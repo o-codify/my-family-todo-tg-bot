@@ -565,7 +565,15 @@ export const api = {
 export type StatsDto = {
   period: { kind: 'week' | 'month' | 'all'; from: string; to: string };
   total: number;
-  byMember: Array<{ userId: string; count: number; pointsEarned: number }>;
+  byMember: Array<{
+    userId: string;
+    count: number;
+    pointsEarned: number;
+    /** Per-member streak inside this stats window. `current` runs end
+     *  today or yesterday; `longest` is the maximum consecutive-day
+     *  span anywhere in the period. */
+    streak: { current: number; longest: number };
+  }>;
   topTasks: Array<{ taskId: string; title: string; count: number }>;
   streaks: {
     me: { current: number; longest: number };

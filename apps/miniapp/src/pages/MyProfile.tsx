@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, type FamilySummary, type MeResponse } from '../api';
-import { Av, Icon, WfBody } from '../design';
+import { Av, Icon, Tag, WfBody } from '../design';
 import { BottomSheet } from '../components/BottomSheet';
 import { ListRow } from '../components/ListRow';
 import { PageHeader } from '../components/PageHeader';
@@ -11,7 +11,7 @@ import {
   QuietHoursPicker,
   ReminderPicker,
 } from '../components/SettingsPickers';
-import { normalizeLocale, useT, type Locale } from '../i18n';
+import { normalizeLocale, pluralize, useT, type Locale } from '../i18n';
 
 type Props = {
   me: MeResponse;
@@ -92,6 +92,15 @@ export function MyProfile({ me, family, onBack, onOpenDrawer }: Props) {
       ? `${notif.quietHoursStart} – ${notif.quietHoursEnd}`
       : t('profile.notifications.quietHours.off');
 
+  // Streak chip for the identity card. We piggyback on the family-wide
+  // stats query (period 'all') the rest of the app already uses — no
+  // extra endpoint, no extra fetch.
+  const statsQuery = useQuery({
+    queryKey: ['stats', family.id, 'all'],
+    queryFn: () => api.getStats(family.id, 'all'),
+  });
+  const myStreak = statsQuery.data?.byMember.find((b) => b.userId === me.id)?.streak ?? null;
+
   return (
     <WfBody onBack={onBack}>
       <PageHeader
@@ -119,6 +128,17 @@ export function MyProfile({ me, family, onBack, onOpenDrawer }: Props) {
         <span className="wf-hint" style={{ overflowWrap: 'anywhere' }}>
           {me.username ? `@${me.username}` : t.locale === 'en' ? 'from TG' : 'из TG'}
         </span>
+        {myStreak && myStreak.current > 0 && (
+          <div
+            className="wf-row wf-gap-6"
+            style={{ marginTop: 8, justifyContent: 'center', flexWrap: 'wrap' }}
+          >
+            <Tag>
+              🔥 {myStreak.current}{' '}
+              {pluralDaysI18n(myStreak.current, t.locale === 'en')}
+            </Tag>
+          </div>
+        )}
       </div>
 
       {/* Color */}
@@ -480,4 +500,11 @@ function fmtDate(iso: string, locale: Locale = 'ru'): string {
   return locale === 'en'
     ? `${months[d.getMonth()]} ${d.getDate()}`
     : `${d.getDate()} ${months[d.getMonth()]}`;
+}
+
+/** "1 день / 2 дня / 5 дней" plural for the streak chip. Same shape as
+ *  MemberProfile's helper — duplicated rather than imported to keep each
+ *  page self-contained (it's a 1-liner). */
+function pluralDaysI18n(n: number, isEn: boolean): string {
+  return pluralize(isEn ? 'en' : 'ru', n, ['день', 'дня', 'дней'], ['day', 'days']);
 }

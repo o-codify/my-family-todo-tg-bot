@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { api, type FamilySummary, type MeResponse, type PhotoDto } from '../api';
 import { Av, Icon, Tag, WfBody } from '../design';
 import { PageHeader } from '../components/PageHeader';
-import { useT, type Locale } from '../i18n';
+import { pluralize, useT, type Locale } from '../i18n';
 
 type Props = {
   me: MeResponse;
@@ -98,6 +98,12 @@ export function MemberProfile({ me, family, userId, onBack }: Props) {
                 <Tag variant="warn">
                   {dto.awayReason === 'sick' ? '🤒' : '🌴'}{' '}
                   {isEn ? 'until' : 'до'} {fmtDate(dto.awayUntil, t.locale)}
+                </Tag>
+              )}
+              {memberStats && memberStats.streak.current > 0 && (
+                <Tag>
+                  🔥 {memberStats.streak.current}{' '}
+                  {pluralDaysI18n(memberStats.streak.current, isEn)}
                 </Tag>
               )}
             </div>
@@ -222,4 +228,11 @@ function PhotoThumb({ familyId, photo }: { familyId: string; photo: PhotoDto }) 
       )}
     </a>
   );
+}
+
+/** "1 день / 2 дня / 5 дней" plural for streak chips. Stats.tsx already
+ *  ships an identical helper; copy here keeps this page self-contained
+ *  rather than tugging another import across the page boundary. */
+function pluralDaysI18n(n: number, isEn: boolean): string {
+  return pluralize(isEn ? 'en' : 'ru', n, ['день', 'дня', 'дней'], ['day', 'days']);
 }

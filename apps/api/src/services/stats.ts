@@ -143,8 +143,13 @@ export async function computeFamilyStats(input: {
 
   const meStreak = computeStreakForDates(datesByUser.get(input.requestingUserId), now);
   let familyBest: { userId: string | null; days: number } = { userId: null, days: 0 };
+  // Per-member streaks live alongside count/points so the MemberProfile
+  // can show a "🔥 N" chip without a second endpoint. Build a side-map
+  // here, then we'll splice it onto `byMember` rows below.
+  const streakByUser = new Map<string, { current: number; longest: number }>();
   for (const [userId, set] of datesByUser) {
     const s = computeStreakForDates(set, now);
+    streakByUser.set(userId, s);
     if (s.longest > familyBest.days) familyBest = { userId, days: s.longest };
   }
 
@@ -158,10 +163,17 @@ export async function computeFamilyStats(input: {
   const bottomCandidate = [...byMember].reverse().find((x) => x.count > 0);
   const bottomUserId = bottomCandidate ? bottomCandidate.userId : null;
 
+  // Splice per-member streaks onto byMember at the very end so the rest
+  // of the byMember math (sort, total) doesn't have to know about it.
+  const byMemberWithStreak = byMember.map((m) => ({
+    ...m,
+    streak: streakByUser.get(m.userId) ?? { current: 0, longest: 0 },
+  }));
+
   return {
     period: { kind: input.period, from: range.from, to: range.to },
     total,
-    byMember,
+    byMember: byMemberWithStreak,
     topTasks,
     streaks: {
       me: meStreak,
