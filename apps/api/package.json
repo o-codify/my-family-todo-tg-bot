@@ -1,0 +1,42 @@
+{
+  "name": "@family-todo/api",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "dev": "tsx watch --env-file=../../.env src/index.ts",
+    "build": "tsc -p tsconfig.json",
+    "start": "node --env-file=../../.env dist/index.js",
+    "typecheck": "tsc --noEmit",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "tsx --env-file=../../.env src/db/migrate.ts",
+    "db:studio": "drizzle-kit studio",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@family-todo/shared": "workspace:*",
+    "@family-todo/tg-auth": "workspace:*",
+    "nanoid": "^5.0.9",
+    "@hono/node-server": "^1.14.0",
+    "@hono/zod-validator": "^0.4.2",
+    "hono": "^4.6.16",
+    "drizzle-orm": "^0.38.3",
+    "postgres": "^3.4.5",
+    "ioredis": "^5.4.2",
+    "bullmq": "^5.34.5",
+    "pino": "^9.5.0",
+    "pino-pretty": "^13.0.0",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@family-todo/config": "workspace:*",
+    "@family-todo/tg-auth": "workspace:*",
+    "@types/node": "^22.10.5",
+    "drizzle-kit": "^0.30.1",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  }
+}

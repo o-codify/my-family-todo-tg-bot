@@ -1,0 +1,7 @@
+{
+  "name": "@family-todo/config",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "files": ["tsconfig.node.json", "tsconfig.react.json"]
+}

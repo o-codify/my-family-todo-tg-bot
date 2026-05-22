@@ -1,0 +1,332 @@
+/* Wireframe tokens & utilities — My Family Todo */
+
+:root {
+  --bg: #f3efe6;
+  --paper: #fdfcf7;
+  --ink: #1c1c1c;
+  --hint: #8a8a82;
+  --line: #1c1c1c;
+  --faint: #eae6db;
+  --softline: #c9c4b6;
+  --danger: #d94f4f;
+  --success: #4a9a5a;
+  --warn: #d8a23a;
+  --tg-blue: #2a82c5;
+}
+
+[data-dark="1"] {
+  --bg: #131418;
+  --paper: #1b1d23;
+  --ink: #ece9df;
+  --hint: #8a8e96;
+  --line: #d6d3c8;
+  --faint: #262932;
+  --softline: #4a4d56;
+  --tg-blue: #7fb6e6;
+}
+
+html, body { margin: 0; padding: 0; background: var(--bg); color: var(--ink); font-family: 'Manrope', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; -webkit-font-smoothing: antialiased; }
+* { box-sizing: border-box; }
+
+.wf-hand { font-family: 'Caveat', cursive; }
+.wf-mono { font-family: 'JetBrains Mono', ui-monospace, monospace; }
+
+/* ─── Phone shells ─────────────────────────────────── */
+
+.wf-naked {
+  width: 380px; height: 780px;
+  background: var(--paper); color: var(--ink);
+  border: 1.5px solid var(--line);
+  border-radius: 22px;
+  position: relative; overflow: hidden;
+  display: flex; flex-direction: column;
+}
+
+.wf-framed {
+  background: var(--ink);
+  width: 412px; height: 836px;
+  border-radius: 48px;
+  padding: 12px;
+  position: relative;
+}
+.wf-framed > .wf-screen {
+  width: 100%; height: 100%;
+  background: var(--paper); color: var(--ink);
+  border-radius: 38px;
+  overflow: hidden;
+  position: relative;
+  display: flex; flex-direction: column;
+}
+.wf-notch {
+  position: absolute; top: 18px; left: 50%; transform: translateX(-50%);
+  width: 110px; height: 28px; background: var(--ink); border-radius: 18px; z-index: 5;
+}
+
+/* ─── TG header strip ──────────────────────────────── */
+.wf-tg-strip {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 14px 8px; flex-shrink: 0;
+  border-bottom: 1px dashed var(--softline);
+  background: var(--paper);
+}
+.wf-framed .wf-tg-strip { padding-top: 56px; }
+.wf-tg-strip .ttl { font-size: 14px; font-weight: 600; }
+.wf-tg-strip .sub { font-size: 11px; color: var(--hint); }
+.wf-tg-strip .icon-x { width: 22px; height: 22px; border: 1.4px solid var(--line); border-radius: 999px; display:flex; align-items:center; justify-content:center; font-size: 12px; }
+
+/* Tab-like home indicator */
+.wf-home {
+  position: absolute; bottom: 8px; left: 50%; transform: translateX(-50%);
+  width: 134px; height: 5px; border-radius: 999px; background: var(--ink);
+}
+.wf-framed .wf-home { background: #fff; }
+
+/* ─── Scrolling body ───────────────────────────────── */
+.wf-body { flex: 1; min-height: 0; overflow: hidden; position: relative; padding: 12px 14px 70px; display: flex; flex-direction: column; gap: 10px; }
+
+/* ─── Type system ──────────────────────────────────── */
+/* Headings use the body sans (Manrope). Caveat is reserved for
+   handwritten annotations (notes, callouts, stamps, post-its, variant tags). */
+.wf-h1 { display: block; font-weight: 700; font-size: 22px; line-height: 1.15; margin: 0; }
+.wf-h2 { display: block; font-weight: 700; font-size: 17px; line-height: 1.2; margin: 0; }
+.wf-h3 { display: block; font-size: 15px; font-weight: 700; margin: 0; }
+.wf-body-text { font-size: 14px; }
+.wf-label { font-size: 13px; }
+.wf-hint { font-size: 12px; color: var(--hint); }
+.wf-tiny { font-size: 11px; color: var(--hint); }
+.wf-note { font-family: 'Caveat'; font-size: 17px; color: var(--hint); line-height: 1.05; }
+
+/* ─── Common primitives ─────────────────────────────── */
+.wf-row { display: flex; align-items: center; }
+.wf-col { display: flex; flex-direction: column; }
+.wf-spread { display: flex; align-items: center; justify-content: space-between; }
+.wf-gap-2 { gap: 2px; } .wf-gap-4 { gap: 4px; } .wf-gap-6 { gap: 6px; }
+.wf-gap-8 { gap: 8px; } .wf-gap-10 { gap: 10px; } .wf-gap-12 { gap: 12px; }
+.wf-gap-16 { gap: 16px; }
+
+.wf-box, .wf-card {
+  border: 1.5px solid var(--line);
+  border-radius: 12px;
+  background: var(--paper);
+  padding: 10px 12px;
+}
+.wf-card.subtle { border-style: dashed; border-color: var(--softline); }
+.wf-card.compact { padding: 8px 10px; }
+.wf-card.elevated { /* no shadow — minimalist */ }
+
+.wf-tag {
+  display: inline-flex; align-items: center; gap: 6px;
+  box-sizing: border-box;
+  height: 22px;          /* fixed pill height */
+  padding: 0 10px;
+  border: 1.5px solid var(--line); border-radius: 999px;
+  font-size: 11px; line-height: 1;
+  white-space: nowrap;
+}
+/* When a tag has a leading avatar, the avatar fills the full pill height
+   and its own border becomes the pill's left cap. */
+.wf-tag:has(> .wf-av:first-child) { padding-left: 0; }
+.wf-tag > .wf-av:first-child {
+  width: 22px; height: 22px;
+  font-size: 10px;
+  border-width: 1.5px;
+  margin: -1.5px 0 -1.5px -1.5px;
+  flex: none;
+}
+.wf-tag.solid { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+.wf-tag.danger { border-color: var(--danger); color: var(--danger); }
+.wf-tag.warn { border-color: var(--warn); color: var(--warn); }
+.wf-tag.success { border-color: var(--success); color: var(--success); }
+
+.wf-btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  border: 1.5px solid var(--line); border-radius: 999px;
+  padding: 8px 14px; font-size: 14px; background: var(--paper); color: var(--ink);
+}
+.wf-btn.primary { background: var(--ink); color: var(--paper); }
+.wf-btn.ghost { border-style: dashed; border-color: var(--softline); color: var(--hint); }
+.wf-btn.danger { border-color: var(--danger); color: var(--danger); }
+.wf-btn.block { width: 100%; }
+.wf-btn.lg { padding: 12px 14px; font-size: 15px; }
+.wf-btn.sm {
+  /* Matches .wf-tag dimensions exactly so chip-buttons sit beside tags cleanly. */
+  height: 22px;
+  padding: 0 10px;
+  font-size: 11px;
+  line-height: 1;
+}
+.wf-btn.sticky-bottom { position: absolute; left: 14px; right: 14px; bottom: 14px; width: auto; }
+
+.wf-check {
+  flex: none;
+  width: 20px; height: 20px; border-radius: 6px; border: 1.5px solid var(--line);
+  display: inline-flex; align-items: center; justify-content: center;
+  background: var(--paper); font-size: 12px;
+}
+.wf-check.done { background: var(--ink); color: var(--paper); }
+
+.wf-bar {
+  background: var(--faint); border-radius: 6px; height: 8px; overflow: hidden;
+}
+.wf-bar > i { display: block; height: 100%; background: var(--ink); }
+
+/* Skeleton-like placeholder text */
+.wf-ph {
+  display: inline-block;
+  background: var(--faint);
+  height: 8px; border-radius: 4px;
+  vertical-align: middle;
+}
+.wf-ph.ln { height: 10px; }
+
+/* ─── Member avatar & dot ──────────────────────────── */
+.wf-av {
+  width: 28px; height: 28px; border-radius: 999px;
+  display: inline-flex; align-items: center; justify-content: center;
+  color: #fff; font-weight: 700; font-size: 12px;
+  border: 1.5px solid var(--line);
+  flex: none;
+}
+.wf-av.xs { width: 18px; height: 18px; font-size: 9px; border-width: 1.2px; }
+.wf-av.sm { width: 22px; height: 22px; font-size: 10px; }
+.wf-av.lg { width: 44px; height: 44px; font-size: 16px; }
+.wf-av.xl { width: 72px; height: 72px; font-size: 28px; border-width: 2px; }
+
+.wf-dot {
+  width: 9px; height: 9px; border-radius: 999px; background: var(--line);
+  flex: none; display: inline-block;
+}
+.wf-dot.lg { width: 12px; height: 12px; }
+.wf-dot.sm { width: 7px; height: 7px; }
+
+/* Member-color toggle */
+[data-colors="off"] .wf-mc { background: var(--softline) !important; }
+[data-colors="off"] .wf-mc-text { color: var(--hint) !important; }
+[data-colors="off"] .wf-mc-border { border-color: var(--softline) !important; }
+
+/* ─── Segmented control ────────────────────────────── */
+.wf-seg {
+  display: inline-flex; border: 1.5px solid var(--line); border-radius: 10px; padding: 2px; gap: 2px;
+  background: var(--paper);
+}
+.wf-seg > span {
+  padding: 5px 10px; font-size: 12px; border-radius: 7px; white-space: nowrap;
+}
+.wf-seg > span.on { background: var(--ink); color: var(--paper); }
+.wf-seg.full { display: flex; }
+.wf-seg.full > span { flex: 1; text-align: center; }
+
+/* ─── Calendar ──────────────────────────────────────── */
+.wf-cal {
+  display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px;
+}
+.wf-cal .wkd { text-align: center; font-size: 10px; color: var(--hint); padding-bottom: 4px; text-transform: uppercase; letter-spacing: 0.08em; }
+.wf-cal .cell {
+  aspect-ratio: 1 / 1.05; min-height: 44px;
+  border: 1.5px solid var(--softline); border-radius: 8px;
+  padding: 4px 4px 3px; position: relative; background: var(--paper);
+  display: flex; flex-direction: column;
+}
+.wf-cal .cell .n { font-size: 13px; font-weight: 600; line-height: 1; }
+.wf-cal .cell.dim .n { color: var(--hint); opacity: 0.55; }
+.wf-cal .cell.today { border-color: var(--line); }
+.wf-cal .cell.selected { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+.wf-cal .cell.selected .n { color: var(--paper); }
+.wf-cal .cell.has-overdue::after {
+  content: ''; position: absolute; top: 3px; right: 3px;
+  width: 5px; height: 5px; border-radius: 999px; background: var(--danger);
+}
+.wf-cal .dots { display: flex; gap: 2px; margin-top: auto; flex-wrap: wrap; }
+.wf-cal .dots .wf-dot { width: 6px; height: 6px; }
+.wf-cal .dots .more { font-size: 9px; color: var(--hint); line-height: 1; }
+
+/* Heat-map variant */
+.wf-cal.heat .cell { background: var(--paper); }
+.wf-cal.heat .cell.l1 { background: rgba(28,28,28,0.06); }
+.wf-cal.heat .cell.l2 { background: rgba(28,28,28,0.14); }
+.wf-cal.heat .cell.l3 { background: rgba(28,28,28,0.26); }
+.wf-cal.heat .cell.l4 { background: rgba(28,28,28,0.40); color: #fff; }
+[data-dark="1"] .wf-cal.heat .cell.l1 { background: rgba(236,233,223,0.08); }
+[data-dark="1"] .wf-cal.heat .cell.l2 { background: rgba(236,233,223,0.18); }
+[data-dark="1"] .wf-cal.heat .cell.l3 { background: rgba(236,233,223,0.30); }
+[data-dark="1"] .wf-cal.heat .cell.l4 { background: rgba(236,233,223,0.50); }
+.wf-cal.heat .cell .badge { position: absolute; bottom: 3px; right: 4px; font-size: 9px; font-weight: 700; }
+
+/* Bars-in-cell variant */
+.wf-cal.bars .cell { padding: 3px 3px 2px; }
+.wf-cal.bars .bars { display: flex; flex-direction: column; gap: 1.5px; margin-top: 2px; }
+.wf-cal.bars .bars i { display: block; height: 3px; border-radius: 2px; }
+
+/* ─── FAB ───────────────────────────────────────────── */
+.wf-fab {
+  position: absolute; right: 14px; bottom: 22px;
+  width: 52px; height: 52px; border-radius: 999px;
+  background: var(--ink); color: var(--paper);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 26px; font-weight: 300; line-height: 1;
+  z-index: 4;
+}
+
+/* ─── Bottom sheet ──────────────────────────────────── */
+.wf-sheet {
+  position: absolute; left: 0; right: 0; bottom: 0;
+  background: var(--paper); border-top: 1.5px solid var(--line);
+  border-radius: 20px 20px 0 0;
+  padding: 12px 14px 20px;
+}
+.wf-sheet .handle { width: 38px; height: 4px; background: var(--softline); border-radius: 999px; margin: 0 auto 10px; }
+
+/* ─── Stamps & notes (handwritten annotations) ─────── */
+.wf-stamp {
+  font-family: 'Caveat', cursive; font-weight: 700;
+  position: absolute; transform: rotate(-5deg);
+  border: 2px solid currentColor; padding: 0 6px; border-radius: 6px;
+  font-size: 14px; color: var(--danger);
+  background: var(--paper); z-index: 6;
+}
+
+/* Squiggly arrow note */
+.wf-callout {
+  position: absolute; font-family: 'Caveat', cursive; font-size: 16px; color: var(--hint);
+  line-height: 1.05; max-width: 140px;
+}
+.wf-callout.right { right: -150px; } .wf-callout.left { left: -150px; }
+
+/* ─── Density ──────────────────────────────────────── */
+[data-density="compact"] .wf-body { gap: 6px; padding-bottom: 60px; }
+[data-density="compact"] .wf-card { padding: 7px 9px; }
+[data-density="compact"] .wf-cal .cell { min-height: 38px; }
+[data-density="relaxed"] .wf-body { gap: 14px; }
+[data-density="relaxed"] .wf-card { padding: 14px 14px; }
+[data-density="relaxed"] .wf-cal .cell { min-height: 50px; }
+
+/* ─── Sketch loosening ─────────────────────────────── */
+[data-sketch="loose"] .wf-naked { border-radius: 22px 26px 21px 24px / 22px 24px 22px 26px; transform: rotate(-0.15deg); }
+[data-sketch="loose"] .wf-card, [data-sketch="loose"] .wf-box { border-radius: 12px 15px 11px 14px / 13px 11px 14px 12px; }
+[data-sketch="loose"] .wf-cal .cell { border-radius: 8px 10px 9px 7px / 8px 9px 7px 10px; }
+[data-sketch="loose"] .wf-check { border-radius: 6px 8px 5px 7px / 7px 5px 8px 6px; }
+[data-sketch="loose"] .wf-av { border-radius: 49% 51% 50% 50% / 50% 49% 51% 50%; }
+
+[data-sketch="tight"] .wf-naked { }
+[data-sketch="tight"] .wf-card, [data-sketch="tight"] .wf-box { }
+
+/* ─── Variant frame label ─────────────────────────── */
+.wf-variant-tag {
+  font-family: 'Caveat'; font-size: 18px; color: var(--hint);
+  text-align: center; margin-top: 4px;
+}
+
+/* ─── Misc icons (drawn from CSS) ─────────────────── */
+.ic { display: inline-flex; align-items: center; justify-content: center; flex: none; width: 18px; height: 18px; }
+.ic svg { width: 100%; height: 100%; }
+
+/* Subtle stripe placeholder */
+.wf-stripe {
+  background: repeating-linear-gradient(135deg, var(--faint), var(--faint) 6px, transparent 6px, transparent 12px);
+}
+
+/* Make svg children inherit color */
+svg { color: var(--ink); }
+
+/* Right-side queue avatar arrow row */
+.wf-arrow { color: var(--hint); font-size: 14px; }

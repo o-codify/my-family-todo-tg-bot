@@ -1,0 +1,20 @@
+{
+  "name": "@family-todo/tg-auth",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@telegram-apps/init-data-node": "^2.0.4"
+  },
+  "devDependencies": {
+    "@family-todo/config": "workspace:*",
+    "@types/node": "^22.10.5",
+    "typescript": "^5.7.2"
+  }
+}

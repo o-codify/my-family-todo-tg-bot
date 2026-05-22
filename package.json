@@ -1,0 +1,32 @@
+{
+  "name": "family-todo",
+  "version": "0.0.0",
+  "private": true,
+  "packageManager": "pnpm@11.1.3",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "scripts": {
+    "build": "turbo run build",
+    "dev": "turbo run dev",
+    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "infra:up": "docker compose --env-file .env -f infra/docker-compose.yml up -d",
+    "infra:down": "docker compose --env-file .env -f infra/docker-compose.yml down",
+    "infra:reset": "docker compose --env-file .env -f infra/docker-compose.yml down -v",
+    "infra:logs": "docker compose --env-file .env -f infra/docker-compose.yml logs -f",
+    "db:generate": "pnpm --filter @family-todo/api db:generate",
+    "db:migrate": "pnpm --filter @family-todo/api db:migrate",
+    "db:studio": "pnpm --filter @family-todo/api db:studio",
+    "dev:initdata": "tsx --env-file=.env scripts/dev-initdata.ts"
+  },
+  "devDependencies": {
+    "@family-todo/tg-auth": "workspace:*",
+    "turbo": "^2.3.3",
+    "typescript": "^5.7.2",
+    "@types/node": "^22.10.5",
+    "tsx": "^4.19.2",
+    "prettier": "^3.4.2"
+  }
+}

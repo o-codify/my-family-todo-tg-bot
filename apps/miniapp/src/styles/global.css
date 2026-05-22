@@ -1,0 +1,342 @@
+@import url('./wireframe.css');
+
+/*
+ * Lock html + body to the viewport so iOS Safari / Telegram WebApp can't
+ * rubber-band the entire page when the user drags. Scrolling lives inside
+ * `.wf-body` only — its `overscroll-behavior: contain` keeps the bounce
+ * confined to that scroller instead of propagating up to the page.
+ *
+ * `position: fixed` + `overflow: hidden` is the standard iOS-lockdown trick;
+ * without it the body itself accepts the touch drag and the whole UI shifts
+ * around (the bug the user reported as "на iOS на всю страницу скролл").
+ */
+html, body {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  overscroll-behavior: none;
+  -webkit-overflow-scrolling: auto;
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  touch-action: pan-y;
+  /* iOS / Android browsers paint a grey 50%-opaque rectangle over any tappable
+     element for ~200ms when you touch it. We design our own active states
+     (subtle scale / colour shift via :active selectors in wireframe.css), so
+     suppress the system overlay everywhere. */
+  -webkit-tap-highlight-color: transparent;
+  /* Disable text selection app-wide so long-press doesn't pop the iOS / Android
+     selection magnifier on every card and button. We re-enable it explicitly
+     below for places where the user actually needs to copy or type. */
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+
+/* Re-enable selection on inputs (typing/pasting), the invite-code chip
+   (`.wf-mono`-flagged values the user often copies), and anything explicitly
+   opted-in via the `.is-selectable` escape hatch. */
+input,
+textarea,
+[contenteditable='true'],
+[contenteditable=''],
+.wf-mono,
+.is-selectable {
+  user-select: text;
+  -webkit-user-select: text;
+  -webkit-touch-callout: default;
+}
+
+/* Belt-and-braces: kill the highlight on every interactive surface we render,
+   in case a child overrides the inherited `transparent` with a colour. */
+button,
+a,
+input,
+[role='button'],
+.wf-btn,
+.wf-card,
+.wf-tag,
+.wf-fab,
+.bottom-nav__tab,
+.wf-check {
+  -webkit-tap-highlight-color: transparent;
+}
+
+#root {
+  /*
+   * The wireframe prototype is built on a 380×780 phone shell with
+   * `display: flex; flex-direction: column` so that `.wf-body { flex: 1 }`
+   * fills the remaining height and `sticky-bottom` buttons + the spacer
+   * `<div flex: 1 />` push content correctly.
+   *
+   * In the live app there's no phone shell, so #root takes that role: it
+   * spans the full viewport height as a flex column so `.wf-body` and its
+   * children behave identically to the prototype.
+   *
+   * `100dvh` (with `100vh` fallback) accounts for iOS Safari's dynamic
+   * toolbar — `100vh` would overshoot when the browser chrome is visible.
+   *
+   * Mobile-only width: Mini App always runs in a narrow column; we clamp the
+   * desktop browser preview to phone width so the layout matches design.
+   */
+  height: 100vh;
+  height: 100dvh;
+  max-width: 412px;
+  margin: 0 auto;
+  background: var(--bg);
+  color: var(--ink);
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
+/* Loading/error helpers used by App.tsx */
+.screen-center {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  text-align: center;
+  color: var(--ink);
+}
+
+.error-box {
+  background: var(--paper);
+  border: 1.5px solid var(--danger);
+  color: var(--danger);
+  padding: 12px 14px;
+  border-radius: 12px;
+  font-size: 14px;
+  max-width: 320px;
+}
+
+/* Bottom tab bar — not part of the prototype but needed to switch between
+   Calendar and Queues in the live app. Visual style follows wireframe tokens.
+   On phones wider than the 412px app-shell, the bar extends edge-to-edge so
+   it doesn't look "inset" with empty margins on either side. */
+.bottom-nav {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  width: 100%;
+  display: flex;
+  background: var(--paper);
+  border-top: 1.5px solid var(--line);
+  padding: 6px 0 calc(6px + env(safe-area-inset-bottom, 0px));
+  z-index: 3;
+}
+
+.bottom-nav__tab {
+  flex: 1;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 4px 0;
+  color: var(--hint);
+  font: inherit;
+}
+
+.bottom-nav__tab[data-active='1'] {
+  color: var(--ink);
+}
+
+.bottom-nav__label {
+  font-size: 11px;
+}
+
+/* Floating toast — appears above sticky bottom buttons for 2.5s after copy. */
+.wf-toast {
+  position: fixed;
+  left: 50%;
+  bottom: 84px;
+  transform: translateX(-50%);
+  padding: 10px 18px;
+  border-radius: 999px;
+  background: var(--success);
+  color: var(--paper);
+  font-size: 13px;
+  font-weight: 600;
+  z-index: 20;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+  animation: toast-in 0.2s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  white-space: nowrap;
+  max-width: calc(100vw - 32px);
+}
+
+.wf-toast__icon {
+  font-size: 14px;
+  line-height: 1;
+  flex: none;
+}
+
+.wf-toast--err {
+  background: var(--danger);
+  color: #fff;
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 8px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+}
+
+/*
+ * In the prototype, `.wf-body { overflow: hidden }` because each screen is a
+ * fixed 380×780 frame. In the live app the content needs to scroll, so we
+ * override to vertical auto-scroll. Bottom padding clears the bottom-nav.
+ *
+ * `overscroll-behavior: contain` traps the iOS rubber-band inside this
+ * scroller — without it, scrolling past the top/bottom propagates to the
+ * (now locked) body and Telegram interprets the gesture as a swipe-to-close.
+ * `-webkit-overflow-scrolling: touch` keeps momentum scrolling smooth.
+ */
+.wf-body {
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  /* Default footer clearance: just the bottom-nav (~56 px incl. safe-area)
+     plus ~20 px breathing room. Pages without a floating add-task pill
+     should not have empty scrollable space hanging below the last card. */
+  padding-bottom: calc(76px + env(safe-area-inset-bottom, 0px));
+}
+
+/*
+ * Pages that DO render a floating `.wf-fab` pill need ~56 px more clearance
+ * so the last list item doesn't end up obscured by it. `:has()` is supported
+ * in every browser we target (Chromium ≥105, Safari ≥15.4, FF ≥121), and
+ * scoping the larger padding here keeps the no-fab pages tight.
+ */
+.wf-body:has(.wf-fab) {
+  padding-bottom: calc(132px + env(safe-area-inset-bottom, 0px));
+}
+
+/*
+ * Bottom-sheet open/close animations.
+ *
+ * `BottomSheet.tsx` mounts immediately and unmounts only after the exit
+ * animation has run, so we drive both phases off CSS classes:
+ *  - `.wf-sheet-backdrop` on the dimmed scrim
+ *  - `.wf-sheet--animated`  on the panel itself
+ *  - `.is-closing` toggles the inverse keyframes for the exit phase
+ *
+ * Keep the durations in lockstep with `ANIM_MS` in BottomSheet.tsx.
+ */
+.wf-sheet-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.35);
+  display: flex;
+  align-items: flex-end;
+  animation: wf-backdrop-in 0.22s ease;
+}
+
+.wf-sheet-backdrop.is-closing {
+  animation: wf-backdrop-out 0.22s ease forwards;
+}
+
+.wf-sheet--animated {
+  animation: wf-sheet-in 0.26s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.wf-sheet--animated.is-closing {
+  animation: wf-sheet-out 0.24s ease forwards;
+}
+
+@keyframes wf-sheet-in {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+
+@keyframes wf-sheet-out {
+  from {
+    transform: translateY(0);
+  }
+  to {
+    transform: translateY(100%);
+  }
+}
+
+@keyframes wf-backdrop-in {
+  from {
+    background: rgba(0, 0, 0, 0);
+  }
+  to {
+    background: rgba(0, 0, 0, 0.35);
+  }
+}
+
+@keyframes wf-backdrop-out {
+  from {
+    background: rgba(0, 0, 0, 0.35);
+  }
+  to {
+    background: rgba(0, 0, 0, 0);
+  }
+}
+
+/*
+ * FAB redesign — used to be a 52×52 round "+" stuck in the corner. Per user
+ * request: now a centered pill "+ Добавить задачу" floating right above the
+ * bottom-nav. Markup stays `<div className="wf-fab">+ Добавить задачу</div>`,
+ * we just override the prototype's circular shape with pill styling here.
+ */
+.wf-fab {
+  position: fixed;
+  left: 50%;
+  bottom: calc(64px + env(safe-area-inset-bottom, 0px));
+  transform: translateX(-50%);
+  /* Reset the prototype's circular sizing. Slim pill height + generous gap
+     between the "+" glyph and the label — gap only fires because the JSX
+     splits them into two child spans. */
+  width: auto;
+  height: 32px;
+  padding: 0 16px;
+  border-radius: 999px;
+  background: var(--ink);
+  color: var(--paper);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  cursor: pointer;
+  white-space: nowrap;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18);
+  z-index: 5;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.wf-fab > .wf-fab__plus {
+  font-size: 15px;
+  font-weight: 500;
+  line-height: 1;
+  /* Optical centring — "+" sits slightly low in most fonts. */
+  margin-top: -1px;
+}
+
+.wf-fab:active {
+  transform: translateX(-50%) scale(0.97);
+}

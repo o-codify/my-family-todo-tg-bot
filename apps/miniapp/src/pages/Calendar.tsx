@@ -1,0 +1,713 @@
+import { useMemo, useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  api,
+  type FamilyMemberDto,
+  type FamilySummary,
+  type MeResponse,
+  type OccurrenceDto,
+  type TaskDto,
+} from '../api';
+import { AvStack, Dot, Icon, Tag, WfBody, type Member } from '../design';
+import { pluralize, useT } from '../i18n';
+
+type Props = {
+  me: MeResponse;
+  family: FamilySummary;
+  families?: FamilySummary[];
+  onSwitchFamily?: (id: string) => void;
+  onOpenDay?: (iso: string) => void;
+  onOpenTask?: (occurrence: OccurrenceDto) => void;
+  onCreateTask?: (iso: string) => void;
+  /** Banner "Invite your family" tap target — sends user to Profile where
+   *  the actual InviteCard (copy/share buttons) lives. */
+  onOpenInvite?: () => void;
+};
+
+const WK_RU = ['пн', 'вт', 'ср', 'чт', 'пт', 'сб', 'вс'];
+const WK_EN = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+const MONTH_NAMES_RU = [
+  'январь',
+  'февраль',
+  'март',
+  'апрель',
+  'май',
+  'июнь',
+  'июль',
+  'август',
+  'сентябрь',
+  'октябрь',
+  'ноябрь',
+  'декабрь',
+];
+const MONTH_NAMES_EN = [
+  'January',
+  'February',
+  'March',
+  'April',
+  'May',
+  'June',
+  'July',
+  'August',
+  'September',
+  'October',
+  'November',
+  'December',
+];
+const MONTH_GENITIVE_RU = [
+  'января',
+  'февраля',
+  'марта',
+  'апреля',
+  'мая',
+  'июня',
+  'июля',
+  'августа',
+  'сентября',
+  'октября',
+  'ноября',
+  'декабря',
+];
+const MONTH_GENITIVE_EN = [
+  'Jan',
+  'Feb',
+  'Mar',
+  'Apr',
+  'May',
+  'Jun',
+  'Jul',
+  'Aug',
+  'Sep',
+  'Oct',
+  'Nov',
+  'Dec',
+];
+const DOW_SHORT_RU = ['вс', 'пн', 'вт', 'ср', 'чт', 'пт', 'сб'];
+const DOW_SHORT_EN = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+function capitalize(s: string): string {
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+function toIso(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+function memberFromDto(dto: FamilyMemberDto): Member {
+  return {
+    id: dto.id,
+    name: dto.firstName,
+    letter: dto.firstName.slice(0, 1).toUpperCase(),
+    color: dto.color,
+    role: dto.role.name,
+    awayUntil: dto.awayUntil,
+  };
+}
+
+/**
+ * Port of CalV1 (screens-calendar.jsx lines 46-141) — the selected wireframe
+ * variant A. Layout, classes and inline styles preserved; data wired to API.
+ */
+export function Calendar({
+  me,
+  family,
+  families = [],
+  onSwitchFamily,
+  onOpenDay,
+  onOpenTask,
+  onCreateTask,
+  onOpenInvite,
+}: Props) {
+  const queryClient = useQueryClient();
+  const t = useT();
+  const isEn = t.locale === 'en';
+  const WK = isEn ? WK_EN : WK_RU;
+  const MONTH_NAMES = isEn ? MONTH_NAMES_EN : MONTH_NAMES_RU;
+  const MONTH_GENITIVE = isEn ? MONTH_GENITIVE_EN : MONTH_GENITIVE_RU;
+  const DOW_SHORT = isEn ? DOW_SHORT_EN : DOW_SHORT_RU;
+  const [view, setView] = useState(() => new Date());
+  const [selectedIso, setSelectedIso] = useState<string>(() => toIso(new Date()));
+  // Collapsed/expanded state of the "Выполнено · N" card under the day list,
+  // mirroring the Day screen so the bottom of the Calendar doesn't get
+  // dominated by old completed rows.
+  const [showDone, setShowDone] = useState(false);
+
+  const monthStart = new Date(view.getFullYear(), view.getMonth(), 1);
+  const monthEnd = new Date(view.getFullYear(), view.getMonth() + 1, 0);
+  const fromIso = toIso(monthStart);
+  const toIsoStr = toIso(monthEnd);
+
+  const membersQuery = useQuery({
+    queryKey: ['members', family.id],
+    queryFn: () => api.listMembers(family.id),
+  });
+  const occurrencesQuery = useQuery({
+    queryKey: ['occurrences', family.id, fromIso, toIsoStr],
+    queryFn: () => api.listOccurrences(family.id, fromIso, toIsoStr),
+  });
+  const tasksQuery = useQuery({
+    queryKey: ['tasks', family.id],
+    queryFn: () => api.listTasks(family.id),
+  });
+
+  const completeMut = useMutation({
+    // Synthesized `floating:<taskId>` ids come from the "Когда-нибудь" rollup
+    // (no real occurrence row exists yet). Route those through the dedicated
+    // /complete-floating endpoint instead of POSTing to a fake occurrence id.
+    mutationFn: (occurrenceId: string) => {
+      if (occurrenceId.startsWith('floating:')) {
+        const taskId = occurrenceId.slice('floating:'.length);
+        return api.completeFloatingTask(family.id, taskId);
+      }
+      return api.completeOccurrence(family.id, occurrenceId);
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['occurrences', family.id] }),
+  });
+  const uncompleteMut = useMutation({
+    mutationFn: (occurrenceId: string) => api.uncompleteOccurrence(family.id, occurrenceId),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['occurrences', family.id] }),
+  });
+
+  const occurrences = occurrencesQuery.data?.occurrences ?? [];
+  const members = useMemo(
+    () => (membersQuery.data?.members ?? []).map(memberFromDto),
+    [membersQuery.data],
+  );
+  const memberById = useMemo(() => new Map(members.map((m) => [m.id, m])), [members]);
+
+  const byDate = useMemo(() => {
+    const map = new Map<string, OccurrenceDto[]>();
+    for (const o of occurrences) {
+      // Floating completions have no scheduled_date — anchor them to the day
+      // they were *completed* so they appear on that day's card. Pending
+      // null-date rows stay in the floating rollup until completed.
+      let key: string;
+      if (o.scheduledDate) {
+        key = o.scheduledDate;
+      } else if (o.status === 'done' && o.completedAt) {
+        key = o.completedAt.slice(0, 10);
+      } else {
+        key = '__floating__';
+      }
+      if (!map.has(key)) map.set(key, []);
+      map.get(key)!.push(o);
+    }
+    return map;
+  }, [occurrences]);
+
+  const cells = useMemo(() => makeMonthCells(view), [view]);
+  const todayIso = toIso(new Date());
+  const todayDay = new Date().getDate();
+  const sameMonthAsView =
+    new Date().getMonth() === view.getMonth() &&
+    new Date().getFullYear() === view.getFullYear();
+  const selectedDay = Number(selectedIso.slice(8, 10));
+
+  const myPoints = useMemo(
+    () =>
+      occurrences
+        .filter((o) => o.status === 'done' && o.completedBy === me.id)
+        .reduce((sum, o) => sum + (o.pointsAwarded ?? 0), 0),
+    [occurrences, me.id],
+  );
+
+  const selectedDate = new Date(`${selectedIso}T00:00:00`);
+  const todayCount = byDate.get(todayIso)?.length ?? 0;
+  const selectedOccurrences = byDate.get(selectedIso) ?? [];
+  const selectedPending = selectedOccurrences.filter((o) => o.status !== 'done');
+  const selectedDone = selectedOccurrences.filter((o) => o.status === 'done');
+  const dayHeading = isEn
+    ? `${DOW_SHORT[selectedDate.getDay()]}, ${MONTH_GENITIVE[selectedDate.getMonth()]} ${selectedDate.getDate()}`
+    : `${DOW_SHORT[selectedDate.getDay()]}, ${selectedDate.getDate()} ${MONTH_GENITIVE[selectedDate.getMonth()]}`;
+  const daySub =
+    selectedIso === todayIso
+      ? `${t('calendar.today')} · ${todayCount} ${pluralTaskI18n(todayCount, isEn)}`
+      : `${selectedOccurrences.length} ${pluralTaskI18n(selectedOccurrences.length, isEn)}`;
+
+  return (
+    <WfBody>
+      {/* Header — port of lines 52-64 */}
+      <div className="wf-spread">
+        <div className="wf-row wf-gap-6">
+          <button
+            onClick={() => setView((m) => new Date(m.getFullYear(), m.getMonth() - 1, 1))}
+            style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 0, color: 'var(--ink)' }}
+            aria-label={isEn ? 'Previous' : 'Предыдущий'}
+          >
+            <Icon name="chevL" />
+          </button>
+          {families.length > 1 && onSwitchFamily ? (
+            <select
+              className="wf-h1"
+              value={family.id}
+              onChange={(e) => onSwitchFamily(e.target.value)}
+              style={{ border: 'none', background: 'transparent', color: 'var(--ink)', fontFamily: 'inherit', padding: 0 }}
+            >
+              {families.map((f) => (
+                <option key={f.id} value={f.id}>
+                  {f.name}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <span className="wf-h1">
+              {capitalize(MONTH_NAMES[view.getMonth()] ?? '')} {view.getFullYear()}
+            </span>
+          )}
+          <button
+            onClick={() => setView((m) => new Date(m.getFullYear(), m.getMonth() + 1, 1))}
+            style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 0, color: 'var(--ink)' }}
+            aria-label={isEn ? 'Next' : 'Следующий'}
+          >
+            <Icon name="chevR" />
+          </button>
+        </div>
+        <div className="wf-row wf-gap-6">
+          <AvStack members={members} size="sm" />
+          <span className="wf-tag solid" style={{ marginLeft: 4 }}>
+            <Icon name="star" /> {myPoints}
+          </span>
+        </div>
+      </div>
+
+      {/* Calendar grid — port of lines 66-91 */}
+      <div className="wf-cal">
+        {WK.map((w) => (
+          <div key={w} className="wkd">
+            {w}
+          </div>
+        ))}
+        {cells.map((c, i) => {
+          const occ = byDate.get(c.iso) ?? [];
+          const overdue = !c.dim && c.iso < todayIso && occ.some((o) => o.status === 'pending');
+          const isToday = sameMonthAsView && !c.dim && c.n === todayDay;
+          const isSel = !c.dim && c.iso === selectedIso && c.n === selectedDay;
+          const cls = ['cell'];
+          if (c.dim) cls.push('dim');
+          if (isToday) cls.push('today');
+          if (isSel) cls.push('selected');
+          if (overdue) cls.push('has-overdue');
+          const shown = occ.slice(0, 3);
+          const more = occ.length - shown.length;
+          return (
+            <div
+              key={i}
+              className={cls.join(' ')}
+              onClick={() => !c.dim && setSelectedIso(c.iso)}
+              // Double-click drills into the dedicated Day screen — the
+              // single-click "select day" UX still works, and a quick
+              // double-tap on mobile fires this after two onClicks.
+              onDoubleClick={() => !c.dim && onOpenDay?.(c.iso)}
+              style={{ cursor: c.dim ? 'default' : 'pointer', userSelect: 'none' }}
+            >
+              <span className="n">{c.n}</span>
+              <span className="dots">
+                {shown.map((o) => (
+                  <Dot
+                    key={o.id}
+                    m={o.assigneeId ? memberById.get(o.assigneeId) ?? null : null}
+                  />
+                ))}
+                {more > 0 && <span className="more">+{more}</span>}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Day heading — port of lines 93-96 */}
+      <div
+        className="wf-spread"
+        style={{ marginTop: 4, cursor: onOpenDay ? 'pointer' : undefined }}
+        onClick={() => onOpenDay?.(selectedIso)}
+      >
+        <span className="wf-h2">{dayHeading}</span>
+        <span className="wf-hint">{daySub}</span>
+      </div>
+
+      {/* Task cards — port of lines 98-129 */}
+      {occurrencesQuery.isLoading && <span className="wf-hint">{t('common.loading')}</span>}
+      {!occurrencesQuery.isLoading && occurrences.length === 0 && (
+        <div className="wf-card subtle" style={{ textAlign: 'center', padding: '18px 12px' }}>
+          <div style={{ fontSize: 36 }}>📝</div>
+          <span className="wf-h2" style={{ display: 'block', marginTop: 8 }}>
+            {t('calendar.empty.title')}
+          </span>
+          <span className="wf-hint" style={{ display: 'block', marginTop: 4 }}>
+            {t('calendar.empty.hint')}
+          </span>
+          <button
+            className="wf-btn primary"
+            onClick={() => onCreateTask?.(selectedIso)}
+            style={{ marginTop: 12, cursor: 'pointer' }}
+          >
+            {t('calendar.empty.cta')}
+          </button>
+        </div>
+      )}
+      {!occurrencesQuery.isLoading &&
+        occurrences.length > 0 &&
+        selectedOccurrences.length === 0 && (
+          <div className="wf-card subtle" style={{ textAlign: 'center', padding: '18px 12px' }}>
+            <span className="wf-hint">{t('calendar.day.empty')}</span>
+          </div>
+        )}
+      {members.length === 1 && occurrences.length === 0 && (
+        <div
+          className="wf-card"
+          role={onOpenInvite ? 'button' : undefined}
+          tabIndex={onOpenInvite ? 0 : undefined}
+          onClick={onOpenInvite}
+          onKeyDown={(e) => {
+            if (onOpenInvite && (e.key === 'Enter' || e.key === ' ')) {
+              e.preventDefault();
+              onOpenInvite();
+            }
+          }}
+          style={{
+            borderColor: 'var(--warn)',
+            cursor: onOpenInvite ? 'pointer' : 'default',
+          }}
+        >
+          <div className="wf-row wf-gap-8">
+            <Icon name="invite" />
+            <div className="wf-col" style={{ flex: 1 }}>
+              <span className="wf-label">{t('calendar.invite.title')}</span>
+              <span className="wf-tiny">{t('calendar.invite.hint')}</span>
+            </div>
+            {onOpenInvite && <Icon name="chevR" />}
+          </div>
+        </div>
+      )}
+      {/* Pending tasks for the selected day. */}
+      {selectedPending.map((o) => (
+        <DayTaskCard
+          key={o.id}
+          o={o}
+          memberById={memberById}
+          selectedIso={selectedIso}
+          todayIso={todayIso}
+          onOpenTask={onOpenTask}
+          onToggle={(occ) => {
+            if (occ.status === 'done') uncompleteMut.mutate(occ.id);
+            else completeMut.mutate(occ.id);
+          }}
+        />
+      ))}
+
+      {/* Done tasks — collapsed by default (matches Day screen UX). */}
+      {selectedDone.length > 0 && (
+        <div
+          className="wf-card subtle"
+          style={{ marginTop: 2, cursor: 'pointer' }}
+          onClick={() => setShowDone(!showDone)}
+        >
+          <div className="wf-spread">
+            <span className="wf-row wf-gap-6">
+              <Icon name="check" />
+              <span className="wf-label">
+                {t('calendar.done.collapsed')} · {selectedDone.length}
+              </span>
+            </span>
+            <Icon name={showDone ? 'chevD' : 'chevR'} />
+          </div>
+        </div>
+      )}
+      {showDone &&
+        selectedDone.map((o) => (
+          <DayTaskCard
+            key={o.id}
+            o={o}
+            memberById={memberById}
+            selectedIso={selectedIso}
+            todayIso={todayIso}
+            onOpenTask={onOpenTask}
+            onToggle={(occ) => uncompleteMut.mutate(occ.id)}
+          />
+        ))}
+
+      {/* "Когда-нибудь" — floating + queued tasks without a scheduled date.
+         Port of CalV1 :131-135. */}
+      <FloatingSection
+        tasks={tasksQuery.data?.tasks ?? []}
+        occurrences={occurrences}
+        memberById={memberById}
+        onOpen={(o) => onOpenTask?.(o)}
+      />
+
+      {/* Add-task pill — centered above the bottom-nav. */}
+      <div
+        className="wf-fab"
+        onClick={() => onCreateTask?.(selectedIso)}
+        role="button"
+        aria-label={t('calendar.fab')}
+      >
+        <span className="wf-fab__plus">+</span>
+        <span>{t('calendar.fab')}</span>
+      </div>
+    </WfBody>
+  );
+}
+
+/** Single task row inside the Calendar's selected-day list. Extracted so both
+ *  the pending and the (collapsed) done branches render identically. */
+function DayTaskCard({
+  o,
+  memberById,
+  selectedIso,
+  todayIso,
+  onOpenTask,
+  onToggle,
+}: {
+  o: OccurrenceDto;
+  memberById: Map<string, Member>;
+  selectedIso: string;
+  todayIso: string;
+  onOpenTask?: (occurrence: OccurrenceDto) => void;
+  onToggle: (occurrence: OccurrenceDto) => void;
+}) {
+  const t = useT();
+  const isEn = t.locale === 'en';
+  const assignee = o.assigneeId ? memberById.get(o.assigneeId) ?? null : null;
+  const done = o.status === 'done';
+  const photoBlocked = o.task.photoRequired && !done;
+  return (
+    <div
+      className="wf-card"
+      onClick={() => onOpenTask?.(o)}
+      style={{ cursor: onOpenTask ? 'pointer' : undefined }}
+    >
+      <div className="wf-row wf-gap-10">
+        <span
+          className={'wf-check' + (done ? ' done' : '')}
+          onClick={(e) => {
+            e.stopPropagation();
+            if (photoBlocked) {
+              onOpenTask?.(o);
+              return;
+            }
+            onToggle(o);
+          }}
+          style={{ cursor: 'pointer' }}
+        >
+          {done && <Icon name="check" />}
+        </span>
+        <span
+          className="wf-mc"
+          style={{
+            width: 4,
+            height: 28,
+            background: assignee?.color ?? 'var(--softline)',
+            borderRadius: 2,
+            opacity: done ? 0.5 : 1,
+          }}
+        />
+        <div className="wf-col" style={{ flex: 1 }}>
+          <span
+            className="wf-label"
+            style={done ? { textDecoration: 'line-through', color: 'var(--hint)' } : undefined}
+          >
+            {o.task.title}
+          </span>
+          <span className="wf-hint">{taskSub(o, assignee, isEn)}</span>
+        </div>
+        {tagForOccurrence(o, done, selectedIso, todayIso, isEn)}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * "Когда-нибудь" — collapsible section of floating tasks (no scheduled date).
+ * Visible at the bottom of the calendar per CalV1 :131-135.
+ *
+ * A floating task is hidden while its pending occurrence is on cooldown
+ * (`availableAt` in the future). The backend already rejects completion in
+ * that window with HTTP 400 — we mirror that on the client so the user
+ * doesn't see (and can't tap) a task they can't actually do yet.
+ */
+function FloatingSection({
+  tasks,
+  occurrences,
+  memberById,
+  onOpen,
+}: {
+  tasks: TaskDto[];
+  occurrences: OccurrenceDto[];
+  memberById: Map<string, Member>;
+  onOpen: (occurrence: OccurrenceDto) => void;
+}) {
+  const t = useT();
+  const [open, setOpen] = useState(false);
+  const now = Date.now();
+  // Map taskId → its latest pending occurrence (so we can read availableAt).
+  const pendingByTask = useMemo(() => {
+    const map = new Map<string, OccurrenceDto>();
+    for (const o of occurrences) {
+      if (o.status !== 'pending') continue;
+      const prev = map.get(o.taskId);
+      // Prefer the latest pending (largest availableAt or last seen).
+      if (!prev) map.set(o.taskId, o);
+    }
+    return map;
+  }, [occurrences]);
+  const floating = tasks.filter((tk) => {
+    if (tk.type !== 'floating' || tk.archivedAt) return false;
+    const pending = pendingByTask.get(tk.id);
+    if (pending?.availableAt && new Date(pending.availableAt).getTime() > now) {
+      return false;
+    }
+    return true;
+  });
+  if (floating.length === 0) return null;
+  return (
+    <>
+      <div
+        className="wf-spread wf-card subtle"
+        style={{ marginTop: 2, cursor: 'pointer' }}
+        onClick={() => setOpen(!open)}
+      >
+        <span className="wf-row wf-gap-6">
+          <Icon name="list" />
+          <span className="wf-label">{t('calendar.someday')}</span>
+          <span className="wf-hint">· {floating.length}</span>
+        </span>
+        <Icon name={open ? 'chevD' : 'chevR'} />
+      </div>
+      {open &&
+        floating.map((ft) => {
+          const assignee = ft.assigneeId ? memberById.get(ft.assigneeId) ?? null : null;
+          // Synthesize a minimal occurrence for TaskSheet
+          const synthOcc: OccurrenceDto = {
+            id: `floating:${ft.id}`,
+            taskId: ft.id,
+            scheduledDate: null,
+            scheduledTime: null,
+            assigneeId: ft.assigneeId,
+            status: 'pending',
+            subtasks: null,
+            completedAt: null,
+            completedBy: null,
+            photoIds: null,
+            pointsAwarded: 0,
+            availableAt: null,
+            task: {
+              id: ft.id,
+              title: ft.title,
+              type: ft.type,
+              points: ft.points,
+              photoRequired: ft.photoRequired,
+              deadlineAt: ft.deadlineAt,
+            },
+          };
+          return (
+            <div
+              key={ft.id}
+              className="wf-card"
+              onClick={() => onOpen(synthOcc)}
+              style={{ cursor: 'pointer' }}
+            >
+              <div className="wf-row wf-gap-10">
+                <span
+                  className="wf-mc"
+                  style={{
+                    width: 4,
+                    height: 28,
+                    background: assignee?.color ?? 'var(--softline)',
+                    borderRadius: 2,
+                  }}
+                />
+                <div className="wf-col" style={{ flex: 1 }}>
+                  <span className="wf-label">{ft.title}</span>
+                  <span className="wf-hint">
+                    {assignee?.name ?? t('day.unassigned')}
+                    {ft.cooldownDays
+                      ? ` · ${t('queues.detail.everyN', { n: ft.cooldownDays })}`
+                      : ''}
+                    {ft.points > 0 ? ` · +${ft.points}` : ''}
+                  </span>
+                </div>
+              </div>
+            </div>
+          );
+        })}
+    </>
+  );
+}
+
+type Cell = { n: number; iso: string; dim: boolean };
+
+function makeMonthCells(month: Date): Cell[] {
+  const first = new Date(month.getFullYear(), month.getMonth(), 1);
+  const dow = (first.getDay() + 6) % 7; // Mon=0..Sun=6
+  const start = new Date(first);
+  start.setDate(first.getDate() - dow);
+  const cells: Cell[] = [];
+  for (let i = 0; i < 42; i++) {
+    const d = new Date(start);
+    d.setDate(start.getDate() + i);
+    cells.push({
+      n: d.getDate(),
+      iso: toIso(d),
+      dim: d.getMonth() !== month.getMonth(),
+    });
+  }
+  return cells;
+}
+
+function taskSub(o: OccurrenceDto, assignee: Member | null, isEn: boolean): string {
+  const parts: string[] = [];
+  if (assignee) parts.push(assignee.name);
+  if (o.task.type === 'recurring') parts.push(isEn ? 'recurring' : 'повтор');
+  else if (o.scheduledTime) parts.push(`${isEn ? 'by' : 'до'} ${o.scheduledTime.slice(0, 5)}`);
+  if (o.task.points > 0) parts.push(`+${o.task.points}`);
+  return parts.join(' · ');
+}
+
+function tagForOccurrence(
+  o: OccurrenceDto,
+  done: boolean,
+  selectedIso: string,
+  todayIso: string,
+  isEn: boolean,
+): JSX.Element | null {
+  if (done) return null;
+  // Past day with pending occurrence → red countdown chip
+  if (selectedIso < todayIso) {
+    return <Tag variant="danger">{isEn ? 'overdue' : 'просрочено'}</Tag>;
+  }
+  // Today with a scheduled time within 3h → warn ⏰
+  if (selectedIso === todayIso && o.scheduledTime) {
+    const [hh, mm] = o.scheduledTime.slice(0, 5).split(':').map(Number);
+    if (hh != null && mm != null) {
+      const due = new Date();
+      due.setHours(hh, mm, 0, 0);
+      const diffH = (due.getTime() - Date.now()) / 3_600_000;
+      if (diffH >= 0 && diffH <= 3) {
+        const h = Math.max(0, Math.ceil(diffH));
+        return <Tag variant="warn">⏰ {h} {isEn ? 'h' : 'ч'}</Tag>;
+      }
+    }
+  }
+  if (o.task.photoRequired) {
+    return (
+      <Tag>
+        <Icon name="cam" />
+      </Tag>
+    );
+  }
+  if (o.task.type === 'recurring') return <Tag>{isEn ? 'Recurring' : 'Повтор'}</Tag>;
+  return null;
+}
+
+function pluralTaskI18n(n: number, isEn: boolean): string {
+  return pluralize(
+    isEn ? 'en' : 'ru',
+    n,
+    ['задача', 'задачи', 'задач'],
+    ['task', 'tasks'],
+  );
+}
