@@ -11,15 +11,19 @@ import {
   type RewardDto,
 } from '../api';
 import { Av, Bar, Icon, Seg, Tag, WfBody, type Member } from '../design';
+import { PageHeader } from '../components/PageHeader';
 import { BottomSheet } from '../components/BottomSheet';
 import { pluralize, useT, type TFn } from '../i18n';
 
 type Props = {
   me: MeResponse;
   family: FamilySummary;
-  /** Burger button → opens the nav drawer. Shop is a top-level destination
-   *  (not a back-able sub-page), so we render a burger instead of `chevL`. */
+  /** Burger button → opens the nav drawer. Shown when Shop is reached
+   *  directly via the drawer (top-level destination). */
   onOpenDrawer?: () => void;
+  /** Back button — shown instead of the burger when reached via in-app
+   *  navigation. Exactly one of `onBack`/`onOpenDrawer` is non-null. */
+  onBack?: () => void;
 };
 
 type ShopTab = 'points' | 'streaks' | 'shop';
@@ -41,7 +45,7 @@ function memberFromDto(dto: FamilyMemberDto): Member {
  * and the GameShop reward grid (Магазин) from screens-gamification.jsx
  * and screens-extras.jsx.
  */
-export function Shop({ me, family, onOpenDrawer }: Props) {
+export function Shop({ me, family, onOpenDrawer, onBack }: Props) {
   const t = useT();
   const TABS: { id: ShopTab; label: string }[] = [
     { id: 'points', label: t('shop.tab.points') },
@@ -155,23 +159,16 @@ export function Shop({ me, family, onOpenDrawer }: Props) {
 
   return (
     <WfBody>
-      <div className="wf-row wf-gap-8">
-        {onOpenDrawer && (
-          <button
-            onClick={onOpenDrawer}
-            aria-label={t('nav.menu')}
-            style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 0, color: 'var(--ink)' }}
-          >
-            <Icon name="menu" />
-          </button>
-        )}
-        <span className="wf-h2" style={{ flex: 1 }}>
-          {t('shop.title')}
-        </span>
-        <span className="wf-tag solid" style={{ fontSize: 14, padding: '4px 10px' }}>
-          <Icon name="star" /> {myPts}
-        </span>
-      </div>
+      <PageHeader
+        title={t('shop.title')}
+        onBack={onBack}
+        onOpenDrawer={onOpenDrawer}
+        right={
+          <span className="wf-tag solid" style={{ fontSize: 14, padding: '4px 10px' }}>
+            <Icon name="star" /> {myPts}
+          </span>
+        }
+      />
 
       <Seg
         items={TABS.map((tt) => tt.label)}

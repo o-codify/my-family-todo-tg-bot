@@ -9,6 +9,7 @@ import {
   type TaskDto,
 } from '../api';
 import { Av, Icon, WfBody, type Member } from '../design';
+import { PageHeader } from '../components/PageHeader';
 import { pluralize, useT } from '../i18n';
 
 type Props = {
@@ -18,6 +19,9 @@ type Props = {
   onCreate: () => void;
   /** Burger button → opens the nav drawer. Top-level page only. */
   onOpenDrawer?: () => void;
+  /** Back button (shown instead of the burger when reached via in-app
+   *  navigation rather than the drawer). */
+  onBack?: () => void;
 };
 
 function memberFromDto(dto: FamilyMemberDto): Member {
@@ -33,7 +37,14 @@ function memberFromDto(dto: FamilyMemberDto): Member {
 }
 
 /** Port of QueueV1 (screens-queue.jsx lines 7-23). */
-export function QueueList({ me, family, onOpenQueue, onCreate, onOpenDrawer }: Props) {
+export function QueueList({
+  me,
+  family,
+  onOpenQueue,
+  onCreate,
+  onOpenDrawer,
+  onBack,
+}: Props) {
   void me;
   const t = useT();
   const today = new Date();
@@ -95,19 +106,7 @@ export function QueueList({ me, family, onOpenQueue, onCreate, onOpenDrawer }: P
 
   return (
     <WfBody>
-      {/* Header */}
-      <div className="wf-row wf-gap-8">
-        {onOpenDrawer && (
-          <button
-            onClick={onOpenDrawer}
-            style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 0, color: 'var(--ink)' }}
-            aria-label={t('nav.menu')}
-          >
-            <Icon name="menu" />
-          </button>
-        )}
-        <span className="wf-h1" style={{ flex: 1 }}>{t('queues.title')}</span>
-      </div>
+      <PageHeader title={t('queues.title')} onBack={onBack} onOpenDrawer={onOpenDrawer} />
       <span className="wf-hint">
         {queues.length} {pluralQueueTask(queues.length, t.locale === 'en')} · {t('queues.sub')}
       </span>

@@ -7,12 +7,16 @@ import {
   type MeResponse,
 } from '../api';
 import { Av, Icon, Seg, Tag, WfBody, type Member } from '../design';
+import { PageHeader } from '../components/PageHeader';
 import { pluralize, useT } from '../i18n';
 
 type Props = {
   me: MeResponse;
   family: FamilySummary;
+  /** Back when reached via in-app nav. Mutually exclusive with onOpenDrawer. */
   onBack?: () => void;
+  /** Burger when reached via the drawer (top-level entry). */
+  onOpenDrawer?: () => void;
 };
 
 type Period = 'week' | 'month' | 'all';
@@ -37,7 +41,7 @@ function memberFromDto(dto: FamilyMemberDto): Member {
  * client just fetches the small pre-aggregated payload + member metadata
  * for rendering names/colors/avatars.
  */
-export function Stats({ me, family, onBack }: Props) {
+export function Stats({ me, family, onBack, onOpenDrawer }: Props) {
   const t = useT();
   const isEn = t.locale === 'en';
   const PERIOD_OPTIONS: { id: Period; label: string }[] = [
@@ -91,28 +95,15 @@ export function Stats({ me, family, onBack }: Props) {
 
   return (
     <WfBody onBack={onBack}>
-      <div className="wf-row wf-gap-8">
-        {onBack && (
-          <button
-            onClick={onBack}
-            aria-label={t('common.back')}
-            style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 0, color: 'var(--ink)' }}
-          >
-            <Icon name="chevL" />
-          </button>
-        )}
-        <span className="wf-h2" style={{ flex: 1 }}>
-          {t('stats.title')}
-        </span>
-        <Seg
-          items={PERIOD_OPTIONS.map((p) => p.label)}
-          active={PERIOD_OPTIONS.find((p) => p.id === period)?.label ?? PERIOD_OPTIONS[0]!.label}
-          onChange={(v) => {
-            const next = PERIOD_OPTIONS.find((p) => p.label === v);
-            if (next) setPeriod(next.id);
-          }}
-        />
-      </div>
+      <PageHeader title={t('stats.title')} onBack={onBack} onOpenDrawer={onOpenDrawer} />
+      <Seg
+        items={PERIOD_OPTIONS.map((p) => p.label)}
+        active={PERIOD_OPTIONS.find((p) => p.id === period)?.label ?? PERIOD_OPTIONS[0]!.label}
+        onChange={(v) => {
+          const next = PERIOD_OPTIONS.find((p) => p.label === v);
+          if (next) setPeriod(next.id);
+        }}
+      />
 
       {/* Кто сколько сделал */}
       <div className="wf-card">

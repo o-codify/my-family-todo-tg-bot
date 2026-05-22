@@ -2,12 +2,16 @@ import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { api, type FamilySummary, type MeResponse, type PhotoDto } from '../api';
 import { Av, Icon, Tag, WfBody } from '../design';
+import { PageHeader } from '../components/PageHeader';
 import { useT, type Locale } from '../i18n';
 
 type Props = {
   me: MeResponse;
   family: FamilySummary;
   userId: string;
+  /** Always reached via in-app navigation (tap a family member), so back is
+   *  the only leading affordance — no drawer entry exists for "a specific
+   *  member's profile". */
   onBack: () => void;
 };
 
@@ -54,24 +58,7 @@ export function MemberProfile({ me, family, userId, onBack }: Props) {
 
   return (
     <WfBody onBack={onBack}>
-      <div className="wf-row wf-gap-8">
-        <button
-          onClick={onBack}
-          aria-label={t('common.back')}
-          style={{
-            background: 'transparent',
-            border: 'none',
-            cursor: 'pointer',
-            padding: 0,
-            color: 'var(--ink)',
-          }}
-        >
-          <Icon name="chevL" />
-        </button>
-        <span className="wf-h2" style={{ flex: 1 }}>
-          {isEn ? 'Member' : 'Участник'}
-        </span>
-      </div>
+      <PageHeader title={isEn ? 'Member' : 'Участник'} onBack={onBack} />
 
       {!dto && membersQuery.isLoading && (
         <span className="wf-hint">{t('common.loading')}</span>

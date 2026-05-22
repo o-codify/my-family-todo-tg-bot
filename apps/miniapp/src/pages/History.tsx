@@ -8,12 +8,16 @@ import {
   type OccurrenceDto,
 } from '../api';
 import { Av, Icon, Seg, Tag, WfBody, type Member } from '../design';
+import { PageHeader } from '../components/PageHeader';
 import { useT } from '../i18n';
 
 type Props = {
   me: MeResponse;
   family: FamilySummary;
-  onBack: () => void;
+  /** Back when reached via in-app nav. Mutually exclusive with onOpenDrawer. */
+  onBack?: () => void;
+  /** Burger when reached via the drawer (top-level entry). */
+  onOpenDrawer?: () => void;
 };
 
 function memberFromDto(dto: FamilyMemberDto): Member {
@@ -29,7 +33,7 @@ function memberFromDto(dto: FamilyMemberDto): Member {
 }
 
 /** Port of MoreV3 (History) from screens-more.jsx. */
-export function History({ me, family, onBack }: Props) {
+export function History({ me, family, onBack, onOpenDrawer }: Props) {
   const t = useT();
   const isEn = t.locale === 'en';
   const FILTERS = [
@@ -71,18 +75,7 @@ export function History({ me, family, onBack }: Props) {
 
   return (
     <WfBody onBack={onBack}>
-      <div className="wf-row wf-gap-8">
-        <button
-          onClick={onBack}
-          aria-label={t('common.back')}
-          style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 0, color: 'var(--ink)' }}
-        >
-          <Icon name="chevL" />
-        </button>
-        <span className="wf-h2" style={{ flex: 1 }}>
-          {t('history.title')}
-        </span>
-      </div>
+      <PageHeader title={t('history.title')} onBack={onBack} onOpenDrawer={onOpenDrawer} />
       <Seg
         items={[...FILTERS]}
         active={filter}

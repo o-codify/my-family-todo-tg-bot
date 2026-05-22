@@ -3,12 +3,17 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, type FamilySummary, type MeResponse } from '../api';
 import { Av, Icon, WfBody } from '../design';
 import { BottomSheet } from '../components/BottomSheet';
+import { PageHeader } from '../components/PageHeader';
 import { useT, type Locale } from '../i18n';
 
 type Props = {
   me: MeResponse;
   family: FamilySummary;
-  onBack: () => void;
+  /** Back when reached via in-app nav (e.g. tapping own avatar in Settings).
+   *  My profile is also a drawer destination, in which case the burger
+   *  appears instead via `onOpenDrawer`. */
+  onBack?: () => void;
+  onOpenDrawer?: () => void;
 };
 
 const COLORS: string[] = [
@@ -28,7 +33,7 @@ const COLORS: string[] = [
  * Notification settings, language, family-wide actions stay in the
  * Settings (formerly "Profile") tab so this page stays focused.
  */
-export function MyProfile({ me, family, onBack }: Props) {
+export function MyProfile({ me, family, onBack, onOpenDrawer }: Props) {
   const queryClient = useQueryClient();
   const t = useT();
   const updateMe = useMutation({
@@ -54,24 +59,11 @@ export function MyProfile({ me, family, onBack }: Props) {
 
   return (
     <WfBody onBack={onBack}>
-      <div className="wf-row wf-gap-8">
-        <button
-          onClick={onBack}
-          aria-label={t('common.back')}
-          style={{
-            background: 'transparent',
-            border: 'none',
-            cursor: 'pointer',
-            padding: 0,
-            color: 'var(--ink)',
-          }}
-        >
-          <Icon name="chevL" />
-        </button>
-        <span className="wf-h2" style={{ flex: 1 }}>
-          {t.locale === 'en' ? 'My profile' : 'Мой профиль'}
-        </span>
-      </div>
+      <PageHeader
+        title={t('nav.myProfile')}
+        onBack={onBack}
+        onOpenDrawer={onOpenDrawer}
+      />
 
       {/* Identity card */}
       <div className="wf-card" style={{ textAlign: 'center', padding: 14 }}>

@@ -9,6 +9,7 @@ import {
   type TaskDto,
 } from '../api';
 import { Icon, Seg, Tag, WfBody, type Member } from '../design';
+import { PageHeader } from '../components/PageHeader';
 import { BottomSheet } from '../components/BottomSheet';
 import { FloatingSection } from '../components/FloatingSection';
 import { pluralize, useT } from '../i18n';
@@ -212,21 +213,15 @@ export function Day({ me, family, iso, onBack, onOpenTask, onCreateTask }: Props
 
   return (
     <WfBody onBack={onBack}>
-      {/* Header — port of lines 7-14 */}
-      <div className="wf-row wf-gap-8">
-        <button
-          onClick={onBack}
-          style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 0, color: 'var(--ink)' }}
-          aria-label={t('common.back')}
-        >
-          <Icon name="chevL" />
-        </button>
-        <div className="wf-col" style={{ flex: 1 }}>
-          <span className="wf-h2">{heading}</span>
-          <span className="wf-hint">{sub}</span>
-        </div>
-        <Icon name="more" />
-      </div>
+      {/* Header — port of lines 7-14. Day is always reached via in-app
+          nav (tap a day on Calendar), so we always have a back button —
+          no drawer entry exists for "this specific day". */}
+      <PageHeader
+        title={heading}
+        subtitle={sub}
+        onBack={onBack}
+        right={<Icon name="more" />}
+      />
 
       {/* Filter Seg — port of line 16 */}
       <Seg items={filterItems} active={filter} onChange={setFilter} />

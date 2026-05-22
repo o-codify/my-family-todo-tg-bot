@@ -10,6 +10,7 @@ import {
 } from '../api';
 import { Av, Icon, Tag, WfBody, type Member } from '../design';
 import { BottomSheet } from '../components/BottomSheet';
+import { PageHeader } from '../components/PageHeader';
 import { makeT, normalizeLocale, useT, type Locale, type TFn } from '../i18n';
 
 type Props = {
@@ -18,17 +19,13 @@ type Props = {
   families: FamilySummary[];
   onSwitchFamily: (id: string) => void;
   onLeft: () => void;
-  onOpenStats?: () => void;
-  onOpenHistory?: () => void;
-  onOpenCatalog?: () => void;
-  onOpenTemplates?: () => void;
-  onOpenRoles?: () => void;
-  onOpenSearch?: () => void;
-  onOpenInbox?: () => void;
   onOpenMyProfile?: () => void;
   onOpenMember?: (userId: string) => void;
   /** Burger button → opens the nav drawer. Top-level page only. */
   onOpenDrawer?: () => void;
+  /** Back button (shown instead of the burger when the user reached this
+   *  page via in-app navigation rather than via the drawer). */
+  onBack?: () => void;
 };
 
 function memberFromDto(dto: FamilyMemberDto): Member {
@@ -54,16 +51,10 @@ export function Profile({
   families,
   onSwitchFamily,
   onLeft,
-  onOpenStats,
-  onOpenHistory,
-  onOpenCatalog,
-  onOpenTemplates,
-  onOpenRoles,
-  onOpenSearch,
-  onOpenInbox,
   onOpenMyProfile,
   onOpenMember,
   onOpenDrawer,
+  onBack,
 }: Props) {
   const queryClient = useQueryClient();
   const membersQuery = useQuery({
@@ -154,23 +145,7 @@ export function Profile({
 
   return (
     <WfBody scrollKey="profile">
-      {/* Top row: burger + page title. Settings is a top-level destination,
-          so this is where the drawer is opened from. Family selector below
-          stays where it was. */}
-      <div className="wf-row wf-gap-8">
-        {onOpenDrawer && (
-          <button
-            onClick={onOpenDrawer}
-            aria-label={t('nav.menu')}
-            style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 0, color: 'var(--ink)' }}
-          >
-            <Icon name="menu" />
-          </button>
-        )}
-        <span className="wf-h1" style={{ flex: 1 }}>
-          {t('nav.profile')}
-        </span>
-      </div>
+      <PageHeader title={t('nav.profile')} onBack={onBack} onOpenDrawer={onOpenDrawer} />
 
       {/* Family selector (if multiple) */}
       {families.length > 1 && (
@@ -481,17 +456,12 @@ export function Profile({
         />
       )}
 
-      {/* Family management nav */}
-      <span className="wf-h3" style={{ marginTop: 8 }}>
-        {t('profile.family.title')}
-      </span>
-      <ListRow icon="search" label={t('profile.section.search')} onClick={onOpenSearch} />
-      <ListRow icon="bell" label={t('profile.section.inbox')} onClick={onOpenInbox} />
-      <ListRow icon="chart" label={t('profile.section.stats')} onClick={onOpenStats} />
-      <ListRow icon="clock" label={t('profile.section.history')} onClick={onOpenHistory} />
-      <ListRow icon="pkg" label={t('profile.section.catalog')} onClick={onOpenCatalog} />
-      <ListRow icon="list" label={t('profile.section.templates')} onClick={onOpenTemplates} />
-      <ListRow icon="sett" label={t('profile.section.roles')} onClick={onOpenRoles} />
+      {/* The "Family management" rows that used to live here (Search /
+          Inbox / Stats / History / Catalog / Templates / Roles) all moved
+          into the burger drawer — duplicating them here just confused
+          users and left two ways to reach the same screen. Settings now
+          focuses on family identity, members, notifications, language,
+          and the owner-only Danger zone below. */}
 
       {/* Owner-only Danger zone — rename + rotate + delete family. */}
       {isFamilyOwner && (

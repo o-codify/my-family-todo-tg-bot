@@ -8,12 +8,16 @@ import {
   type RoleDto,
 } from '../api';
 import { Av, AvStack, Icon, Tag, WfBody, type Member } from '../design';
+import { PageHeader } from '../components/PageHeader';
 import { useT } from '../i18n';
 
 type Props = {
   me: MeResponse;
   family: FamilySummary;
-  onBack: () => void;
+  /** Back when reached via in-app nav. */
+  onBack?: () => void;
+  /** Burger when reached via the drawer. */
+  onOpenDrawer?: () => void;
 };
 
 const PERMISSION_KEYS: Record<string, string> = {
@@ -55,7 +59,7 @@ function roleEmoji(name: string): string {
 }
 
 /** Roles editor — port of RolesV1+R2 (screens-roles-catalog.jsx). */
-export function Roles({ me, family, onBack }: Props) {
+export function Roles({ me, family, onBack, onOpenDrawer }: Props) {
   void me;
   const queryClient = useQueryClient();
   const t = useT();
@@ -106,27 +110,17 @@ export function Roles({ me, family, onBack }: Props) {
   if (selected) {
     const readOnly = selected.name.toLowerCase() === 'owner';
     return (
-      <WfBody onBack={onBack}>
-        <div className="wf-row wf-gap-8">
-          <button
-            onClick={() => setSelectedRoleId(null)}
-            aria-label={t('common.back')}
-            style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 0, color: 'var(--ink)' }}
-          >
-            <Icon name="chevL" />
-          </button>
-          <div className="wf-col" style={{ flex: 1 }}>
-            <span className="wf-h2">
-              {t('roles.role.label')} · {selected.name}
-            </span>
-            <span className="wf-hint">
-              {selectedMembers.length === 0
-                ? t('roles.members.none')
-                : `${selectedMembers.length} ${pluralMembersI18n(selectedMembers.length, t.locale === 'en')}: ${selectedMembers.map((m) => m.name).join(', ')}`}
-            </span>
-          </div>
-          {readOnly && <Tag>{t('roles.tag.readonly')}</Tag>}
-        </div>
+      <WfBody onBack={() => setSelectedRoleId(null)}>
+        <PageHeader
+          title={`${t('roles.role.label')} · ${selected.name}`}
+          subtitle={
+            selectedMembers.length === 0
+              ? t('roles.members.none')
+              : `${selectedMembers.length} ${pluralMembersI18n(selectedMembers.length, t.locale === 'en')}: ${selectedMembers.map((m) => m.name).join(', ')}`
+          }
+          onBack={() => setSelectedRoleId(null)}
+          right={readOnly ? <Tag>{t('roles.tag.readonly')}</Tag> : undefined}
+        />
         <div className="wf-card subtle">
           <span className="wf-tiny">
             {readOnly ? t('roles.readOnly') : t('roles.realtime')}
@@ -173,18 +167,7 @@ export function Roles({ me, family, onBack }: Props) {
 
   return (
     <WfBody onBack={onBack}>
-      <div className="wf-row wf-gap-8">
-        <button
-          onClick={onBack}
-          aria-label="Назад"
-          style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 0, color: 'var(--ink)' }}
-        >
-          <Icon name="chevL" />
-        </button>
-        <span className="wf-h2" style={{ flex: 1 }}>
-          {t('roles.title')}
-        </span>
-      </div>
+      <PageHeader title={t('roles.title')} onBack={onBack} onOpenDrawer={onOpenDrawer} />
 
       <span className="wf-hint">{t('roles.hint')}</span>
 

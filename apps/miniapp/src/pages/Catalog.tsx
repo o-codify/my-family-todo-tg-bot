@@ -2,12 +2,16 @@ import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, type CatalogItemDto, type FamilySummary, type MeResponse } from '../api';
 import { Icon, Tag, WfBody } from '../design';
+import { PageHeader } from '../components/PageHeader';
 import { useT } from '../i18n';
 
 type Props = {
   me: MeResponse;
   family: FamilySummary;
-  onBack: () => void;
+  /** Back when reached via in-app nav. */
+  onBack?: () => void;
+  /** Burger when reached via the drawer. */
+  onOpenDrawer?: () => void;
 };
 
 const PRESET_EMOJI = [
@@ -32,7 +36,7 @@ const PRESET_EMOJI = [
 const ALL = '__all__';
 
 /** Port of CatV1 (screens-roles-catalog.jsx :174-233). */
-export function Catalog({ me, family, onBack }: Props) {
+export function Catalog({ me, family, onBack, onOpenDrawer }: Props) {
   void me;
   const queryClient = useQueryClient();
   const t = useT();
@@ -85,25 +89,20 @@ export function Catalog({ me, family, onBack }: Props) {
 
   return (
     <WfBody onBack={onBack}>
-      <div className="wf-row wf-gap-8">
-        <button
-          onClick={onBack}
-          aria-label={t('common.back')}
-          style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 0, color: 'var(--ink)' }}
-        >
-          <Icon name="chevL" />
-        </button>
-        <span className="wf-h2" style={{ flex: 1 }}>
-          {t('catalog.title')}
-        </span>
-        <button
-          onClick={() => setCreating(true)}
-          aria-label={t('common.add')}
-          style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 0, color: 'var(--ink)' }}
-        >
-          <Icon name="plus" />
-        </button>
-      </div>
+      <PageHeader
+        title={t('catalog.title')}
+        onBack={onBack}
+        onOpenDrawer={onOpenDrawer}
+        right={
+          <button
+            onClick={() => setCreating(true)}
+            aria-label={t('common.add')}
+            style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 0, color: 'var(--ink)' }}
+          >
+            <Icon name="plus" />
+          </button>
+        }
+      />
 
       {/* Search */}
       <div className="wf-box" style={{ padding: '8px 10px' }}>

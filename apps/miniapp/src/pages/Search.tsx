@@ -9,15 +9,19 @@ import {
   type TemplateDto,
 } from '../api';
 import { Icon, Seg, Tag, WfBody } from '../design';
+import { PageHeader } from '../components/PageHeader';
 import { useT, type TFn } from '../i18n';
 
 type Props = {
   me: MeResponse;
   family: FamilySummary;
-  onBack: () => void;
+  /** Back when reached via in-app nav. */
+  onBack?: () => void;
+  /** Burger when reached via the drawer. */
+  onOpenDrawer?: () => void;
 };
 
-export function Search({ me, family, onBack }: Props) {
+export function Search({ me, family, onBack, onOpenDrawer }: Props) {
   void me;
   const t = useT();
   const FILTERS = [
@@ -67,18 +71,7 @@ export function Search({ me, family, onBack }: Props) {
 
   return (
     <WfBody onBack={onBack}>
-      <div className="wf-row wf-gap-8">
-        <button
-          onClick={onBack}
-          aria-label={t('common.back')}
-          style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 0, color: 'var(--ink)' }}
-        >
-          <Icon name="chevL" />
-        </button>
-        <span className="wf-h2" style={{ flex: 1 }}>
-          {t('search.title')}
-        </span>
-      </div>
+      <PageHeader title={t('search.title')} onBack={onBack} onOpenDrawer={onOpenDrawer} />
       <div className="wf-box" style={{ padding: '10px 12px' }}>
         <div className="wf-row wf-gap-6">
           <Icon name="search" />

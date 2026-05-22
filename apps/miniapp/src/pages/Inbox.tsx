@@ -9,12 +9,16 @@ import {
   type TransferDto,
 } from '../api';
 import { Av, Icon, Tag, WfBody, type Member } from '../design';
+import { PageHeader } from '../components/PageHeader';
 import { useT, type TFn } from '../i18n';
 
 type Props = {
   me: MeResponse;
   family: FamilySummary;
-  onBack: () => void;
+  /** Back when reached via in-app nav. */
+  onBack?: () => void;
+  /** Burger when reached via the drawer. */
+  onOpenDrawer?: () => void;
 };
 
 function memberFromDto(dto: FamilyMemberDto): Member {
@@ -33,7 +37,7 @@ function memberFromDto(dto: FamilyMemberDto): Member {
  * Port of screens-states.jsx — incoming transfers + redemption requests.
  * One screen with both feeds: «Передачи мне» and «Запросы призов».
  */
-export function Inbox({ me, family, onBack }: Props) {
+export function Inbox({ me, family, onBack, onOpenDrawer }: Props) {
   const queryClient = useQueryClient();
   const t = useT();
 
@@ -101,18 +105,7 @@ export function Inbox({ me, family, onBack }: Props) {
 
   return (
     <WfBody onBack={onBack}>
-      <div className="wf-row wf-gap-8">
-        <button
-          onClick={onBack}
-          aria-label={t('common.back')}
-          style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 0, color: 'var(--ink)' }}
-        >
-          <Icon name="chevL" />
-        </button>
-        <span className="wf-h2" style={{ flex: 1 }}>
-          {t('inbox.title')}
-        </span>
-      </div>
+      <PageHeader title={t('inbox.title')} onBack={onBack} onOpenDrawer={onOpenDrawer} />
 
       {isAnyLoading && <span className="wf-hint">{t('common.loading')}</span>}
 

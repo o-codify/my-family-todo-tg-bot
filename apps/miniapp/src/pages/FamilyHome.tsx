@@ -225,8 +225,41 @@ export function FamilyHome({ me, families }: Props) {
   const [route, setRoute] = useState<Route>(() =>
     typeof window === 'undefined' ? { kind: 'calendar' } : parseRoute(window.location.hash),
   );
+  // Back-stack so sub-pages reached via in-app navigation return to where
+  // the user came from (not always to Settings). Drawer-driven navigation
+  // resets the stack — a drawer pick is a fresh top-level destination,
+  // not a step deeper.
+  const [backStack, setBackStack] = useState<Route[]>([]);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const activeNav: NavKey = navKeyForRoute(route);
+
+  /** Replace the current route AND push it onto the back stack. Used for
+   *  in-app navigation (member tap, "Открыть..." rows, sub-page links). */
+  const pushRoute = (next: Route) => {
+    setBackStack((s) => [...s, route]);
+    setRoute(next);
+  };
+
+  /** Pop the back stack. Falls back to calendar when empty (defensive —
+   *  the caller only renders a back button when the stack is non-empty,
+   *  so this branch shouldn't fire in practice). */
+  const popRoute = () => {
+    setBackStack((s) => {
+      if (s.length === 0) {
+        setRoute({ kind: 'calendar' });
+        return s;
+      }
+      const next = s[s.length - 1]!;
+      setRoute(next);
+      return s.slice(0, -1);
+    });
+  };
+
+  // Convenience: handlers a page can install for "back" vs "open drawer".
+  // We never offer both — if there's anywhere to go back, that's the only
+  // leading affordance; otherwise it's the burger.
+  const onBackFor = backStack.length > 0 ? popRoute : undefined;
+  const onOpenDrawerFor = backStack.length === 0 ? () => setDrawerOpen(true) : undefined;
 
   // Onboarding tour shown once per user. The flag lives in `preferences`
   // (PATCH /me); after dismissal it's persisted so refresh/re-launch won't
@@ -277,32 +310,41 @@ export function FamilyHome({ me, families }: Props) {
       </div>
     );
 
-  // The drawer turns any logical destination into a route flip. Closing the
-  // drawer happens inside `NavDrawer` (it runs the slide-out first).
-  const openDrawer = () => setDrawerOpen(true);
+  // Drawer-driven navigation resets the back stack: the user is jumping
+  // to a top-level destination, not stepping into a sub-page. Without
+  // this reset, a drawer pick would inherit the previous page's back
+  // history, which reads wrong ("back" goes somewhere unrelated).
   const onNavigate = (key: NavKey) => {
+    setBackStack([]);
     setRoute(NAV_ROUTE[key]);
     setDrawerOpen(false);
   };
 
   return (
     <>
-      {/* Active screen */}
+      {/* Active screen.
+          Two rules drive the leading affordance (back vs burger):
+          - Sub-pages reached by in-app navigation get `onBack` (via the
+            back-stack) — passed through `onBackFor`.
+          - Pages reached via the drawer (or as the initial calendar) get
+            `onOpenDrawer` instead — via `onOpenDrawerFor`.
+          Exactly one is non-null at a time, never both. */}
       {route.kind === 'calendar' && (
         <Calendar
           me={me}
           family={activeFamily}
           families={families}
           onSwitchFamily={setActiveFamilyId}
-          onOpenDay={(iso) => setRoute({ kind: 'day', iso })}
+          onOpenDay={(iso) => pushRoute({ kind: 'day', iso })}
           onOpenTask={setOpenTask}
           onCreateTask={(iso) => {
             setCreateDefaultDate(iso);
             setCreateDefaultKind('recurring');
             setCreateOpen(true);
           }}
-          onOpenInvite={() => setRoute({ kind: 'profile' })}
-          onOpenDrawer={openDrawer}
+          onOpenInvite={() => pushRoute({ kind: 'profile' })}
+          onBack={onBackFor}
+          onOpenDrawer={onOpenDrawerFor}
         />
       )}
       {route.kind === 'day' && (
@@ -310,7 +352,7 @@ export function FamilyHome({ me, families }: Props) {
           me={me}
           family={activeFamily}
           iso={route.iso}
-          onBack={() => setRoute({ kind: 'calendar' })}
+          onBack={onBackFor ?? (() => setRoute({ kind: 'calendar' }))}
           onOpenTask={setOpenTask}
           onCreateTask={() => {
             setCreateDefaultDate(route.iso);
@@ -323,13 +365,14 @@ export function FamilyHome({ me, families }: Props) {
         <QueueList
           me={me}
           family={activeFamily}
-          onOpenQueue={(taskId) => setRoute({ kind: 'queue', taskId })}
+          onOpenQueue={(taskId) => pushRoute({ kind: 'queue', taskId })}
           onCreate={() => {
             setCreateDefaultDate(new Date().toISOString().slice(0, 10));
             setCreateDefaultKind('queued');
             setCreateOpen(true);
           }}
-          onOpenDrawer={openDrawer}
+          onBack={onBackFor}
+          onOpenDrawer={onOpenDrawerFor}
         />
       )}
       {route.kind === 'queue' && (
@@ -337,7 +380,7 @@ export function FamilyHome({ me, families }: Props) {
           me={me}
           family={activeFamily}
           taskId={route.taskId}
-          onBack={() => setRoute({ kind: 'queues' })}
+          onBack={onBackFor ?? (() => setRoute({ kind: 'queues' }))}
           onEditTask={(id) => {
             const t = tasksQuery.data?.tasks.find((x) => x.id === id);
             if (t) setEditingTask(t);
@@ -348,7 +391,8 @@ export function FamilyHome({ me, families }: Props) {
         <Shop
           me={me}
           family={activeFamily}
-          onOpenDrawer={openDrawer}
+          onBack={onBackFor}
+          onOpenDrawer={onOpenDrawerFor}
         />
       )}
       {route.kind === 'profile' && (
@@ -361,23 +405,18 @@ export function FamilyHome({ me, families }: Props) {
             // After leaving, App.tsx's families query will refetch and route to Onboarding
             setRoute({ kind: 'calendar' });
           }}
-          onOpenMyProfile={() => setRoute({ kind: 'my-profile' })}
-          onOpenMember={(userId) => setRoute({ kind: 'member', userId })}
-          onOpenStats={() => setRoute({ kind: 'stats' })}
-          onOpenHistory={() => setRoute({ kind: 'history' })}
-          onOpenCatalog={() => setRoute({ kind: 'catalog' })}
-          onOpenTemplates={() => setRoute({ kind: 'templates' })}
-          onOpenRoles={() => setRoute({ kind: 'roles' })}
-          onOpenSearch={() => setRoute({ kind: 'search' })}
-          onOpenInbox={() => setRoute({ kind: 'inbox' })}
-          onOpenDrawer={openDrawer}
+          onOpenMyProfile={() => pushRoute({ kind: 'my-profile' })}
+          onOpenMember={(userId) => pushRoute({ kind: 'member', userId })}
+          onBack={onBackFor}
+          onOpenDrawer={onOpenDrawerFor}
         />
       )}
       {route.kind === 'my-profile' && (
         <MyProfile
           me={me}
           family={activeFamily}
-          onBack={() => setRoute({ kind: 'profile' })}
+          onBack={onBackFor ?? (() => setRoute({ kind: 'profile' }))}
+          onOpenDrawer={onOpenDrawerFor}
         />
       )}
       {route.kind === 'member' && (
@@ -385,35 +424,39 @@ export function FamilyHome({ me, families }: Props) {
           me={me}
           family={activeFamily}
           userId={route.userId}
-          onBack={() => setRoute({ kind: 'profile' })}
+          onBack={onBackFor ?? (() => setRoute({ kind: 'profile' }))}
         />
       )}
       {route.kind === 'stats' && (
         <Stats
           me={me}
           family={activeFamily}
-          onBack={() => setRoute({ kind: 'profile' })}
+          onBack={onBackFor}
+          onOpenDrawer={onOpenDrawerFor}
         />
       )}
       {route.kind === 'history' && (
         <History
           me={me}
           family={activeFamily}
-          onBack={() => setRoute({ kind: 'profile' })}
+          onBack={onBackFor}
+          onOpenDrawer={onOpenDrawerFor}
         />
       )}
       {route.kind === 'catalog' && (
         <Catalog
           me={me}
           family={activeFamily}
-          onBack={() => setRoute({ kind: 'profile' })}
+          onBack={onBackFor}
+          onOpenDrawer={onOpenDrawerFor}
         />
       )}
       {route.kind === 'templates' && (
         <Templates
           me={me}
           family={activeFamily}
-          onBack={() => setRoute({ kind: 'profile' })}
+          onBack={onBackFor}
+          onOpenDrawer={onOpenDrawerFor}
           onApply={async (payload) => {
             try {
               await api.createTask(activeFamily.id, payload);
@@ -422,6 +465,7 @@ export function FamilyHome({ me, families }: Props) {
             }
             queryClient.invalidateQueries({ queryKey: ['occurrences', activeFamily.id] });
             queryClient.invalidateQueries({ queryKey: ['tasks', activeFamily.id] });
+            setBackStack([]);
             setRoute({ kind: 'calendar' });
           }}
         />
@@ -430,21 +474,24 @@ export function FamilyHome({ me, families }: Props) {
         <Roles
           me={me}
           family={activeFamily}
-          onBack={() => setRoute({ kind: 'profile' })}
+          onBack={onBackFor}
+          onOpenDrawer={onOpenDrawerFor}
         />
       )}
       {route.kind === 'search' && (
         <Search
           me={me}
           family={activeFamily}
-          onBack={() => setRoute({ kind: 'profile' })}
+          onBack={onBackFor}
+          onOpenDrawer={onOpenDrawerFor}
         />
       )}
       {route.kind === 'inbox' && (
         <Inbox
           me={me}
           family={activeFamily}
-          onBack={() => setRoute({ kind: 'profile' })}
+          onBack={onBackFor}
+          onOpenDrawer={onOpenDrawerFor}
         />
       )}
       {route.kind === 'transfer' && (
@@ -452,10 +499,10 @@ export function FamilyHome({ me, families }: Props) {
           me={me}
           family={activeFamily}
           occurrenceId={route.occurrenceId}
-          // Cancel + done both fall back to the calendar — same UX shape as
-          // closing the old sheet, but a real navigation now.
-          onBack={() => setRoute({ kind: 'calendar' })}
-          onDone={() => setRoute({ kind: 'calendar' })}
+          // Cancel + done both pop the stack (typically back to the
+          // calendar / day page that opened the transfer).
+          onBack={onBackFor ?? (() => setRoute({ kind: 'calendar' }))}
+          onDone={onBackFor ?? (() => setRoute({ kind: 'calendar' }))}
         />
       )}
 
@@ -497,7 +544,7 @@ export function FamilyHome({ me, families }: Props) {
             // Navigate to the Transfer page; the TaskSheet close-animation
             // wraps this callback via `close(onTransfer)`, so the sheet
             // slides out first, then we swap routes.
-            setRoute({ kind: 'transfer', occurrenceId: openTask.id });
+            pushRoute({ kind: 'transfer', occurrenceId: openTask.id });
             setOpenTask(null);
           }}
         />

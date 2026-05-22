@@ -8,6 +8,7 @@ import {
   type OccurrenceDto,
 } from '../api';
 import { Av, Icon, Seg, Tag, WfBody, type Member } from '../design';
+import { PageHeader } from '../components/PageHeader';
 import { useT } from '../i18n';
 
 type Props = {
@@ -168,18 +169,7 @@ export function Transfer({ me, family, occurrenceId, onBack, onDone }: Props) {
   if (isSynth || (!occurrenceQuery.isLoading && !occurrence)) {
     return (
       <WfBody onBack={onBack}>
-        <div className="wf-row wf-gap-8">
-          <button
-            onClick={onBack}
-            aria-label={t('common.back')}
-            style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 0, color: 'var(--ink)' }}
-          >
-            <Icon name="chevL" />
-          </button>
-          <span className="wf-h2" style={{ flex: 1 }}>
-            {t('transfer.title.plain')}
-          </span>
-        </div>
+        <PageHeader title={t('transfer.title.plain')} onBack={onBack} />
         <div className="wf-card subtle" style={{ textAlign: 'center', padding: 18 }}>
           <span className="wf-hint">
             {isEn ? 'This task cannot be transferred' : 'Эту задачу нельзя передать'}
@@ -192,18 +182,7 @@ export function Transfer({ me, family, occurrenceId, onBack, onDone }: Props) {
   if (!occurrence) {
     return (
       <WfBody onBack={onBack}>
-        <div className="wf-row wf-gap-8">
-          <button
-            onClick={onBack}
-            aria-label={t('common.back')}
-            style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 0, color: 'var(--ink)' }}
-          >
-            <Icon name="chevL" />
-          </button>
-          <span className="wf-h2" style={{ flex: 1 }}>
-            {t('transfer.title.plain')}
-          </span>
-        </div>
+        <PageHeader title={t('transfer.title.plain')} onBack={onBack} />
         <span className="wf-hint">{t('common.loading')}</span>
       </WfBody>
     );
@@ -211,23 +190,16 @@ export function Transfer({ me, family, occurrenceId, onBack, onDone }: Props) {
 
   return (
     <WfBody onBack={onBack}>
-      {/* Header — chevL + title (per design V1/V2/V3) */}
-      <div className="wf-row wf-gap-8">
-        <button
-          onClick={onBack}
-          aria-label={t('common.back')}
-          style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 0, color: 'var(--ink)' }}
-        >
-          <Icon name="chevL" />
-        </button>
-        <span className="wf-h2" style={{ flex: 1 }}>
-          {mode === 'swap'
+      <PageHeader
+        title={
+          mode === 'swap'
             ? t('transfer.title.swap')
             : mode === 'reward'
               ? t('transfer.title.reward')
-              : t('transfer.title.plain')}
-        </span>
-      </div>
+              : t('transfer.title.plain')
+        }
+        onBack={onBack}
+      />
 
       <Seg
         items={MODES.map((m) => m.label)}

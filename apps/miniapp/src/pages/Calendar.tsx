@@ -28,6 +28,9 @@ type Props = {
   /** Burger button at the top-left opens this. Top-level pages get a burger
    *  in their header to access the navigation drawer; sub-pages don't. */
   onOpenDrawer?: () => void;
+  /** Back button (shown instead of the burger when the user reached this
+   *  page via in-app navigation rather than via the drawer). */
+  onBack?: () => void;
 };
 
 const WK_RU = ['пн', 'вт', 'ср', 'чт', 'пт', 'сб', 'вс'];
@@ -128,6 +131,7 @@ export function Calendar({
   onCreateTask,
   onOpenInvite,
   onOpenDrawer,
+  onBack,
 }: Props) {
   const queryClient = useQueryClient();
   const t = useT();
@@ -339,16 +343,32 @@ export function Calendar({
 
   return (
     <WfBody>
-      {/* Header — port of lines 52-64 */}
+      {/* Header — port of lines 52-64.
+          Leading slot is a single black-pill button — either Back (in-app
+          nav source) or burger (drawer source); never both. Matches
+          PageHeader's style so all pages read consistently. */}
       <div className="wf-spread">
         <div className="wf-row wf-gap-6">
-          {onOpenDrawer && (
+          {(onBack || onOpenDrawer) && (
             <button
-              onClick={onOpenDrawer}
-              style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 0, color: 'var(--ink)' }}
-              aria-label={t('nav.menu')}
+              onClick={onBack ?? onOpenDrawer}
+              aria-label={onBack ? t('common.back') : t('nav.menu')}
+              style={{
+                width: 36,
+                height: 36,
+                borderRadius: 999,
+                background: 'var(--ink)',
+                color: 'var(--paper)',
+                border: 'none',
+                cursor: 'pointer',
+                padding: 0,
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flex: 'none',
+              }}
             >
-              <Icon name="menu" />
+              <Icon name={onBack ? 'chevL' : 'menu'} />
             </button>
           )}
           <button

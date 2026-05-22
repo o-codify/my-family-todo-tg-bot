@@ -8,6 +8,7 @@ import {
   type OccurrenceDto,
 } from '../api';
 import { Av, Bar, Icon, Tag, WfBody, type Member } from '../design';
+import { PageHeader } from '../components/PageHeader';
 import { pluralize, useT } from '../i18n';
 
 type Props = {
@@ -138,40 +139,32 @@ export function QueueDetail({ me, family, taskId, onBack, onEditTask }: Props) {
 
   return (
     <WfBody onBack={onBack}>
-      {/* Header — port of lines 80-84 */}
-      <div className="wf-row wf-gap-8">
-        <button
-          onClick={onBack}
-          style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 0, color: 'var(--ink)' }}
-          aria-label={t('common.back')}
-        >
-          <Icon name="chevL" />
-        </button>
-        <span className="wf-h2" style={{ flex: 1 }}>
-          {task?.title ?? '…'}
-        </span>
-        {/* Pencil opens the same CreateTaskSheet used everywhere else.
-            Delete lives at the bottom-left of that sheet, so all task
-            management — rename, cooldown, queue roster, delete — sits
-            in one place instead of being split between two different
-            UIs. (Same element, same behavior.) */}
-        <button
-          type="button"
-          onClick={() => onEditTask?.(taskId)}
-          disabled={!onEditTask}
-          aria-label={t.locale === 'en' ? 'Edit' : 'Изменить'}
-          style={{
-            background: 'transparent',
-            border: 'none',
-            cursor: onEditTask ? 'pointer' : 'default',
-            padding: 0,
-            color: 'var(--ink)',
-            opacity: onEditTask ? 1 : 0.4,
-          }}
-        >
-          <Icon name="edit" />
-        </button>
-      </div>
+      {/* Pencil opens the same CreateTaskSheet used everywhere else —
+          delete lives at the bottom-left of that sheet, so all task
+          management (rename, cooldown, queue roster, delete) sits in
+          one place. */}
+      <PageHeader
+        title={task?.title ?? '…'}
+        onBack={onBack}
+        right={
+          <button
+            type="button"
+            onClick={() => onEditTask?.(taskId)}
+            disabled={!onEditTask}
+            aria-label={t.locale === 'en' ? 'Edit' : 'Изменить'}
+            style={{
+              background: 'transparent',
+              border: 'none',
+              cursor: onEditTask ? 'pointer' : 'default',
+              padding: 0,
+              color: 'var(--ink)',
+              opacity: onEditTask ? 1 : 0.4,
+            }}
+          >
+            <Icon name="edit" />
+          </button>
+        }
+      />
       <div className="wf-row wf-gap-6">
         <Tag>
           <Icon name="repeat" />{' '}
