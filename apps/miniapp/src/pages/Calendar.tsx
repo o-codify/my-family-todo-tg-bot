@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   api,
@@ -134,6 +134,26 @@ export function Calendar({
   // mirroring the Day screen so the bottom of the Calendar doesn't get
   // dominated by old completed rows.
   const [showDone, setShowDone] = useState(false);
+
+  // Manual double-tap detection. The native `onDoubleClick` event is
+  // unreliable on iOS/Telegram WebView — the OS often eats the second tap
+  // as a zoom gesture or returns it as a single click. Tracking
+  // (iso + timestamp) of the previous tap gives consistent behaviour on
+  // both touch and mouse: tap = select day, double-tap inside DOUBLE_TAP_MS
+  // on the SAME cell = drill into the Day screen.
+  const DOUBLE_TAP_MS = 350;
+  const lastTapRef = useRef<{ iso: string; t: number } | null>(null);
+  const handleCellTap = (iso: string) => {
+    const now = Date.now();
+    const prev = lastTapRef.current;
+    if (prev && prev.iso === iso && now - prev.t < DOUBLE_TAP_MS) {
+      lastTapRef.current = null;
+      onOpenDay?.(iso);
+      return;
+    }
+    lastTapRef.current = { iso, t: now };
+    setSelectedIso(iso);
+  };
 
   const monthStart = new Date(view.getFullYear(), view.getMonth(), 1);
   const monthEnd = new Date(view.getFullYear(), view.getMonth() + 1, 0);
@@ -296,11 +316,10 @@ export function Calendar({
             <div
               key={i}
               className={cls.join(' ')}
-              onClick={() => !c.dim && setSelectedIso(c.iso)}
-              // Double-click drills into the dedicated Day screen — the
-              // single-click "select day" UX still works, and a quick
-              // double-tap on mobile fires this after two onClicks.
-              onDoubleClick={() => !c.dim && onOpenDay?.(c.iso)}
+              // Single tap selects the day, two taps within 350ms drill
+              // into the Day screen. See `handleCellTap` above — manual
+              // tracking is more reliable than `onDoubleClick` on mobile.
+              onClick={() => !c.dim && handleCellTap(c.iso)}
               style={{ cursor: c.dim ? 'default' : 'pointer', userSelect: 'none' }}
             >
               <span className="n">{c.n}</span>

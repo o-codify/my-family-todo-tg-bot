@@ -128,7 +128,20 @@ export function Stats({ me, family, onBack }: Props) {
             return (
               <div key={userId} className="wf-row wf-gap-8">
                 <Av m={member ?? null} size="sm" />
-                <span className="wf-label" style={{ width: 56, flex: 'none' }}>
+                {/* Name cell: capped at 35% of the row width so it shares
+                    space with the progress bar fairly, and clips with
+                    ellipsis when the username is longer than that. */}
+                <span
+                  className="wf-label"
+                  style={{
+                    flex: '0 1 35%',
+                    minWidth: 0,
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                  }}
+                  title={member?.name}
+                >
                   {member?.name ?? '—'}
                 </span>
                 <span className="wf-bar" style={{ flex: 1, height: 12 }}>
@@ -165,9 +178,18 @@ export function Stats({ me, family, onBack }: Props) {
             </span>
           )}
         </div>
-        <div className="wf-card" style={{ flex: 1 }}>
+        <div className="wf-card" style={{ flex: 1, minWidth: 0 }}>
           <span className="wf-tiny">{t('stats.streak.family')}</span>
-          <div className="wf-h2" style={{ marginTop: 2 }}>
+          <div
+            className="wf-h2"
+            style={{
+              marginTop: 2,
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+            }}
+            title={familyTopMember?.name}
+          >
             {familyTopMember?.name ?? '—'} · {familyTop.days}
           </div>
           <span className="wf-tiny">

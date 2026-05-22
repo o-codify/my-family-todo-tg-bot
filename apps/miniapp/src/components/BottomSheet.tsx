@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 
 type CloseFn = (after?: () => void) => void;
 
@@ -52,7 +53,12 @@ export function BottomSheet({ onClose, zIndex = 10, children }: Props) {
     };
   }, []);
 
-  return (
+  // Portal into <body> so the sheet escapes any stacking context created
+  // by ancestors (`.wf-body` has `position: relative`, `#root` is a flex
+  // column with `overflow: hidden` — both can constrain a child's z-index
+  // and let the bottom-nav paint on top of the sheet despite higher z).
+  if (typeof document === 'undefined') return null;
+  return createPortal(
     <div
       onClick={() => close()}
       className={'wf-sheet-backdrop' + (closing ? ' is-closing' : '')}
@@ -65,6 +71,7 @@ export function BottomSheet({ onClose, zIndex = 10, children }: Props) {
       >
         {children({ close })}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

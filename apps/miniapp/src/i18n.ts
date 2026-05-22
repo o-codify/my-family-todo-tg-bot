@@ -55,7 +55,7 @@ const DICT: Record<string, Record<Locale, string>> = {
   'nav.calendar': { ru: 'Календарь', en: 'Calendar' },
   'nav.queues': { ru: 'Очереди', en: 'Queues' },
   'nav.shop': { ru: 'Призы', en: 'Rewards' },
-  'nav.profile': { ru: 'Профиль', en: 'Profile' },
+  'nav.profile': { ru: 'Настройки', en: 'Settings' },
 
   // ─── calendar ──────────────────────────────────────────────────────
   'calendar.someday': { ru: 'Когда-нибудь', en: 'Someday' },

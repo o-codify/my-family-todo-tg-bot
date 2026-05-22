@@ -158,7 +158,7 @@ export function Profile({
       : t('profile.notifications.quietHours.off');
 
   return (
-    <WfBody>
+    <WfBody scrollKey="profile">
       {/* Family selector (if multiple) */}
       {families.length > 1 && (
         <select
@@ -239,8 +239,20 @@ export function Profile({
               }}
             >
               <Av m={m} size="md" />
-              <div className="wf-col" style={{ flex: 1 }}>
-                <span className="wf-label">
+              {/* Member info cell: name + role. `minWidth: 0` lets the
+                  ellipsis kick in on long usernames; without it flex
+                  children default to min-content and overflow the row. */}
+              <div className="wf-col" style={{ flex: 1, minWidth: 0 }}>
+                <span
+                  className="wf-label"
+                  style={{
+                    display: 'block',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                  }}
+                  title={m.name}
+                >
                   {m.name}
                   {isSelf && (
                     <span className="wf-hint"> · {t.locale === 'en' ? 'you' : 'ты'}</span>
@@ -290,11 +302,14 @@ export function Profile({
           }}
           size="xl"
         />
-        <div className="wf-h3" style={{ marginTop: 6 }}>
+        <div
+          className="wf-h3"
+          style={{ marginTop: 6, overflowWrap: 'anywhere' }}
+        >
           {me.firstName}
           {me.lastName && ` ${me.lastName}`}
         </div>
-        <span className="wf-hint">
+        <span className="wf-hint" style={{ overflowWrap: 'anywhere' }}>
           {me.username ? `@${me.username}` : t.locale === 'en' ? 'from TG' : 'из TG'}
         </span>
       </div>
