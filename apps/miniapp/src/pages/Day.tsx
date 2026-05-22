@@ -10,6 +10,7 @@ import {
 } from '../api';
 import { Icon, Seg, Tag, WfBody, type Member } from '../design';
 import { BottomSheet } from '../components/BottomSheet';
+import { FloatingSection } from '../components/FloatingSection';
 import { pluralize, useT } from '../i18n';
 import { forecastQueueOccurrences } from '../utils/queueForecast';
 
@@ -350,6 +351,15 @@ export function Day({ me, family, iso, onBack, onOpenTask, onCreateTask }: Props
             onOpen={() => onOpenTask(o)}
           />
         ))}
+
+      {/* "Когда-нибудь" — same collapsible block as on Calendar, so the
+          user can pick a dateless floating task without leaving Day. */}
+      <FloatingSection
+        tasks={tasks}
+        occurrences={rawOccurrences}
+        memberById={memberById}
+        onOpen={(o) => onOpenTask(o)}
+      />
 
       <div className="wf-fab" onClick={onCreateTask} role="button" aria-label={t('day.fab')}>
         <span className="wf-fab__plus">+</span>

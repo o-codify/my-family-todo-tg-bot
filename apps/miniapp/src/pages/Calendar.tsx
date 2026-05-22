@@ -9,6 +9,7 @@ import {
   type TaskDto,
 } from '../api';
 import { AvStack, Dot, Icon, Seg, Tag, WfBody, type Member } from '../design';
+import { FloatingSection } from '../components/FloatingSection';
 import { pluralize, useT } from '../i18n';
 import { forecastQueueOccurrences } from '../utils/queueForecast';
 
@@ -608,124 +609,6 @@ function DayTaskCard({
         {tagForOccurrence(o, done, selectedIso, todayIso, isEn)}
       </div>
     </div>
-  );
-}
-
-/**
- * "Когда-нибудь" — collapsible section of floating tasks (no scheduled date).
- * Visible at the bottom of the calendar per CalV1 :131-135.
- *
- * A floating task is hidden while its pending occurrence is on cooldown
- * (`availableAt` in the future). The backend already rejects completion in
- * that window with HTTP 400 — we mirror that on the client so the user
- * doesn't see (and can't tap) a task they can't actually do yet.
- */
-function FloatingSection({
-  tasks,
-  occurrences,
-  memberById,
-  onOpen,
-}: {
-  tasks: TaskDto[];
-  occurrences: OccurrenceDto[];
-  memberById: Map<string, Member>;
-  onOpen: (occurrence: OccurrenceDto) => void;
-}) {
-  const t = useT();
-  const [open, setOpen] = useState(false);
-  const now = Date.now();
-  // Map taskId → its latest pending occurrence (so we can read availableAt).
-  const pendingByTask = useMemo(() => {
-    const map = new Map<string, OccurrenceDto>();
-    for (const o of occurrences) {
-      if (o.status !== 'pending') continue;
-      const prev = map.get(o.taskId);
-      // Prefer the latest pending (largest availableAt or last seen).
-      if (!prev) map.set(o.taskId, o);
-    }
-    return map;
-  }, [occurrences]);
-  const floating = tasks.filter((tk) => {
-    if (tk.type !== 'floating' || tk.archivedAt) return false;
-    const pending = pendingByTask.get(tk.id);
-    if (pending?.availableAt && new Date(pending.availableAt).getTime() > now) {
-      return false;
-    }
-    return true;
-  });
-  if (floating.length === 0) return null;
-  return (
-    <>
-      <div
-        className="wf-spread wf-card subtle"
-        style={{ marginTop: 2, cursor: 'pointer' }}
-        onClick={() => setOpen(!open)}
-      >
-        <span className="wf-row wf-gap-6">
-          <Icon name="list" />
-          <span className="wf-label">{t('calendar.someday')}</span>
-          <span className="wf-hint">· {floating.length}</span>
-        </span>
-        <Icon name={open ? 'chevD' : 'chevR'} />
-      </div>
-      {open &&
-        floating.map((ft) => {
-          const assignee = ft.assigneeId ? memberById.get(ft.assigneeId) ?? null : null;
-          // Synthesize a minimal occurrence for TaskSheet
-          const synthOcc: OccurrenceDto = {
-            id: `floating:${ft.id}`,
-            taskId: ft.id,
-            scheduledDate: null,
-            scheduledTime: null,
-            assigneeId: ft.assigneeId,
-            status: 'pending',
-            subtasks: null,
-            completedAt: null,
-            completedBy: null,
-            photoIds: null,
-            pointsAwarded: 0,
-            availableAt: null,
-            task: {
-              id: ft.id,
-              title: ft.title,
-              type: ft.type,
-              points: ft.points,
-              photoRequired: ft.photoRequired,
-              deadlineAt: ft.deadlineAt,
-            },
-          };
-          return (
-            <div
-              key={ft.id}
-              className="wf-card"
-              onClick={() => onOpen(synthOcc)}
-              style={{ cursor: 'pointer' }}
-            >
-              <div className="wf-row wf-gap-10">
-                <span
-                  className="wf-mc"
-                  style={{
-                    width: 4,
-                    height: 28,
-                    background: assignee?.color ?? 'var(--softline)',
-                    borderRadius: 2,
-                  }}
-                />
-                <div className="wf-col" style={{ flex: 1 }}>
-                  <span className="wf-label">{ft.title}</span>
-                  <span className="wf-hint">
-                    {assignee?.name ?? t('day.unassigned')}
-                    {ft.cooldownDays
-                      ? ` · ${t('queues.detail.everyN', { n: ft.cooldownDays })}`
-                      : ''}
-                    {ft.points > 0 ? ` · +${ft.points}` : ''}
-                  </span>
-                </div>
-              </div>
-            </div>
-          );
-        })}
-    </>
   );
 }
 
