@@ -207,7 +207,7 @@ export function Day({ me, family, iso, onBack, onOpenTask, onCreateTask }: Props
       : `${totalActive} ${pluralTaskI18nDay(totalActive, isEn)}`;
 
   return (
-    <WfBody>
+    <WfBody onBack={onBack}>
       {/* Header — port of lines 7-14 */}
       <div className="wf-row wf-gap-8">
         <button

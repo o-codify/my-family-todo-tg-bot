@@ -142,7 +142,7 @@ export function QueueDetail({ me, family, taskId, onBack }: Props) {
       : 'с момента создания';
 
   return (
-    <WfBody>
+    <WfBody onBack={onBack}>
       {/* Header — port of lines 80-84 */}
       <div className="wf-row wf-gap-8">
         <button

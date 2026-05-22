@@ -49,7 +49,7 @@ export function Templates({ me, family, onBack, onApply }: Props) {
   };
 
   return (
-    <WfBody>
+    <WfBody onBack={onBack}>
       <div className="wf-row wf-gap-8">
         <button
           onClick={onBack}

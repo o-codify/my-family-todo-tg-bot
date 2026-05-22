@@ -90,7 +90,7 @@ export function Stats({ me, family, onBack }: Props) {
     : undefined;
 
   return (
-    <WfBody>
+    <WfBody onBack={onBack}>
       <div className="wf-row wf-gap-8">
         {onBack && (
           <button

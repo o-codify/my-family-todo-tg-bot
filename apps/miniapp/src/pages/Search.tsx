@@ -66,7 +66,7 @@ export function Search({ me, family, onBack }: Props) {
   const showTemplates = filter === FILTERS[0] || filter === FILTERS[3];
 
   return (
-    <WfBody>
+    <WfBody onBack={onBack}>
       <div className="wf-row wf-gap-8">
         <button
           onClick={onBack}

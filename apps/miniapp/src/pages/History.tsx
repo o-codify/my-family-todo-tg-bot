@@ -69,7 +69,7 @@ export function History({ me, family, onBack }: Props) {
   const grouped = useMemo(() => groupByDay(done), [done]);
 
   return (
-    <WfBody>
+    <WfBody onBack={onBack}>
       <div className="wf-row wf-gap-8">
         <button
           onClick={onBack}

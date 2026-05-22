@@ -105,7 +105,7 @@ export function Roles({ me, family, onBack }: Props) {
   if (selected) {
     const readOnly = selected.name.toLowerCase() === 'owner';
     return (
-      <WfBody>
+      <WfBody onBack={onBack}>
         <div className="wf-row wf-gap-8">
           <button
             onClick={() => setSelectedRoleId(null)}
@@ -171,7 +171,7 @@ export function Roles({ me, family, onBack }: Props) {
   }
 
   return (
-    <WfBody>
+    <WfBody onBack={onBack}>
       <div className="wf-row wf-gap-8">
         <button
           onClick={onBack}

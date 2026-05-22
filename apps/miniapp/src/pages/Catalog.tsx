@@ -84,7 +84,7 @@ export function Catalog({ me, family, onBack }: Props) {
   });
 
   return (
-    <WfBody>
+    <WfBody onBack={onBack}>
       <div className="wf-row wf-gap-8">
         <button
           onClick={onBack}

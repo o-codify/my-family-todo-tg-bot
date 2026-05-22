@@ -99,7 +99,7 @@ export function Inbox({ me, family, onBack }: Props) {
   const isAnyLoading = transfersQuery.isLoading || redemptionsQuery.isLoading;
 
   return (
-    <WfBody>
+    <WfBody onBack={onBack}>
       <div className="wf-row wf-gap-8">
         <button
           onClick={onBack}

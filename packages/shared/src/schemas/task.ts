@@ -37,7 +37,7 @@ export const createTaskSchema = z.object({
   type: taskTypeSchema,
   schedule: taskScheduleSchema,
   assigneeId: z.string().uuid().nullable().optional(),
-  queueUserIds: z.array(z.string().uuid()).optional(),
+  queueUserIds: z.array(z.string().uuid()).nullable().optional(),
   deadlineAt: z.string().datetime().nullable().optional(),
   points: z.number().int().nonnegative().max(10_000).default(0),
   photoRequired: z.boolean().default(false),

@@ -125,7 +125,7 @@ export function Shop({ me, family, onBack }: Props) {
   const [createOpen, setCreateOpen] = useState(false);
 
   return (
-    <WfBody>
+    <WfBody onBack={onBack}>
       <div className="wf-row wf-gap-8">
         <button
           onClick={onBack}

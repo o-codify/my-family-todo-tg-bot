@@ -167,7 +167,7 @@ export function Transfer({ me, family, occurrenceId, onBack, onDone }: Props) {
   // instead of the form.
   if (isSynth || (!occurrenceQuery.isLoading && !occurrence)) {
     return (
-      <WfBody>
+      <WfBody onBack={onBack}>
         <div className="wf-row wf-gap-8">
           <button
             onClick={onBack}
@@ -191,7 +191,7 @@ export function Transfer({ me, family, occurrenceId, onBack, onDone }: Props) {
 
   if (!occurrence) {
     return (
-      <WfBody>
+      <WfBody onBack={onBack}>
         <div className="wf-row wf-gap-8">
           <button
             onClick={onBack}
@@ -210,7 +210,7 @@ export function Transfer({ me, family, occurrenceId, onBack, onDone }: Props) {
   }
 
   return (
-    <WfBody>
+    <WfBody onBack={onBack}>
       {/* Header — chevL + title (per design V1/V2/V3) */}
       <div className="wf-row wf-gap-8">
         <button
