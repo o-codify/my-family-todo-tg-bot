@@ -7,9 +7,26 @@ import { getInitData } from './telegram';
  *     phone via the dev machine's LAN IP, localhost would resolve to the
  *     phone itself, so we mirror the current host.
  *  3. Fall back to localhost:3000.
+ *
+ * The base is normalized so users can write either form in the env var:
+ *   - `https://example.com`
+ *   - `https://example.com/api`         ← gets `/api` stripped
+ *   - `https://example.com/api/v1`      ← gets `/api/v1` stripped
+ * Every method in this file builds paths as `/api/v1/...` — duplicating
+ * that prefix in the env was the easiest way to wind up with
+ * `…/api/api/v1/me` in the URL.
  */
+function normalizeBaseUrl(raw: string): string {
+  return raw
+    .trim()
+    .replace(/\/+$/, '')
+    .replace(/\/api(\/v1)?$/, '');
+}
+
 function pickApiBaseUrl(): string {
-  const envBase = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? '';
+  const envBase = normalizeBaseUrl(
+    (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? '',
+  );
   const isLocalhostEnv = !envBase || /\/\/(localhost|127\.0\.0\.1)/.test(envBase);
 
   if (typeof window !== 'undefined') {
