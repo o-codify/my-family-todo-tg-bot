@@ -7,6 +7,7 @@ import {
   type FamilySummary,
   type MeResponse,
   type OccurrenceDto,
+  type RedemptionDto,
   type RewardDto,
 } from '../api';
 import { Av, Bar, Icon, Seg, Tag, WfBody, type Member } from '../design';
@@ -89,21 +90,47 @@ export function Shop({ me, family, onBack }: Props) {
     queryKey: ['tasks', family.id],
     queryFn: () => api.listTasks(family.id),
   });
+  // Redemptions across the family. We render the requesting user's own
+  // history in the Магазин tab so they have proof the request was
+  // recorded; the grant/reject side lives in Inbox for adults.
+  const redemptionsQuery = useQuery({
+    queryKey: ['redemptions', family.id],
+    queryFn: () => api.listRedemptions(family.id),
+  });
 
   const myPts = balanceQuery.data?.points ?? 0;
   const rewards = rewardsQuery.data?.rewards ?? [];
+  const rewardById = useMemo(
+    () => new Map(rewards.map((r) => [r.id, r])),
+    [rewards],
+  );
   const members = useMemo(
     () => (membersQuery.data?.members ?? []).map(memberFromDto),
     [membersQuery.data],
   );
+  const memberById = useMemo(
+    () => new Map(members.map((m) => [m.id, m])),
+    [members],
+  );
   const occurrences = occurrencesQuery.data?.occurrences ?? [];
   const tasks = tasksQuery.data?.tasks ?? [];
+  const myRedemptions = useMemo(
+    () =>
+      (redemptionsQuery.data?.redemptions ?? [])
+        .filter((r) => r.userId === me.id)
+        .sort((a, b) => b.requestedAt.localeCompare(a.requestedAt)),
+    [redemptionsQuery.data, me.id],
+  );
 
   const redeemMut = useMutation({
     mutationFn: (rewardId: string) => api.redeemReward(family.id, rewardId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['balance', family.id] });
       queryClient.invalidateQueries({ queryKey: ['rewards', family.id] });
+      // Without this the new "Pending" row in the user's history doesn't
+      // appear immediately — they'd think the redeem silently failed
+      // (which is exactly what the user reported).
+      queryClient.invalidateQueries({ queryKey: ['redemptions', family.id] });
     },
   });
 
@@ -183,6 +210,9 @@ export function Shop({ me, family, onBack }: Props) {
           onAdd={() => setCreateOpen(true)}
           error={redeemMut.error as ApiError | null}
           isPending={redeemMut.isPending}
+          myRedemptions={myRedemptions}
+          rewardById={rewardById}
+          memberById={memberById}
           t={t}
         />
       )}
@@ -647,6 +677,9 @@ function ShopList({
   onAdd,
   error,
   isPending,
+  myRedemptions,
+  rewardById,
+  memberById,
   t,
 }: {
   rewards: RewardDto[];
@@ -656,8 +689,12 @@ function ShopList({
   onAdd: () => void;
   error: ApiError | null;
   isPending: boolean;
+  myRedemptions: RedemptionDto[];
+  rewardById: Map<string, RewardDto>;
+  memberById: Map<string, Member>;
   t: TFn;
 }) {
+  void memberById;
   if (loading) return <span className="wf-hint">{t('common.loading')}</span>;
   if (rewards.length === 0) {
     return (
@@ -786,8 +823,92 @@ function ShopList({
             : error.message}
         </div>
       )}
+
+      {/* User's own redemption history. Without this the user reported
+          "забрал приз и он нигде не отображается" — the request lived
+          server-side as a pending row but the FE never surfaced it. */}
+      {myRedemptions.length > 0 && (
+        <>
+          <span className="wf-hint" style={{ marginTop: 12 }}>
+            {t.locale === 'en' ? 'My requests' : 'Мои запросы'}
+          </span>
+          <div className="wf-col wf-gap-6">
+            {myRedemptions.slice(0, 8).map((r) => {
+              const reward = r.rewardId ? rewardById.get(r.rewardId) : null;
+              const isEn = t.locale === 'en';
+              const label =
+                r.status === 'pending'
+                  ? isEn
+                    ? 'Pending'
+                    : 'Ждёт выдачи'
+                  : r.status === 'granted'
+                    ? isEn
+                      ? 'Granted'
+                      : 'Выдан'
+                    : isEn
+                      ? 'Rejected'
+                      : 'Отклонён';
+              const variant =
+                r.status === 'pending'
+                  ? ('warn' as const)
+                  : r.status === 'granted'
+                    ? ('success' as const)
+                    : ('danger' as const);
+              return (
+                <div key={r.id} className="wf-card compact">
+                  <div className="wf-row wf-gap-10">
+                    <div
+                      style={{
+                        width: 40,
+                        height: 40,
+                        borderRadius: 8,
+                        background: 'var(--faint)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontSize: 22,
+                        flex: 'none',
+                      }}
+                    >
+                      {reward?.emoji ?? '🎁'}
+                    </div>
+                    <div className="wf-col" style={{ flex: 1, minWidth: 0 }}>
+                      <span
+                        className="wf-label"
+                        style={{
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap',
+                        }}
+                      >
+                        {reward?.name ?? (isEn ? 'Removed reward' : 'Приз удалён')}
+                      </span>
+                      <span className="wf-tiny">
+                        {r.costPoints} ⭐ · {fmtRedDate(r.requestedAt, isEn)}
+                      </span>
+                    </div>
+                    <Tag variant={variant}>{label}</Tag>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </>
+      )}
     </>
   );
+}
+
+function fmtRedDate(iso: string, isEn: boolean): string {
+  const d = new Date(iso);
+  const monthsRu = ['янв', 'фев', 'мар', 'апр', 'мая', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек'];
+  const monthsEn = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const months = isEn ? monthsEn : monthsRu;
+  const dd = d.getDate();
+  const mm = months[d.getMonth()]!;
+  const hh = String(d.getHours()).padStart(2, '0');
+  const mi = String(d.getMinutes()).padStart(2, '0');
+  return isEn ? `${mm} ${dd}, ${hh}:${mi}` : `${dd} ${mm}, ${hh}:${mi}`;
 }
 
 /* ─── Helpers ─────────────────────────────────────── */
