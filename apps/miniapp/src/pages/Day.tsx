@@ -520,9 +520,18 @@ function filterOccurrences(
   mineLabel: string,
 ): OccurrenceDto[] {
   if (filter === allLabel) return list;
-  if (filter === mineLabel) return list.filter((o) => o.assigneeId === meId);
+  // Match on assignee OR completer so done rows where the user finished
+  // someone else's task (or where the task was later transferred) stay
+  // visible under their filter. Same rule used on Calendar.
+  if (filter === mineLabel) {
+    return list.filter((o) => o.assigneeId === meId || o.completedBy === meId);
+  }
   const member = members.find((m) => m.name === filter);
-  if (member) return list.filter((o) => o.assigneeId === member.id);
+  if (member) {
+    return list.filter(
+      (o) => o.assigneeId === member.id || o.completedBy === member.id,
+    );
+  }
   return list;
 }
 

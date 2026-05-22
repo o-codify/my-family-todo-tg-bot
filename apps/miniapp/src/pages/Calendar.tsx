@@ -265,11 +265,20 @@ export function Calendar({
 
   const occurrences = useMemo(() => {
     let list = combinedOccurrences;
+    // "Мои" / "<member name>" filters match on assignee OR completer.
+    // Filtering by assignee alone hid done rows where the user finished
+    // someone else's task (or where the task was transferred), which
+    // read as a bug: "I completed it, but it's not in my list?" Matching
+    // either side keeps the user's own work visible across the lifecycle.
     if (filter === MINE_LBL) {
-      list = list.filter((o) => o.assigneeId === me.id);
+      list = list.filter((o) => o.assigneeId === me.id || o.completedBy === me.id);
     } else if (filter !== ALL_LBL) {
       const named = members.find((m) => m.name === filter);
-      if (named) list = list.filter((o) => o.assigneeId === named.id);
+      if (named) {
+        list = list.filter(
+          (o) => o.assigneeId === named.id || o.completedBy === named.id,
+        );
+      }
     }
     if (onlyPending) {
       list = list.filter((o) => o.status === 'pending');
