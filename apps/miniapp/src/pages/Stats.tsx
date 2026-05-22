@@ -156,23 +156,24 @@ export function Stats({ me, family, onBack, onOpenDrawer }: Props) {
         </div>
       </div>
 
-      {/* Streaks */}
-      <div className="wf-row wf-gap-8">
-        <div className="wf-card" style={{ flex: 1 }}>
+      {/* Streaks. Both cards lay out identically — tiny title, big number
+          row (⚡ + days), tiny meta. The left card's meta is the all-time
+          record (or a non-breaking space placeholder so the line height
+          is still reserved when there's no record yet); the right card's
+          is the holder's name. Forcing the same 3-row vertical rhythm
+          keeps the two-up grid from looking lopsided. */}
+      <div className="wf-row wf-gap-8" style={{ alignItems: 'stretch' }}>
+        <div className="wf-card" style={{ flex: 1, minWidth: 0 }}>
           <span className="wf-tiny">{t('stats.streak.mine')}</span>
           <div className="wf-h2" style={{ marginTop: 2 }}>
             <Icon name="zap" /> {streak.current} {pluralDaysI18n(streak.current, isEn)}
           </div>
-          {streak.longest > streak.current && (
-            <span className="wf-tiny">
-              {t('stats.streak.record')}: {streak.longest}
-            </span>
-          )}
+          <span className="wf-tiny" style={{ display: 'block' }}>
+            {streak.longest > streak.current
+              ? `${t('stats.streak.record')}: ${streak.longest}`
+              : ' ' /* nbsp keeps the row tall when no record yet */}
+          </span>
         </div>
-        {/* Mirror the left card's visual rhythm: tiny title, big number row
-            (⚡ + days), then a tiny meta line. Originally the name went into
-            the h2, which made this card 1 line taller than its neighbour and
-            broke the visual symmetry of the two-up grid. */}
         <div className="wf-card" style={{ flex: 1, minWidth: 0 }}>
           <span className="wf-tiny">{t('stats.streak.family')}</span>
           <div className="wf-h2" style={{ marginTop: 2 }}>
@@ -188,7 +189,7 @@ export function Stats({ me, family, onBack, onOpenDrawer }: Props) {
             }}
             title={familyTopMember?.name}
           >
-            {familyTopMember?.name ?? '—'}
+            {familyTopMember?.name ?? ' '}
           </span>
         </div>
       </div>
