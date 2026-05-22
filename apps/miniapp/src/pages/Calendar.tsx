@@ -332,7 +332,12 @@ export function Calendar({
         </div>
         <div className="wf-row wf-gap-6">
           <AvStack members={members} size="sm" />
-          <span className="wf-tag solid" style={{ marginLeft: 4 }}>
+          {/* Balance pill — same size + padding as on the Shop page so
+              switching tabs doesn't read as visual jitter. */}
+          <span
+            className="wf-tag solid"
+            style={{ marginLeft: 4, fontSize: 14, padding: '4px 10px' }}
+          >
             <Icon name="star" /> {myPoints}
           </span>
         </div>
