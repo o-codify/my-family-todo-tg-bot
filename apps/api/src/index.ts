@@ -108,7 +108,11 @@ app.route('/api/v1/families', eventsRouter);
 // (tasks/:id/photos, occurrences/:id/photos, photos/:id) so we mount under
 // the family root rather than a single sub-prefix.
 app.route('/api/v1/families/:familyId', photosRouter);
-app.route('/internal/v1', internalRouter);
+// Mounted under /api so reverse proxies that only route `/api/*` to the
+// api container (typical when api + miniapp share one domain) still
+// reach internal endpoints. Auth is still gated by INTERNAL_SERVICE_TOKEN
+// via serviceAuth middleware — the prefix change doesn't weaken anything.
+app.route('/api/internal/v1', internalRouter);
 
 /**
  * Boot sequence:

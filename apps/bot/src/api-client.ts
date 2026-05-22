@@ -14,8 +14,24 @@ export class BotApiError extends Error {
   }
 }
 
+/**
+ * Normalize the configured API base — trim trailing slash and an optional
+ * `/api` suffix. That way the operator can give us either form:
+ *   - `http://family-todo-api:3000`             (internal docker network)
+ *   - `https://my-family-todo.example.com`      (public host root)
+ *   - `https://my-family-todo.example.com/api`  (same host as the miniapp,
+ *                                                with `/api` already in the URL)
+ * In every case we end up calling `<base>/api/internal/v1/...`.
+ */
+function normalizeBase(raw: string): string {
+  return raw.trim().replace(/\/+$/, '').replace(/\/api$/, '');
+}
+
+const BASE = normalizeBase(env.BOT_API_BASE_URL);
+const INTERNAL_PREFIX = `${BASE}/api/internal/v1`;
+
 export async function lookupInviteCode(code: string): Promise<ApiInviteResponse['family'] | null> {
-  const url = `${env.BOT_API_BASE_URL}/internal/v1/invites/${encodeURIComponent(code)}`;
+  const url = `${INTERNAL_PREFIX}/invites/${encodeURIComponent(code)}`;
   const res = await fetch(url, {
     headers: { 'x-service-token': env.INTERNAL_SERVICE_TOKEN },
   });
@@ -36,7 +52,7 @@ export async function deletePhotoForChat(
   photoId: string,
   telegramId: string | number,
 ): Promise<boolean> {
-  const url = `${env.BOT_API_BASE_URL}/internal/v1/photos/${encodeURIComponent(photoId)}/delete`;
+  const url = `${INTERNAL_PREFIX}/photos/${encodeURIComponent(photoId)}/delete`;
   const res = await fetch(url, {
     method: 'POST',
     headers: {
@@ -70,7 +86,7 @@ export type TodayResponse = {
  * Returns null if the user has never opened the Mini App (no DB row yet).
  */
 export async function fetchTodayForUser(telegramId: number): Promise<TodayResponse | null> {
-  const url = `${env.BOT_API_BASE_URL}/internal/v1/today/${telegramId}`;
+  const url = `${INTERNAL_PREFIX}/today/${telegramId}`;
   const res = await fetch(url, {
     headers: { 'x-service-token': env.INTERNAL_SERVICE_TOKEN },
   });
