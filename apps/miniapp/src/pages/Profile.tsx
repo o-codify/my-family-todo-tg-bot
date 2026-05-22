@@ -25,18 +25,9 @@ type Props = {
   onOpenRoles?: () => void;
   onOpenSearch?: () => void;
   onOpenInbox?: () => void;
+  onOpenMyProfile?: () => void;
+  onOpenMember?: (userId: string) => void;
 };
-
-const COLORS: string[] = [
-  '#FF6B6B',
-  '#4ECDC4',
-  '#FFD93D',
-  '#6BCB77',
-  '#A66CFF',
-  '#FF9F68',
-  '#3D8BFD',
-  '#E83E8C',
-];
 
 function memberFromDto(dto: FamilyMemberDto): Member {
   return {
@@ -68,6 +59,8 @@ export function Profile({
   onOpenRoles,
   onOpenSearch,
   onOpenInbox,
+  onOpenMyProfile,
+  onOpenMember,
 }: Props) {
   const queryClient = useQueryClient();
   const membersQuery = useQuery({
@@ -126,14 +119,6 @@ export function Profile({
     queryFn: () => api.listRoles(family.id),
   });
 
-  const isAway = me.awayUntil != null && new Date(me.awayUntil) > new Date();
-  const awayReason = (me.awayReason ?? null) as 'vacation' | 'sick' | null;
-  // Default reason for legacy rows that have `awayUntil` set but no reason
-  // recorded (created before the awayReason column existed).
-  const isVacation = isAway && (awayReason === null || awayReason === 'vacation');
-  const isSick = isAway && awayReason === 'sick';
-  const sevenDays = () => new Date(Date.now() + 7 * 86_400_000).toISOString();
-  const threeDays = () => new Date(Date.now() + 3 * 86_400_000).toISOString();
   const myMemberDto = membersQuery.data?.members.find((m) => m.id === me.id);
   // "Owner" in our model is `family.ownerId`, not the role label — but the
   // first owner gets the Owner role at creation. Use the role to gate the
@@ -148,7 +133,6 @@ export function Profile({
   const [memberActionId, setMemberActionId] = useState<string | null>(null);
   const [renameOpen, setRenameOpen] = useState(false);
 
-  const [tzPickerOpen, setTzPickerOpen] = useState(false);
   const [digestOpen, setDigestOpen] = useState(false);
   const [reminderOpen, setReminderOpen] = useState(false);
   const [quietOpen, setQuietOpen] = useState(false);
@@ -236,12 +220,19 @@ export function Profile({
           // the menu so they can rotate invites.
           const isSelf = m.id === me.id;
           const canActOn = !isSelf && m.role !== 'Owner' && (canKick || canManageRoles);
+          const goTo = () => {
+            if (isSelf) onOpenMyProfile?.();
+            else onOpenMember?.(m.id);
+          };
+          const navigable = isSelf ? !!onOpenMyProfile : !!onOpenMember;
           return (
             <div
               key={m.id}
               className="wf-row wf-gap-10"
+              onClick={navigable ? goTo : undefined}
               style={{
                 padding: '10px 12px',
+                cursor: navigable ? 'pointer' : 'default',
                 borderBottom:
                   i < members.length - 1 ? '1px dashed var(--softline)' : 'none',
               }}
@@ -275,7 +266,10 @@ export function Profile({
               {canActOn && (
                 <button
                   type="button"
-                  onClick={() => setMemberActionId(m.id)}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setMemberActionId(m.id);
+                  }}
                   aria-label={t.locale === 'en' ? 'Actions' : 'Действия'}
                   style={{
                     background: 'transparent',
@@ -294,138 +288,53 @@ export function Profile({
         })}
       </div>
 
-      {/* ── My profile section (UsrV1) ─────────── */}
+      {/* Profile entry point — full user-owned settings (name display,
+          color, vacation/sick, timezone) live on the dedicated MyProfile
+          page now. Settings keeps just the family-wide + app-wide bits. */}
       <span className="wf-h3" style={{ marginTop: 4 }}>
         {t.locale === 'en' ? 'My profile' : 'Мой профиль'}
       </span>
-
-      <div className="wf-card" style={{ textAlign: 'center', padding: 14 }}>
-        <Av
-          m={{
-            id: me.id,
-            name: me.firstName,
-            letter: me.firstName.slice(0, 1).toUpperCase(),
-            color: me.color,
-            role: isOwner ? 'Owner' : 'Adult',
-          }}
-          size="xl"
-        />
-        <div
-          className="wf-h3"
-          style={{ marginTop: 6, overflowWrap: 'anywhere' }}
-        >
-          {me.firstName}
-          {me.lastName && ` ${me.lastName}`}
-        </div>
-        <span className="wf-hint" style={{ overflowWrap: 'anywhere' }}>
-          {me.username ? `@${me.username}` : t.locale === 'en' ? 'from TG' : 'из TG'}
-        </span>
-      </div>
-
-      {/* Color picker — UsrV1 lines 132-143 */}
-      <div className="wf-card">
-        <span className="wf-tiny">{t('profile.color')}</span>
-        <div className="wf-row wf-gap-6" style={{ flexWrap: 'wrap', marginTop: 6 }}>
-          {COLORS.map((c) => {
-            const sel = c.toLowerCase() === me.color.toLowerCase();
-            return (
+      <div
+        className="wf-card compact"
+        onClick={onOpenMyProfile}
+        style={{ cursor: onOpenMyProfile ? 'pointer' : 'default' }}
+      >
+        <div className="wf-spread">
+          <div className="wf-row wf-gap-8">
+            <Av
+              m={{
+                id: me.id,
+                name: me.firstName,
+                letter: me.firstName.slice(0, 1).toUpperCase(),
+                color: me.color,
+                role: isOwner ? 'Owner' : 'Adult',
+              }}
+              size="sm"
+            />
+            <div className="wf-col" style={{ minWidth: 0 }}>
               <span
-                key={c}
-                className="wf-mc"
-                onClick={() => updateMe.mutate({ color: c })}
+                className="wf-label"
                 style={{
-                  width: 26,
-                  height: 26,
-                  borderRadius: 999,
-                  background: c,
-                  border: sel ? '2.5px solid var(--ink)' : '1.5px solid var(--line)',
-                  cursor: 'pointer',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
                 }}
-              />
-            );
-          })}
-        </div>
-      </div>
-
-      {/* Away modes — vacation (🌴) and sick (🤒) are mutually exclusive.
-          Turning one on flips the other off; both have the same effect
-          server-side (skipped from queue rotation), only the label/icon
-          differs so other family members know why. */}
-      <div className="wf-card">
-        <div className="wf-spread">
-          <div className="wf-row wf-gap-8">
-            <span style={{ fontSize: 18 }}>🌴</span>
-            <div className="wf-col">
-              <span className="wf-label">{t('profile.away.title')}</span>
-              <span className="wf-tiny">
-                {isVacation
-                  ? t('profile.away.until', { date: fmtDate(me.awayUntil!, t.locale) })
-                  : t('profile.away.hint')}
-              </span>
-            </div>
-          </div>
-          <Toggle
-            on={isVacation}
-            onClick={() => {
-              if (isVacation) {
-                updateMe.mutate({ awayUntil: null, awayReason: null });
-              } else {
-                updateMe.mutate({ awayUntil: sevenDays(), awayReason: 'vacation' });
-              }
-            }}
-          />
-        </div>
-      </div>
-      <div className="wf-card">
-        <div className="wf-spread">
-          <div className="wf-row wf-gap-8">
-            <span style={{ fontSize: 18 }}>🤒</span>
-            <div className="wf-col">
-              <span className="wf-label">
-                {t.locale === 'en' ? 'Sick' : 'Болею'}
+              >
+                {me.firstName}
+                {me.lastName && ` ${me.lastName}`}
               </span>
               <span className="wf-tiny">
-                {isSick
-                  ? t('profile.away.until', { date: fmtDate(me.awayUntil!, t.locale) })
+                {me.username
+                  ? `@${me.username}`
                   : t.locale === 'en'
-                    ? 'queues will skip me'
-                    : 'очереди будут пропускать меня'}
+                    ? 'open to edit color, away mode, timezone'
+                    : 'цвет, режим отсутствия, часовой пояс'}
               </span>
             </div>
           </div>
-          <Toggle
-            on={isSick}
-            onClick={() => {
-              if (isSick) {
-                updateMe.mutate({ awayUntil: null, awayReason: null });
-              } else {
-                // 3-day default for sick — shorter than vacation since
-                // illness usually clears up faster, and the user can
-                // re-toggle to extend.
-                updateMe.mutate({ awayUntil: threeDays(), awayReason: 'sick' });
-              }
-            }}
-          />
+          <Icon name="chevR" />
         </div>
       </div>
-
-      {/* Timezone — opens a sheet to pick an IANA zone. */}
-      <ListRow
-        icon="clock"
-        label={t('profile.timezone')}
-        value={me.timezone}
-        onClick={() => setTzPickerOpen(true)}
-      />
-      {tzPickerOpen && (
-        <TimezonePicker
-          current={me.timezone}
-          onClose={() => setTzPickerOpen(false)}
-          onPick={(tz) => {
-            updateMe.mutate({ timezone: tz });
-            setTzPickerOpen(false);
-          }}
-        />
-      )}
 
       {/* Notifications — wired to user.notificationSettings on the backend.
           Actual delivery (digest/reminder) is task #25 (BullMQ); for now we
@@ -861,39 +770,6 @@ function ListRow({
   );
 }
 
-function Toggle({ on, onClick }: { on: boolean; onClick: () => void }) {
-  return (
-    <span
-      onClick={onClick}
-      style={{
-        width: 36,
-        height: 20,
-        borderRadius: 999,
-        background: on ? 'var(--ink)' : 'var(--softline)',
-        position: 'relative',
-        border: '1.5px solid var(--line)',
-        flex: 'none',
-        cursor: 'pointer',
-        transition: 'background 0.15s',
-      }}
-    >
-      <span
-        style={{
-          position: 'absolute',
-          left: on ? 16 : 2,
-          top: '50%',
-          width: 14,
-          height: 14,
-          borderRadius: 999,
-          background: 'var(--paper)',
-          transform: 'translateY(-50%)',
-          transition: 'left .15s',
-        }}
-      />
-    </span>
-  );
-}
-
 function roleLabel(role: string, locale: Locale = 'ru'): string {
   if (locale === 'en') {
     if (role === 'Owner') return 'owner';
@@ -1247,149 +1123,6 @@ function MiniToggle({ on }: { on: boolean }) {
         }}
       />
     </span>
-  );
-}
-
-/** Bottom sheet that lets the user pick an IANA timezone. Falls back to a
- *  curated short list when the runtime doesn't expose Intl.supportedValuesOf. */
-function TimezonePicker({
-  current,
-  onClose,
-  onPick,
-}: {
-  current: string;
-  onClose: () => void;
-  onPick: (tz: string) => void;
-}) {
-  const t = useT();
-  const [query, setQuery] = useState('');
-  const zones = useMemo(() => {
-    const out: string[] = [];
-    // Intl.supportedValuesOf is ES2022, but older Telegram WebView runtimes
-    // (esp. on iOS < 15) might not ship it. Runtime-check defensively and
-    // fall through to the curated list below.
-    if (typeof Intl.supportedValuesOf === 'function') {
-      try {
-        out.push(...Intl.supportedValuesOf('timeZone'));
-      } catch {
-        /* fall through to curated list */
-      }
-    }
-    if (out.length === 0) {
-      out.push(
-        'UTC',
-        'Europe/London',
-        'Europe/Paris',
-        'Europe/Berlin',
-        'Europe/Moscow',
-        'Europe/Kiev',
-        'Europe/Minsk',
-        'Asia/Yerevan',
-        'Asia/Tbilisi',
-        'Asia/Baku',
-        'Asia/Tashkent',
-        'Asia/Almaty',
-        'Asia/Yekaterinburg',
-        'Asia/Novosibirsk',
-        'Asia/Krasnoyarsk',
-        'Asia/Irkutsk',
-        'Asia/Yakutsk',
-        'Asia/Vladivostok',
-        'Asia/Magadan',
-        'Asia/Kamchatka',
-        'America/New_York',
-        'America/Chicago',
-        'America/Los_Angeles',
-        'Asia/Dubai',
-        'Asia/Bangkok',
-        'Asia/Tokyo',
-        'Australia/Sydney',
-      );
-    }
-    return out;
-  }, []);
-
-  const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    if (!q) return zones;
-    return zones.filter((z) => z.toLowerCase().includes(q));
-  }, [query, zones]);
-
-  return (
-    <BottomSheet onClose={onClose} zIndex={12}>
-      {({ close }) => (
-        <>
-          <div className="handle" />
-          <div className="wf-row wf-gap-8" style={{ marginBottom: 8 }}>
-            <span className="wf-h2" style={{ flex: 1 }}>
-              {t('profile.timezone')}
-            </span>
-            <button
-              onClick={() => close()}
-              aria-label={t('common.close')}
-              style={{
-                background: 'transparent',
-                border: 'none',
-                cursor: 'pointer',
-                padding: 0,
-                color: 'var(--ink)',
-              }}
-            >
-              <Icon name="x" />
-            </button>
-          </div>
-
-          <div className="wf-box" style={{ padding: '8px 10px', marginBottom: 8 }}>
-            <div className="wf-row wf-gap-6">
-              <Icon name="search" />
-              <input
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder={t('common.search.placeholder')}
-                autoFocus
-                className="wf-label"
-                style={{
-                  flex: 1,
-                  border: 'none',
-                  background: 'transparent',
-                  outline: 'none',
-                  color: 'var(--ink)',
-                  font: 'inherit',
-                }}
-              />
-            </div>
-          </div>
-
-          <div style={{ maxHeight: '50vh', overflowY: 'auto' }}>
-            {filtered.length === 0 && (
-              <span className="wf-hint" style={{ display: 'block', padding: 10 }}>
-                {t('common.notFound')}
-              </span>
-            )}
-            {filtered.map((tz) => {
-              const isCurrent = tz === current;
-              return (
-                <div
-                  key={tz}
-                  className="wf-card compact"
-                  onClick={() => close(() => onPick(tz))}
-                  style={{ cursor: 'pointer', marginBottom: 4 }}
-                >
-                  <div className="wf-spread">
-                    <span className="wf-label">{tz}</span>
-                    {isCurrent && (
-                      <span style={{ color: 'var(--success)' }}>
-                        <Icon name="check" />
-                      </span>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </>
-      )}
-    </BottomSheet>
   );
 }
 

@@ -6,6 +6,8 @@ import { Calendar } from './Calendar';
 import { Catalog } from './Catalog';
 import { Day } from './Day';
 import { Profile } from './Profile';
+import { MyProfile } from './MyProfile';
+import { MemberProfile } from './MemberProfile';
 import { History } from './History';
 import { Inbox } from './Inbox';
 import { QueueDetail } from './QueueDetail';
@@ -33,6 +35,8 @@ type Route =
   | { kind: 'queue'; taskId: string }
   | { kind: 'shop' }
   | { kind: 'profile' }
+  | { kind: 'my-profile' }
+  | { kind: 'member'; userId: string }
   | { kind: 'stats' }
   | { kind: 'history' }
   | { kind: 'catalog' }
@@ -82,6 +86,10 @@ function serializeRoute(r: Route): string {
       return '#/shop';
     case 'profile':
       return '#/profile';
+    case 'my-profile':
+      return '#/profile/me';
+    case 'member':
+      return `#/profile/member/${r.userId}`;
     case 'stats':
       return '#/profile/stats';
     case 'history':
@@ -134,6 +142,13 @@ function parseRoute(hash: string): Route {
         case undefined:
         case '':
           return { kind: 'profile' };
+        case 'me':
+          return { kind: 'my-profile' };
+        case 'member': {
+          const userId = rest[1];
+          if (userId) return { kind: 'member', userId };
+          return { kind: 'profile' };
+        }
         case 'stats':
         case 'history':
         case 'catalog':
@@ -306,6 +321,8 @@ export function FamilyHome({ me, families }: Props) {
             // After leaving, App.tsx's families query will refetch and route to Onboarding
             setRoute({ kind: 'calendar' });
           }}
+          onOpenMyProfile={() => setRoute({ kind: 'my-profile' })}
+          onOpenMember={(userId) => setRoute({ kind: 'member', userId })}
           onOpenStats={() => setRoute({ kind: 'stats' })}
           onOpenHistory={() => setRoute({ kind: 'history' })}
           onOpenCatalog={() => setRoute({ kind: 'catalog' })}
@@ -313,6 +330,21 @@ export function FamilyHome({ me, families }: Props) {
           onOpenRoles={() => setRoute({ kind: 'roles' })}
           onOpenSearch={() => setRoute({ kind: 'search' })}
           onOpenInbox={() => setRoute({ kind: 'inbox' })}
+        />
+      )}
+      {route.kind === 'my-profile' && (
+        <MyProfile
+          me={me}
+          family={activeFamily}
+          onBack={() => setRoute({ kind: 'profile' })}
+        />
+      )}
+      {route.kind === 'member' && (
+        <MemberProfile
+          me={me}
+          family={activeFamily}
+          userId={route.userId}
+          onBack={() => setRoute({ kind: 'profile' })}
         />
       )}
       {route.kind === 'stats' && (
