@@ -1,0 +1,59 @@
+name: Mini App
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - "apps/miniapp/**"
+      - "packages/**"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+      - ".github/workflows/miniapp.yml"
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Generate version
+        id: version
+        run: |
+          VERSION="$(date -u +%Y.%-m%d).${{ github.run_number }}"
+          echo "VERSION=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "Version: ${VERSION}"
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build & push
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./apps/miniapp/Dockerfile
+          push: true
+          # Vite bakes env vars in at build time — pass them as build args,
+          # not runtime envs. Each value becomes part of the JS bundle.
+          build-args: |
+            VITE_API_BASE_URL=${{ secrets.VITE_API_BASE_URL }}
+            VITE_TG_BOT_USERNAME=${{ secrets.VITE_TG_BOT_USERNAME }}
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/family-todo-miniapp:latest
+            ghcr.io/${{ github.repository_owner }}/family-todo-miniapp:${{ steps.version.outputs.VERSION }}
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Trigger Coolify deploy
+        run: |
+          curl -f -X POST "${{ secrets.COOLIFY_MINIAPP_WEBHOOK }}" \
+            -H "Authorization: Bearer ${{ secrets.COOLIFY_TOKEN }}"

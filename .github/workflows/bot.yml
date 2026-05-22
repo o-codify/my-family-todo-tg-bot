@@ -1,0 +1,54 @@
+name: Bot
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - "apps/bot/**"
+      - "packages/**"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+      - ".github/workflows/bot.yml"
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Generate version
+        id: version
+        run: |
+          VERSION="$(date -u +%Y.%-m%d).${{ github.run_number }}"
+          echo "VERSION=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "Version: ${VERSION}"
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build & push
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./apps/bot/Dockerfile
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/family-todo-bot:latest
+            ghcr.io/${{ github.repository_owner }}/family-todo-bot:${{ steps.version.outputs.VERSION }}
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Trigger Coolify deploy
+        run: |
+          curl -f -X POST "${{ secrets.COOLIFY_BOT_WEBHOOK }}" \
+            -H "Authorization: Bearer ${{ secrets.COOLIFY_TOKEN }}"
