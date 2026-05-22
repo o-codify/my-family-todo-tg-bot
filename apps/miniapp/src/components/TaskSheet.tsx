@@ -400,57 +400,68 @@ export function TaskSheet({ me, family, occurrence, onClose, onEdit, onTransfer 
           </div>
         )}
 
-        {/* Actions — port of lines 195-199 */}
-        <div className="wf-row wf-gap-8" style={{ marginTop: 12 }}>
-          {!done && (
-            <>
-              <button
-                className="wf-btn"
-                onClick={() => onTransfer && close(onTransfer)}
-                disabled={!onTransfer}
-                style={{ cursor: onTransfer ? 'pointer' : 'not-allowed' }}
-              >
-                {t('task.action.transfer')}
-              </button>
-              {/* Reschedule is only meaningful for dated occurrences. Floating
-                  tasks have no scheduledDate, so we hide the button there. */}
-              {!o.id.startsWith('floating:') && o.task.type !== 'floating' && (
+        {/* Actions — only the assignee can transfer / reschedule / complete
+            their own turn (or uncomplete a finished one). Other family
+            members see the task read-only; their own management actions
+            ("Stop repeating" below) live in a separate block. */}
+        {(!done && isAssignee) || (done && (isCompleter || isAssignee)) ? (
+          <div className="wf-row wf-gap-8" style={{ marginTop: 12 }}>
+            {!done && isAssignee && (
+              <>
                 <button
                   className="wf-btn"
-                  onClick={() => setRescheduleOpen(true)}
-                  style={{ cursor: 'pointer' }}
+                  onClick={() => onTransfer && close(onTransfer)}
+                  disabled={!onTransfer}
+                  style={{ cursor: onTransfer ? 'pointer' : 'not-allowed' }}
                 >
-                  {t('task.action.reschedule')}
+                  {t('task.action.transfer')}
                 </button>
-              )}
+                {/* Reschedule is only meaningful for dated occurrences.
+                    Floating tasks have no scheduledDate, so we hide it. */}
+                {!o.id.startsWith('floating:') && o.task.type !== 'floating' && (
+                  <button
+                    className="wf-btn"
+                    onClick={() => setRescheduleOpen(true)}
+                    style={{ cursor: 'pointer' }}
+                  >
+                    {t('task.action.reschedule')}
+                  </button>
+                )}
+                <button
+                  className="wf-btn primary"
+                  style={{
+                    flex: 1,
+                    cursor: photoMissing ? 'not-allowed' : 'pointer',
+                    opacity: photoMissing ? 0.5 : 1,
+                  }}
+                  onClick={() => {
+                    if (photoMissing) return;
+                    completeMut.mutate(undefined, { onSuccess: () => close() });
+                  }}
+                  disabled={completeMut.isPending || photoMissing}
+                >
+                  {completeMut.isPending
+                    ? t('task.action.completing')
+                    : t('task.action.complete')}
+                </button>
+              </>
+            )}
+            {done && (
               <button
-                className="wf-btn primary"
-                style={{ flex: 1, cursor: photoMissing ? 'not-allowed' : 'pointer', opacity: photoMissing ? 0.5 : 1 }}
-                onClick={() => {
-                  if (photoMissing) return;
-                  completeMut.mutate(undefined, { onSuccess: () => close() });
+                className="wf-btn block"
+                onClick={() => uncompleteMut.mutate(undefined, { onSuccess: () => close() })}
+                disabled={uncompleteMut.isPending}
+                style={{
+                  cursor: uncompleteMut.isPending ? 'default' : 'pointer',
+                  opacity: uncompleteMut.isPending ? 0.5 : 1,
+                  flex: 1,
                 }}
-                disabled={completeMut.isPending || photoMissing}
               >
-                {completeMut.isPending ? t('task.action.completing') : t('task.action.complete')}
+                {uncompleteMut.isPending ? '…' : t('task.action.uncomplete')}
               </button>
-            </>
-          )}
-          {done && (
-            <button
-              className="wf-btn block"
-              onClick={() => uncompleteMut.mutate(undefined, { onSuccess: () => close() })}
-              disabled={uncompleteMut.isPending || !(isCompleter || isAssignee)}
-              style={{
-                cursor: uncompleteMut.isPending ? 'default' : 'pointer',
-                opacity: uncompleteMut.isPending ? 0.5 : 1,
-                flex: 1,
-              }}
-            >
-              {uncompleteMut.isPending ? '…' : t('task.action.uncomplete')}
-            </button>
-          )}
-        </div>
+            )}
+          </div>
+        ) : null}
         {photoMissing && (
           <span
             className="wf-tiny"
