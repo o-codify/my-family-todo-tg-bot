@@ -330,13 +330,19 @@ export function Calendar({
     new Date().getFullYear() === view.getFullYear();
   const selectedDay = Number(selectedIso.slice(8, 10));
 
-  const myPoints = useMemo(
-    () =>
-      occurrences
-        .filter((o) => o.status === 'done' && o.completedBy === me.id)
-        .reduce((sum, o) => sum + (o.pointsAwarded ?? 0), 0),
-    [occurrences, me.id],
-  );
+  // Current user's actual balance — sourced from the server's points
+  // ledger via `myBalance`. Originally this was computed locally by
+  // summing `pointsAwarded` across the currently-visible (filtered)
+  // occurrences, which produced two bugs at once: (1) the number changed
+  // when filtering by another member (occurrences list no longer
+  // included the user's own dones), and (2) even with the right
+  // filter, it only summed the visible month and ignored
+  // redemption spends, so it never matched the Shop's balance.
+  const balanceQuery = useQuery({
+    queryKey: ['balance', family.id, me.id],
+    queryFn: () => api.myBalance(family.id),
+  });
+  const myPoints = balanceQuery.data?.points ?? 0;
 
   const selectedDate = new Date(`${selectedIso}T00:00:00`);
   const todayCount = byDate.get(todayIso)?.length ?? 0;
