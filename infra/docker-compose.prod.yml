@@ -85,19 +85,8 @@ services:
     ports:
       - "${MINIAPP_PORT:-8080}:80"
 
-  # One-shot migration service. Run on demand with:
-  #   docker compose -f infra/docker-compose.yml -f infra/docker-compose.prod.yml run --rm migrate
-  # Builds from the api image because the migrations file ships in there.
-  migrate:
-    build:
-      context: ..
-      dockerfile: apps/api/Dockerfile
-    container_name: family-todo-migrate
-    profiles: ["tools"]
-    depends_on:
-      postgres:
-        condition: service_healthy
-    environment:
-      DATABASE_URL: postgres://${POSTGRES_USER:-familytodo}:${POSTGRES_PASSWORD:-familytodo}@postgres:5432/${POSTGRES_DB:-familytodo}
-      LOG_LEVEL: ${LOG_LEVEL:-info}
-    command: ["node", "apps/api/dist/db/migrate.js"]
+  # NOTE: there's no separate `migrate` service — the API boot sequence
+  # runs `runMigrations()` automatically before binding the port. A
+  # Postgres advisory lock keeps concurrent replicas safe. If you ever
+  # need to run migrations from a shell (e.g. dry-run a rollback), use:
+  #   docker compose exec api node apps/api/dist/db/migrate.js

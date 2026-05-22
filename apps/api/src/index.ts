@@ -3,6 +3,7 @@ import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { logger as honoLogger } from 'hono/logger';
 import { sql as dbSql, db } from './db/client';
+import { runMigrations } from './db/migrate';
 import { env } from './env';
 import { logger } from './logger';
 import { catalogRouter } from './routes/catalog';
@@ -109,37 +110,61 @@ app.route('/api/v1/families', eventsRouter);
 app.route('/api/v1/families/:familyId', photosRouter);
 app.route('/internal/v1', internalRouter);
 
-const server = serve({
-  fetch: app.fetch,
-  port: env.API_PORT,
-  hostname: env.API_HOST,
-});
+/**
+ * Boot sequence:
+ *   1. Run pending DB migrations (idempotent, advisory-locked) — we never
+ *      want to start serving traffic against a stale schema.
+ *   2. Bind the HTTP server.
+ *   3. Start the BullMQ worker + hydrate digest schedulers.
+ *
+ * If migrations fail we crash the process — Docker / Coolify will surface
+ * the error in the logs and restart-loop it until the operator fixes the
+ * database connection. Half-migrated DBs are not worth serving.
+ */
+async function main() {
+  try {
+    await runMigrations();
+  } catch (err) {
+    logger.error({ err }, 'Migrations failed — refusing to start API');
+    process.exit(1);
+  }
 
-logger.info(
-  { port: env.API_PORT, host: env.API_HOST, env: env.NODE_ENV },
-  `API listening on http://${env.API_HOST}:${env.API_PORT}`,
-);
+  const server = serve({
+    fetch: app.fetch,
+    port: env.API_PORT,
+    hostname: env.API_HOST,
+  });
 
-// Boot the BullMQ worker in-process. For now we co-locate it with the API;
-// a dedicated apps/worker process is cleaner at scale. Hydration after boot
-// makes sure every user with digestEnabled has a repeatable job even if
-// Redis lost state.
-startNotificationsWorker();
-void hydrateDigestSchedulers().catch((err) =>
-  logger.warn({ err }, 'failed to hydrate digest schedulers'),
-);
+  logger.info(
+    { port: env.API_PORT, host: env.API_HOST, env: env.NODE_ENV },
+    `API listening on http://${env.API_HOST}:${env.API_PORT}`,
+  );
 
-const shutdown = async (signal: string) => {
-  logger.info({ signal }, 'Shutting down...');
-  server.close();
-  await stopNotificationsWorker();
-  await closeQueue();
-  await closeRealtime();
-  await dbSql.end();
-  process.exit(0);
-};
+  // Boot the BullMQ worker in-process. For now we co-locate it with the API;
+  // a dedicated apps/worker process is cleaner at scale. Hydration after boot
+  // makes sure every user with digestEnabled has a repeatable job even if
+  // Redis lost state.
+  startNotificationsWorker();
+  void hydrateDigestSchedulers().catch((err) =>
+    logger.warn({ err }, 'failed to hydrate digest schedulers'),
+  );
 
-process.on('SIGINT', () => void shutdown('SIGINT'));
-process.on('SIGTERM', () => void shutdown('SIGTERM'));
+  const shutdown = async (signal: string) => {
+    logger.info({ signal }, 'Shutting down...');
+    server.close();
+    await stopNotificationsWorker();
+    await closeQueue();
+    await closeRealtime();
+    await dbSql.end();
+    process.exit(0);
+  };
+
+  process.on('SIGINT', () => void shutdown('SIGINT'));
+  process.on('SIGTERM', () => void shutdown('SIGTERM'));
+}
 
 void db;
+main().catch((err) => {
+  logger.error({ err }, 'Fatal boot error');
+  process.exit(1);
+});
