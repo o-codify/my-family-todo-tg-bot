@@ -171,25 +171,30 @@ export function QueueDetail({ me, family, taskId, onBack }: Props) {
         </div>
         <div className="wf-h2">{current?.name ?? '—'}</div>
         <span className="wf-hint">{completionsByCurrentSince}</span>
-        <div
-          className="wf-row wf-gap-8"
-          style={{ marginTop: 12, justifyContent: 'center' }}
-        >
-          <span className="wf-btn" title={t('common.soon')}>
-            {t('queues.detail.transfer')}
-          </span>
-          <button
-            className="wf-btn primary"
-            onClick={() => pending && completeMut.mutate(pending.id)}
-            disabled={!pending || completeMut.isPending}
-            style={{
-              cursor: !pending || completeMut.isPending ? 'default' : 'pointer',
-              opacity: !pending || completeMut.isPending ? 0.5 : 1,
-            }}
+        {/* Action buttons only when the queue is on the current user.
+            Other family members see the row read-only — they can't
+            mark Zakir's turn as done, that's Zakir's job. */}
+        {currentId === me.id && (
+          <div
+            className="wf-row wf-gap-8"
+            style={{ marginTop: 12, justifyContent: 'center' }}
           >
-            {completeMut.isPending ? '…' : t('queues.detail.iDid')}
-          </button>
-        </div>
+            <span className="wf-btn" title={t('common.soon')}>
+              {t('queues.detail.transfer')}
+            </span>
+            <button
+              className="wf-btn primary"
+              onClick={() => pending && completeMut.mutate(pending.id)}
+              disabled={!pending || completeMut.isPending}
+              style={{
+                cursor: !pending || completeMut.isPending ? 'default' : 'pointer',
+                opacity: !pending || completeMut.isPending ? 0.5 : 1,
+              }}
+            >
+              {completeMut.isPending ? '…' : t('queues.detail.iDid')}
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Next — port of lines 104-111 */}

@@ -105,16 +105,24 @@ export function Day({ me, family, iso, onBack, onOpenTask, onCreateTask }: Props
 
   // The /occurrences API also returns null-date pending rows (so the
   // Calendar can render the "Когда-нибудь" rollup). On the Day screen we
-  // explicitly look at *one* day — show only dated rows + null-date *done*
-  // rows whose completedAt matches this day. The latter is how a freshly
-  // completed floating task surfaces here ("Лёша сделал «Купить хлеб»").
+  // explicitly look at *one* day — show only:
+  //   - dated rows in this day
+  //   - null-date *done* rows whose completedAt matches this day
+  //     (this surfaces freshly completed floating tasks)
+  //   - null-date pending *queued* rows when viewing today — queue tasks
+  //     are intrinsically date-less but only one is "active" at a time,
+  //     and the user expects to see their current turn in today's list
+  const isToday = iso === todayIso;
   const rawOccurrences = occurrencesQuery.data?.occurrences ?? [];
   const occurrences = rawOccurrences.filter((o) => {
     if (o.scheduledDate !== null) return true;
-    // null-date row: keep only done ones whose completedAt is this day.
-    if (o.status !== 'done') return false;
-    if (!o.completedAt) return false;
-    return o.completedAt.slice(0, 10) === iso;
+    if (o.status === 'done') {
+      if (!o.completedAt) return false;
+      return o.completedAt.slice(0, 10) === iso;
+    }
+    // null-date pending: only queue tasks, and only on today's view.
+    if (isToday && o.task.type === 'queued') return true;
+    return false;
   });
 
   // "Мои" already covers the current user, so don't list them again as a named filter.

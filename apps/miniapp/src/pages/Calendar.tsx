@@ -8,7 +8,7 @@ import {
   type OccurrenceDto,
   type TaskDto,
 } from '../api';
-import { AvStack, Dot, Icon, Tag, WfBody, type Member } from '../design';
+import { AvStack, Dot, Icon, Seg, Tag, WfBody, type Member } from '../design';
 import { pluralize, useT } from '../i18n';
 
 type Props = {
@@ -191,24 +191,46 @@ export function Calendar({
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['occurrences', family.id] }),
   });
 
-  const occurrences = occurrencesQuery.data?.occurrences ?? [];
+  const rawOccurrences = occurrencesQuery.data?.occurrences ?? [];
   const members = useMemo(
     () => (membersQuery.data?.members ?? []).map(memberFromDto),
     [membersQuery.data],
   );
   const memberById = useMemo(() => new Map(members.map((m) => [m.id, m])), [members]);
 
+  // Filter Seg — Все / Мои / <member name>. Same shape as the Day screen
+  // so navigating between them feels consistent. Applied before bucketing
+  // into byDate so the calendar dots reflect the active filter too.
+  const otherMembers = members.filter((m) => m.id !== me.id);
+  const ALL_LBL = t('common.everyone');
+  const MINE_LBL = t('common.mine');
+  const filterItems: string[] = [ALL_LBL, MINE_LBL, ...otherMembers.map((m) => m.name)];
+  const [filter, setFilter] = useState<string>(ALL_LBL);
+  const occurrences = useMemo(() => {
+    if (filter === ALL_LBL) return rawOccurrences;
+    if (filter === MINE_LBL) return rawOccurrences.filter((o) => o.assigneeId === me.id);
+    const named = members.find((m) => m.name === filter);
+    if (!named) return rawOccurrences;
+    return rawOccurrences.filter((o) => o.assigneeId === named.id);
+  }, [rawOccurrences, filter, me.id, members, ALL_LBL, MINE_LBL]);
+
+  const todayIso = toIso(new Date());
+
   const byDate = useMemo(() => {
     const map = new Map<string, OccurrenceDto[]>();
     for (const o of occurrences) {
-      // Floating completions have no scheduled_date — anchor them to the day
-      // they were *completed* so they appear on that day's card. Pending
-      // null-date rows stay in the floating rollup until completed.
+      // Anchor logic for null-date rows:
+      //   - done   → the day completedAt landed on
+      //   - queued pending → today (queue tasks are date-less, but the
+      //     active turn should surface on today's card)
+      //   - floating pending → "Когда-нибудь" rollup (not on a calendar cell)
       let key: string;
       if (o.scheduledDate) {
         key = o.scheduledDate;
       } else if (o.status === 'done' && o.completedAt) {
         key = o.completedAt.slice(0, 10);
+      } else if (o.status === 'pending' && o.task.type === 'queued') {
+        key = todayIso;
       } else {
         key = '__floating__';
       }
@@ -216,10 +238,9 @@ export function Calendar({
       map.get(key)!.push(o);
     }
     return map;
-  }, [occurrences]);
+  }, [occurrences, todayIso]);
 
   const cells = useMemo(() => makeMonthCells(view), [view]);
-  const todayIso = toIso(new Date());
   const todayDay = new Date().getDate();
   const sameMonthAsView =
     new Date().getMonth() === view.getMonth() &&
@@ -336,6 +357,13 @@ export function Calendar({
           );
         })}
       </div>
+
+      {/* Filter Seg — Все / Мои / <member>. Same shape as Day so the user
+          can stay in their preferred view as they switch screens. Affects
+          both the day list and the dots on the month grid. */}
+      {members.length > 1 && (
+        <Seg items={filterItems} active={filter} onChange={setFilter} />
+      )}
 
       {/* Day heading — port of lines 93-96 */}
       <div
