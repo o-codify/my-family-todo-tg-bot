@@ -16,6 +16,11 @@ export default defineConfig(({ mode }) => {
       alias: {
         '@': resolve(__dirname, 'src'),
       },
+      // Always resolve workspace packages from their source `.ts` files
+      // (via the `development` condition in their package.json exports).
+      // Vite handles TS just fine in both dev and prod builds, and this
+      // saves us from needing a separate `tsc` step for shared/tg-auth.
+      conditions: ['development'],
     },
     define: {
       __DEV__: JSON.stringify(mode === 'development'),

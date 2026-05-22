@@ -17,6 +17,7 @@ build/
 .turbo/
 .next/
 .cache/
+*.tsbuildinfo
 
 # IDE
 .idea/

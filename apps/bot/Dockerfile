@@ -20,6 +20,9 @@ RUN --mount=type=cache,id=pnpm,target=/pnpm-store \
 
 FROM deps AS build
 COPY . .
+# shared package emits to dist/ (its `default` exports condition). Bot
+# imports `@family-todo/shared`; without a JS build Node can't load it at
+# runtime since the source is .ts.
 RUN pnpm --filter @family-todo/shared build && \
     pnpm --filter @family-todo/bot build
 

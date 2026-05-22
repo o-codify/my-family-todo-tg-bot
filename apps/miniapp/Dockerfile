@@ -30,8 +30,10 @@ ARG VITE_TG_BOT_USERNAME
 ENV VITE_API_BASE_URL=${VITE_API_BASE_URL}
 ENV VITE_TG_BOT_USERNAME=${VITE_TG_BOT_USERNAME}
 COPY . .
-RUN pnpm --filter @family-todo/shared build && \
-    pnpm --filter @family-todo/miniapp build
+# Vite bundles workspace packages from source `.ts` directly (see
+# vite.config.ts `resolve.conditions: ['development']`), so no need to
+# pre-build @family-todo/shared.
+RUN pnpm --filter @family-todo/miniapp build
 
 # ── nginx runtime ────────────────────────────────────────────────────
 FROM nginx:1.27-alpine AS runner
