@@ -11,40 +11,28 @@ import { useQueryClient } from '@tanstack/react-query';
 type Props = {
   children: ReactNode;
   style?: CSSProperties;
-  /**
-   * Persist the scroll position of this body under a stable key across
-   * mount/unmount cycles. When the user navigates away from a tab and
-   * back, the scroller restores to wherever they were instead of jumping
-   * to the top. Pass a key per logical screen (e.g. `'profile'`).
-   */
+  /** Persist this body's scroll across mount/unmount. */
   scrollKey?: string;
-  /**
-   * Called when the user swipes right from the left edge of the screen
-   * past the activation threshold — typical "go back" gesture. If not
-   * provided, the edge gesture is inert (top-level tabs).
-   */
+  /** Edge-swipe-right past threshold → fires this. Pass per sub-page. */
   onBack?: () => void;
-  /**
-   * Called when the user pulls down from the top of the scroller past
-   * the activation threshold. Defaults to invalidating all TanStack
-   * Query caches, which causes every visible query to refetch.
-   */
+  /** Pull-down from top past threshold → fires this. Defaults to
+   *  invalidating all TanStack Query caches. */
   onRefresh?: () => void | Promise<void>;
 };
 
-/**
- * Module-level cache of last-known scroll positions, keyed by `scrollKey`.
- * In memory only — refresh / reload resets to 0.
- */
 const scrollCache = new Map<string, number>();
 const RESTORE_WINDOW_MS = 1500;
 
-// Gesture thresholds — px to start tracking, px to commit.
-const EDGE_ZONE_PX = 24;            // touchstart within this many px of left edge
-const ACTIVATE_PX = 16;             // movement needed to lock a direction
-const COMMIT_PX_BACK = 90;          // dx to trigger onBack
-const COMMIT_PX_REFRESH = 70;       // dy to trigger onRefresh
-const MAX_PULL_PX = 140;            // hard cap on visual indicator travel
+// Gesture thresholds — px.
+const EDGE_ZONE_PX = 24;
+const ACTIVATE_PX = 16;
+const COMMIT_PX_BACK = 90;
+const COMMIT_PX_REFRESH = 70;
+const MAX_PULL_PX = 140;
+// Visual: cap how far the indicator slides from the gesture's edge.
+// Keeps it visually close to where the user's finger is, not hovering
+// in the middle of the screen.
+const INDICATOR_MAX_TRAVEL = 24;
 
 export function WfBody({
   children,
@@ -56,21 +44,15 @@ export function WfBody({
   const ref = useRef<HTMLDivElement | null>(null);
   const queryClient = useQueryClient();
 
-  // Visual indicator state. We render a small circular chevron pill that
-  // slides in from the edge the gesture is coming from. Same look for
-  // both back and refresh so the user has one mental model.
+  // Visual state only — gesture truth lives in closure variables inside
+  // the effect so touchend can read the final committed value without
+  // racing React state batching.
   const [gesture, setGesture] = useState<null | 'back' | 'refresh'>(null);
   const [progress, setProgress] = useState(0);
-  const [committed, setCommitted] = useState(false);
-  // Mirror in a ref so the touch handler reads the latest value without
-  // forcing the effect to re-subscribe mid-gesture (which would lose the
-  // touchstart anchors and break the in-progress drag).
-  const committedRef = useRef(false);
-  useEffect(() => {
-    committedRef.current = committed;
-  }, [committed]);
+  const [committedView, setCommittedView] = useState(false);
+  const [busy, setBusy] = useState(false);
 
-  // ── Scroll restoration (unchanged from earlier) ───────────────────────
+  // ── Scroll restoration ───────────────────────────────────────────────
   useLayoutEffect(() => {
     if (!scrollKey) return;
     const el = ref.current;
@@ -109,7 +91,6 @@ export function WfBody({
     };
   }, [scrollKey]);
 
-  // Save scroll position on every frame the user scrolls.
   useEffect(() => {
     if (!scrollKey) return;
     const el = ref.current;
@@ -129,33 +110,41 @@ export function WfBody({
     };
   }, [scrollKey]);
 
-  // ── Gesture: edge-swipe-back + pull-to-refresh ────────────────────────
-  // Both gestures live on the same touch handler so we can disambiguate
-  // direction at runtime (the user's intent isn't known until they've
-  // moved past ACTIVATE_PX in the dominant axis).
+  // ── Edge-swipe-back + pull-to-refresh ────────────────────────────────
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
 
+    // Gesture truth — closure-local so we can read the last value inside
+    // touchend without waiting on React state to flush.
     let active: null | 'back' | 'refresh' = null;
+    let committed = false;
     let startX = 0;
     let startY = 0;
     let startScroll = 0;
+    let lastDx = 0;
+    let lastDy = 0;
 
-    const reset = () => {
-      active = null;
+    const resetVisuals = () => {
       setGesture(null);
       setProgress(0);
-      setCommitted(false);
+      setCommittedView(false);
     };
 
     const onTouchStart = (e: TouchEvent) => {
-      if (e.touches.length !== 1) return reset();
+      if (e.touches.length !== 1) {
+        active = null;
+        committed = false;
+        return;
+      }
       const t = e.touches[0]!;
       startX = t.clientX;
       startY = t.clientY;
       startScroll = el.scrollTop;
       active = null;
+      committed = false;
+      lastDx = 0;
+      lastDy = 0;
     };
 
     const onTouchMove = (e: TouchEvent) => {
@@ -165,127 +154,170 @@ export function WfBody({
       const dy = t.clientY - startY;
       const adx = Math.abs(dx);
       const ady = Math.abs(dy);
+      lastDx = dx;
+      lastDy = dy;
 
       if (!active) {
-        // Edge swipe → back. Must originate near the left edge, move
-        // right, and be mostly horizontal.
         if (onBack && startX < EDGE_ZONE_PX && dx > ACTIVATE_PX && adx > ady) {
           active = 'back';
-        }
-        // Pull → refresh. Must be at the top of the scroller, moving
-        // down, and mostly vertical.
-        else if (
-          (onRefresh || true) &&
-          startScroll <= 0 &&
-          dy > ACTIVATE_PX &&
-          ady > adx
-        ) {
+        } else if (startScroll <= 0 && dy > ACTIVATE_PX && ady > adx) {
           active = 'refresh';
         } else {
-          // No gesture committed yet — let normal scrolling happen.
           return;
         }
       }
 
       if (active === 'back') {
+        committed = dx >= COMMIT_PX_BACK;
         const p = Math.min(Math.max(dx, 0) / COMMIT_PX_BACK, 1);
         setGesture('back');
         setProgress(p);
-        setCommitted(dx >= COMMIT_PX_BACK);
-        // Don't fight the browser only after we've committed to this
-        // gesture — otherwise we'd block legitimate horizontal scroll.
+        setCommittedView(committed);
         e.preventDefault();
       } else if (active === 'refresh') {
         const dyClamped = Math.min(Math.max(dy, 0), MAX_PULL_PX);
+        committed = dy >= COMMIT_PX_REFRESH;
         const p = Math.min(dyClamped / COMMIT_PX_REFRESH, 1);
         setGesture('refresh');
         setProgress(p);
-        setCommitted(dy >= COMMIT_PX_REFRESH);
-        // Same here — preventDefault only inside the active refresh
-        // gesture stops native pull-to-refresh while leaving normal
-        // scroll alone.
+        setCommittedView(committed);
         e.preventDefault();
       }
     };
 
     const onTouchEnd = async () => {
-      if (active === 'back' && committedRef.current && onBack) {
+      const wasActive = active;
+      const wasCommitted = committed;
+      active = null;
+      committed = false;
+
+      if (wasActive === 'back' && wasCommitted && onBack) {
+        resetVisuals();
         onBack();
-      } else if (active === 'refresh' && committedRef.current) {
+        return;
+      }
+      if (wasActive === 'refresh' && wasCommitted) {
+        // Keep the indicator visible while refreshing so the user gets
+        // feedback that something is happening.
+        setBusy(true);
         try {
           if (onRefresh) {
             await onRefresh();
           } else {
-            // Default: refetch everything visible.
             await queryClient.invalidateQueries();
+            await queryClient.refetchQueries({ type: 'active' });
           }
         } catch {
-          /* swallow — user just wanted to retry */
+          /* swallow */
         }
+        setBusy(false);
+        resetVisuals();
+        return;
       }
-      reset();
+      resetVisuals();
+      void lastDx;
+      void lastDy;
     };
 
     el.addEventListener('touchstart', onTouchStart, { passive: true });
     el.addEventListener('touchmove', onTouchMove, { passive: false });
     el.addEventListener('touchend', onTouchEnd);
-    el.addEventListener('touchcancel', reset);
+    el.addEventListener('touchcancel', () => {
+      active = null;
+      committed = false;
+      resetVisuals();
+    });
     return () => {
       el.removeEventListener('touchstart', onTouchStart);
       el.removeEventListener('touchmove', onTouchMove);
       el.removeEventListener('touchend', onTouchEnd);
-      el.removeEventListener('touchcancel', reset);
     };
   }, [onBack, onRefresh, queryClient]);
 
+  // Choose icon: chevron for back, circular-refresh glyph for refresh.
+  // Using two glyphs (not one rotating chevron) reads more clearly —
+  // a chevron pointing left never quite means "refresh" to anyone.
+  const isRefresh = gesture === 'refresh';
+
   return (
     <div ref={ref} className="wf-body" style={style}>
-      {/* Gesture indicator. Shared visual: a circular pill with a chevron-
-          left arrow, color-flipped once the user passes the commit
-          threshold (mirrors the iOS pattern where the indicator "fills"
-          when the action will fire on release). */}
       {gesture && (
         <div
           aria-hidden
           style={{
             position: 'fixed',
             zIndex: 50,
-            width: 44,
-            height: 44,
+            width: 40,
+            height: 40,
             borderRadius: 999,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            background: committed ? 'var(--ink)' : 'var(--paper)',
-            color: committed ? 'var(--paper)' : 'var(--ink)',
-            border: '1.5px solid var(--line)',
-            boxShadow: '0 2px 12px rgba(0,0,0,.12)',
-            opacity: Math.max(progress, 0.4),
-            transition: 'background .12s ease, color .12s ease',
+            background: 'var(--paper)',
+            // The border thickens + colors-in as the user approaches the
+            // commit threshold — gives the same "fills up" feel as iOS
+            // without the harsh paper→ink swap that read as "wrong" before.
+            border: `1.5px solid ${committedView ? 'var(--ink)' : 'var(--line)'}`,
+            color: committedView ? 'var(--ink)' : 'var(--hint)',
+            boxShadow: '0 2px 12px rgba(0,0,0,.08)',
+            opacity: Math.max(progress, 0.35),
+            transition: 'border-color .12s ease, color .12s ease',
             pointerEvents: 'none',
-            ...(gesture === 'back'
+            ...(isRefresh
               ? {
-                  // Slide in from the left edge as the finger moves right.
-                  top: '50%',
-                  left: 0,
-                  transform: `translate(${4 + progress * 48}px, -50%)`,
-                }
-              : {
-                  // Slide down from the top center as the finger pulls.
                   top: 0,
                   left: '50%',
-                  transform: `translate(-50%, ${4 + progress * 56}px) rotate(${gesture === 'refresh' ? progress * 270 : 0}deg)`,
+                  transform: `translate(-50%, ${4 + progress * INDICATOR_MAX_TRAVEL}px)`,
+                }
+              : {
+                  top: '50%',
+                  left: 0,
+                  transform: `translate(${4 + progress * INDICATOR_MAX_TRAVEL}px, -50%)`,
                 }),
           }}
         >
-          {/* Same chevron-left glyph for both — the rotation on refresh
-              makes it read as a circular "refresh" arc when committed. */}
-          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <polyline points="15 6 9 12 15 18" />
-          </svg>
+          {isRefresh ? (
+            // Circular refresh arrow. When busy (post-release, awaiting
+            // the refresh promise) we spin it. Otherwise the arc grows
+            // with the pull progress.
+            <svg
+              viewBox="0 0 24 24"
+              width="20"
+              height="20"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              style={{
+                animation: busy ? 'wf-spin 0.8s linear infinite' : 'none',
+                transform: busy ? 'none' : `rotate(${progress * 270}deg)`,
+              }}
+            >
+              <polyline points="23 4 23 10 17 10" />
+              <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
+            </svg>
+          ) : (
+            // Left chevron for back — unambiguous "go back".
+            <svg
+              viewBox="0 0 24 24"
+              width="20"
+              height="20"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <polyline points="15 6 9 12 15 18" />
+            </svg>
+          )}
         </div>
       )}
       {children}
+      {/* Inline keyframe for the spinner so we don't need to touch the
+          shared CSS file. */}
+      <style>{`@keyframes wf-spin { to { transform: rotate(360deg); } }`}</style>
     </div>
   );
 }
