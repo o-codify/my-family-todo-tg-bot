@@ -248,6 +248,7 @@ export async function listFamilyMembers(familyId: string) {
     avatarUrl: user.avatarUrl,
     color: user.color,
     awayUntil: user.awayUntil?.toISOString() ?? null,
+    awayReason: (user.awayReason as 'vacation' | 'sick' | null) ?? null,
     joinedAt: joinedAt.toISOString(),
     role: serializeRole(role),
   }));

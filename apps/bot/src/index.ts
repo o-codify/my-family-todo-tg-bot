@@ -112,10 +112,16 @@ bot.command('today', async (ctx) => {
       return;
     }
     const header = isEn ? `☀️ Today (${data.date}):` : `☀️ На сегодня (${data.date}):`;
+    // Only tag each line with the family name when the user actually has
+    // more than one family — otherwise it's noise ("1. И · +40 · Цц"
+    // when the user is in exactly one family called Цц).
+    const familyNames = new Set(data.tasks.map((t) => t.familyName));
+    const showFamily = familyNames.size > 1;
     const lines = data.tasks.map((t, i) => {
       const time = t.time ? ` · ${t.time.slice(0, 5)}` : '';
       const pts = t.points > 0 ? ` · +${t.points}` : '';
-      return `${i + 1}. ${escapeHtml(t.title)}${time}${pts} <i>· ${escapeHtml(t.familyName)}</i>`;
+      const fam = showFamily ? ` <i>· ${escapeHtml(t.familyName)}</i>` : '';
+      return `${i + 1}. ${escapeHtml(t.title)}${time}${pts}${fam}`;
     });
     await ctx.reply([header, ...lines].join('\n'), {
       parse_mode: 'HTML',

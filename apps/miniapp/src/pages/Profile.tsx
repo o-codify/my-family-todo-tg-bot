@@ -46,6 +46,7 @@ function memberFromDto(dto: FamilyMemberDto): Member {
     color: dto.color,
     role: dto.role.name,
     awayUntil: dto.awayUntil,
+    awayReason: dto.awayReason,
   };
 }
 
@@ -126,6 +127,13 @@ export function Profile({
   });
 
   const isAway = me.awayUntil != null && new Date(me.awayUntil) > new Date();
+  const awayReason = (me.awayReason ?? null) as 'vacation' | 'sick' | null;
+  // Default reason for legacy rows that have `awayUntil` set but no reason
+  // recorded (created before the awayReason column existed).
+  const isVacation = isAway && (awayReason === null || awayReason === 'vacation');
+  const isSick = isAway && awayReason === 'sick';
+  const sevenDays = () => new Date(Date.now() + 7 * 86_400_000).toISOString();
+  const threeDays = () => new Date(Date.now() + 3 * 86_400_000).toISOString();
   const myMemberDto = membersQuery.data?.members.find((m) => m.id === me.id);
   // "Owner" in our model is `family.ownerId`, not the role label — but the
   // first owner gets the Owner role at creation. Use the role to gate the
@@ -262,7 +270,7 @@ export function Profile({
               </div>
               {m.role === 'Owner' && <Tag>Owner</Tag>}
               {m.awayUntil && new Date(m.awayUntil) > new Date() && (
-                <Tag variant="warn">🌴</Tag>
+                <Tag variant="warn">{m.awayReason === 'sick' ? '🤒' : '🌴'}</Tag>
               )}
               {canActOn && (
                 <button
@@ -339,7 +347,10 @@ export function Profile({
         </div>
       </div>
 
-      {/* Away mode toggle — UsrV1 lines 149-160 */}
+      {/* Away modes — vacation (🌴) and sick (🤒) are mutually exclusive.
+          Turning one on flips the other off; both have the same effect
+          server-side (skipped from queue rotation), only the label/icon
+          differs so other family members know why. */}
       <div className="wf-card">
         <div className="wf-spread">
           <div className="wf-row wf-gap-8">
@@ -347,20 +358,51 @@ export function Profile({
             <div className="wf-col">
               <span className="wf-label">{t('profile.away.title')}</span>
               <span className="wf-tiny">
-                {isAway
+                {isVacation
                   ? t('profile.away.until', { date: fmtDate(me.awayUntil!, t.locale) })
                   : t('profile.away.hint')}
               </span>
             </div>
           </div>
           <Toggle
-            on={isAway}
+            on={isVacation}
             onClick={() => {
-              if (isAway) updateMe.mutate({ awayUntil: null });
-              else {
-                // Default: away for next 7 days
-                const until = new Date(Date.now() + 7 * 86_400_000).toISOString();
-                updateMe.mutate({ awayUntil: until });
+              if (isVacation) {
+                updateMe.mutate({ awayUntil: null, awayReason: null });
+              } else {
+                updateMe.mutate({ awayUntil: sevenDays(), awayReason: 'vacation' });
+              }
+            }}
+          />
+        </div>
+      </div>
+      <div className="wf-card">
+        <div className="wf-spread">
+          <div className="wf-row wf-gap-8">
+            <span style={{ fontSize: 18 }}>🤒</span>
+            <div className="wf-col">
+              <span className="wf-label">
+                {t.locale === 'en' ? 'Sick' : 'Болею'}
+              </span>
+              <span className="wf-tiny">
+                {isSick
+                  ? t('profile.away.until', { date: fmtDate(me.awayUntil!, t.locale) })
+                  : t.locale === 'en'
+                    ? 'queues will skip me'
+                    : 'очереди будут пропускать меня'}
+              </span>
+            </div>
+          </div>
+          <Toggle
+            on={isSick}
+            onClick={() => {
+              if (isSick) {
+                updateMe.mutate({ awayUntil: null, awayReason: null });
+              } else {
+                // 3-day default for sick — shorter than vacation since
+                // illness usually clears up faster, and the user can
+                // re-toggle to extend.
+                updateMe.mutate({ awayUntil: threeDays(), awayReason: 'sick' });
               }
             }}
           />

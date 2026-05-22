@@ -79,6 +79,7 @@ export function serializeUser(row: UserRow) {
     color: row.color,
     notificationSettings: row.notificationSettings,
     awayUntil: row.awayUntil?.toISOString() ?? null,
+    awayReason: (row.awayReason as 'vacation' | 'sick' | null) ?? null,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
   };

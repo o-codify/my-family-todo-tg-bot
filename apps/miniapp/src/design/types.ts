@@ -10,4 +10,5 @@ export type Member = {
   color: string;
   role: 'Owner' | 'Adult' | 'Child' | string;
   awayUntil?: string | null;
+  awayReason?: 'vacation' | 'sick' | null;
 };

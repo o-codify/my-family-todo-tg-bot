@@ -23,6 +23,10 @@ export const users = pgTable('users', {
       defaultReminderBeforeMinutes: 15,
     }),
   awayUntil: timestamp('away_until', { withTimezone: true }),
+  // Why the user is away — 'vacation' (default for the existing "В отъезде"
+  // toggle) or 'sick'. Both opt the user out of queue rotations equally,
+  // but the UI shows different icons/labels (🌴 vs 🤒).
+  awayReason: text('away_reason'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });

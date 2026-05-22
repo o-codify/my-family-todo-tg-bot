@@ -24,6 +24,7 @@ function memberFromDto(dto: FamilyMemberDto): Member {
     color: dto.color,
     role: dto.role.name,
     awayUntil: dto.awayUntil,
+    awayReason: dto.awayReason,
   };
 }
 

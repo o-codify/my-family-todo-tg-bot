@@ -108,6 +108,7 @@ export type MeResponse = {
   timezone: string;
   notificationSettings: NotificationSettings;
   awayUntil: string | null;
+  awayReason: 'vacation' | 'sick' | null;
 };
 
 export type FamilySummary = {
@@ -127,6 +128,7 @@ export type FamilyMemberDto = {
   avatarUrl: string | null;
   color: string;
   awayUntil: string | null;
+  awayReason: 'vacation' | 'sick' | null;
   joinedAt: string;
   role: { id: string; name: string; permissions: string[] };
 };
@@ -226,6 +228,7 @@ export const api = {
     locale?: string;
     timezone?: string;
     awayUntil?: string | null;
+    awayReason?: 'vacation' | 'sick' | null;
     notificationSettings?: Partial<NotificationSettings>;
   }) =>
     request<MeResponse>('/api/v1/me', {

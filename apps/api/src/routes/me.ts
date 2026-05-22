@@ -29,6 +29,14 @@ meRouter.patch('/', zValidator('json', updateMeSchema), async (c) => {
   }
   if (patch.awayUntil !== undefined) {
     next.awayUntil = patch.awayUntil ? new Date(patch.awayUntil) : null;
+    // Clear the reason when clearing awayUntil so we don't leave a
+    // stale "sick" tag on someone who's already back.
+    if (!patch.awayUntil && patch.awayReason === undefined) {
+      next.awayReason = null;
+    }
+  }
+  if (patch.awayReason !== undefined) {
+    next.awayReason = patch.awayReason;
   }
 
   const [updated] = await db.update(users).set(next).where(eq(users.id, user.id)).returning();

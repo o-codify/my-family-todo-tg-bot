@@ -22,6 +22,7 @@ export const userSchema = z.object({
   color: z.string().regex(/^#[0-9a-fA-F]{6}$/),
   notificationSettings: notificationSettingsSchema,
   awayUntil: z.string().datetime().nullable(),
+  awayReason: z.enum(['vacation', 'sick']).nullable(),
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime(),
 });
@@ -34,6 +35,7 @@ export const updateMeSchema = z.object({
   timezone: z.string().optional(),
   notificationSettings: notificationSettingsSchema.partial().optional(),
   awayUntil: z.string().datetime().nullable().optional(),
+  awayReason: z.enum(['vacation', 'sick']).nullable().optional(),
 });
 
 export type UpdateMeInput = z.infer<typeof updateMeSchema>;
