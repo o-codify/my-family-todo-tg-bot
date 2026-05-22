@@ -120,40 +120,28 @@ export function History({ me, family, onBack, onOpenDrawer }: Props) {
       <PageHeader title={t('history.title')} onBack={onBack} onOpenDrawer={onOpenDrawer} />
       <Seg items={[ALL, MINE]} active={author} onChange={setAuthor} />
 
-      {/* Type filter chips — independent of the author Seg above. */}
-      <div className="wf-row wf-gap-6" style={{ flexWrap: 'wrap' }}>
-        {(
-          [
-            { key: 'all', label: t('history.type.all') },
-            { key: 'tasks', label: t('history.type.tasks') },
-            { key: 'rewards', label: t('history.type.rewards') },
-            { key: 'photos', label: t('history.type.photos') },
-          ] as Array<{ key: TypeFilter; label: string }>
-        ).map((c) => {
-          const active = typeFilter === c.key;
-          return (
-            <button
-              key={c.key}
-              type="button"
-              onClick={() => setTypeFilter(c.key)}
-              style={{
-                background: active ? 'var(--ink)' : 'transparent',
-                color: active ? 'var(--paper)' : 'var(--ink)',
-                border: `1.5px solid ${active ? 'var(--ink)' : 'var(--line)'}`,
-                borderRadius: 999,
-                padding: '4px 10px',
-                fontSize: 12,
-                fontWeight: 600,
-                cursor: 'pointer',
-                font: 'inherit',
-                lineHeight: 1.2,
-              }}
-            >
-              {c.label}
-            </button>
-          );
-        })}
-      </div>
+      {/* Type filter Seg — mutually exclusive, so a real `<Seg>` (same
+          visual treatment as the author Seg above). We map labels back
+          to keys via a lookup since `<Seg>` only carries strings. */}
+      {(() => {
+        const TYPE_LABELS: Record<TypeFilter, string> = {
+          all: t('history.type.all'),
+          tasks: t('history.type.tasks'),
+          rewards: t('history.type.rewards'),
+          photos: t('history.type.photos'),
+        };
+        const order: TypeFilter[] = ['all', 'tasks', 'rewards', 'photos'];
+        return (
+          <Seg
+            items={order.map((k) => TYPE_LABELS[k])}
+            active={TYPE_LABELS[typeFilter]}
+            onChange={(label) => {
+              const found = order.find((k) => TYPE_LABELS[k] === label);
+              if (found) setTypeFilter(found);
+            }}
+          />
+        );
+      })()}
 
       {isLoading && <span className="wf-hint">{t('common.loading')}</span>}
       {!isLoading && items.length === 0 && (

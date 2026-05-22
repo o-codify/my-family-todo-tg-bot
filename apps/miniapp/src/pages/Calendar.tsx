@@ -478,20 +478,26 @@ export function Calendar({
         <Seg items={filterItems} active={filter} onChange={setFilter} />
       )}
 
-      {/* Secondary filter chips — "Не сделанные" / "С фото". Persisted in
-          user preferences so a refresh keeps the active filter. Tags will
-          slot in here once Phase B adds them. */}
-      <div className="wf-row wf-gap-6" style={{ flexWrap: 'wrap' }}>
-        <FilterChip
-          active={onlyPending}
-          label={t('calendar.filter.pending')}
+      {/* Secondary filter chips — "Не сделанные" / "С фото". These are
+          independent toggles (not mutually exclusive like a normal Seg),
+          so we reuse `.wf-seg`'s pill styling but add `.on` per-item
+          rather than to a single active one. Visually matches the
+          author Seg above for consistency. Tags slot in here in Phase B. */}
+      <div className="wf-seg">
+        <span
+          className={onlyPending ? 'on' : ''}
           onClick={() => toggleFilter('onlyPending')}
-        />
-        <FilterChip
-          active={onlyWithPhoto}
-          label={t('calendar.filter.withPhoto')}
+          style={{ cursor: 'pointer' }}
+        >
+          {t('calendar.filter.pending')}
+        </span>
+        <span
+          className={onlyWithPhoto ? 'on' : ''}
           onClick={() => toggleFilter('onlyWithPhoto')}
-        />
+          style={{ cursor: 'pointer' }}
+        >
+          {t('calendar.filter.withPhoto')}
+        </span>
       </div>
 
       {/* Day heading — port of lines 93-96 */}
@@ -802,38 +808,3 @@ function pluralTaskI18n(n: number, isEn: boolean): string {
   );
 }
 
-/**
- * Toggle chip used for secondary calendar filters. Visually a pill that
- * fills in when active. We don't reuse `<Seg>` here because Seg is a
- * mutually-exclusive segmented control; these are independent toggles.
- */
-function FilterChip({
-  active,
-  label,
-  onClick,
-}: {
-  active: boolean;
-  label: string;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      style={{
-        background: active ? 'var(--ink)' : 'transparent',
-        color: active ? 'var(--paper)' : 'var(--ink)',
-        border: `1.5px solid ${active ? 'var(--ink)' : 'var(--line)'}`,
-        borderRadius: 999,
-        padding: '4px 10px',
-        fontSize: 12,
-        fontWeight: 600,
-        cursor: 'pointer',
-        font: 'inherit',
-        lineHeight: 1.2,
-      }}
-    >
-      {label}
-    </button>
-  );
-}
