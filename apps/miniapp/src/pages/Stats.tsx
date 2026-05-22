@@ -169,22 +169,26 @@ export function Stats({ me, family, onBack, onOpenDrawer }: Props) {
             </span>
           )}
         </div>
+        {/* Mirror the left card's visual rhythm: tiny title, big number row
+            (⚡ + days), then a tiny meta line. Originally the name went into
+            the h2, which made this card 1 line taller than its neighbour and
+            broke the visual symmetry of the two-up grid. */}
         <div className="wf-card" style={{ flex: 1, minWidth: 0 }}>
           <span className="wf-tiny">{t('stats.streak.family')}</span>
-          <div
-            className="wf-h2"
+          <div className="wf-h2" style={{ marginTop: 2 }}>
+            <Icon name="zap" /> {familyTop.days} {pluralDaysI18n(familyTop.days, isEn)}
+          </div>
+          <span
+            className="wf-tiny"
             style={{
-              marginTop: 2,
+              display: 'block',
               overflow: 'hidden',
               textOverflow: 'ellipsis',
               whiteSpace: 'nowrap',
             }}
             title={familyTopMember?.name}
           >
-            {familyTopMember?.name ?? '—'} · {familyTop.days}
-          </div>
-          <span className="wf-tiny">
-            {familyTop.days > 0 ? pluralDaysI18n(familyTop.days, isEn) : ''}
+            {familyTopMember?.name ?? '—'}
           </span>
         </div>
       </div>

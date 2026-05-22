@@ -128,19 +128,37 @@ export async function redeemReward(input: {
   });
 }
 
+/** Joined view used by listRedemptions — carries the reward's name/emoji
+ *  alongside the redemption row so the Inbox / Magazin doesn't have to do
+ *  a separate `listRewards` call just to render "Хочет приз X". The reward
+ *  may have been archived (rewardId is nullable), in which case both
+ *  fields are null and the UI falls back to the cost. */
+export type RedemptionWithReward = RedemptionRow & {
+  rewardName: string | null;
+  rewardEmoji: string | null;
+};
+
 export async function listRedemptions(input: {
   familyId: string;
   userId?: string;
   status?: 'pending' | 'granted' | 'rejected';
-}): Promise<RedemptionRow[]> {
+}): Promise<RedemptionWithReward[]> {
   const conditions = [eq(rewardRedemptions.familyId, input.familyId)];
   if (input.userId) conditions.push(eq(rewardRedemptions.userId, input.userId));
   if (input.status) conditions.push(eq(rewardRedemptions.status, input.status));
-  return db
-    .select()
+  // LEFT JOIN because `rewardId` is nullable — a redemption can outlive
+  // the reward it referenced (admin deleted/archived the reward later).
+  const rows = await db
+    .select({ redemption: rewardRedemptions, reward: rewards })
     .from(rewardRedemptions)
+    .leftJoin(rewards, eq(rewardRedemptions.rewardId, rewards.id))
     .where(and(...conditions))
     .orderBy(desc(rewardRedemptions.requestedAt));
+  return rows.map((r) => ({
+    ...r.redemption,
+    rewardName: r.reward?.name ?? null,
+    rewardEmoji: r.reward?.emoji ?? null,
+  }));
 }
 
 export async function grantRedemption(input: {
@@ -207,10 +225,16 @@ export function serializeReward(row: RewardRow) {
   };
 }
 
-export function serializeRedemption(row: RedemptionRow) {
+export function serializeRedemption(row: RedemptionRow | RedemptionWithReward) {
+  // `RedemptionWithReward` carries the join'd reward name/emoji — for
+  // single-row helpers (`requestRedemption` returns just the row) those
+  // fields are absent and we emit null.
+  const withReward = row as Partial<RedemptionWithReward>;
   return {
     id: row.id,
     rewardId: row.rewardId,
+    rewardName: withReward.rewardName ?? null,
+    rewardEmoji: withReward.rewardEmoji ?? null,
     userId: row.userId,
     familyId: row.familyId,
     costPoints: row.costPoints,

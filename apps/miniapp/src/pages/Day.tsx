@@ -342,6 +342,7 @@ export function Day({ me, family, iso, onBack, onOpenTask, onCreateTask }: Props
             key={o.id}
             o={o}
             assignee={o.assigneeId ? memberById.get(o.assigneeId) ?? null : null}
+            completedBy={o.completedBy ? memberById.get(o.completedBy) ?? null : null}
             doneCard
             onToggle={() => uncompleteMut.mutate(o.id)}
             onOpen={() => onOpenTask(o)}
@@ -365,19 +366,60 @@ export function Day({ me, family, iso, onBack, onOpenTask, onCreateTask }: Props
   );
 }
 
+/**
+ * Pick a readable foreground colour (ink black vs paper white) against a
+ * given background hex. Used to colour the checkmark on top of a done
+ * task's checkbox — for typical pastel avatars the mark stays black, but
+ * for a near-black avatar the mark flips to white so it stays visible.
+ *
+ * Falls back to ink when the colour isn't parseable as `#rrggbb`.
+ */
+function pickInkOrPaper(bg: string): string {
+  const m = /^#([0-9a-f]{6})$/i.exec(bg.trim());
+  if (!m) return 'var(--ink)';
+  const v = parseInt(m[1]!, 16);
+  const r = (v >> 16) & 0xff;
+  const g = (v >> 8) & 0xff;
+  const b = v & 0xff;
+  // ITU-R BT.601 luma — same formula every contrast picker uses. Threshold
+  // 140 (slightly above mid-grey) keeps ink black on the typical pastel
+  // palette and only flips to paper for the darkest avatars.
+  const luma = 0.299 * r + 0.587 * g + 0.114 * b;
+  return luma > 140 ? 'var(--ink)' : 'var(--paper)';
+}
+
 type CardProps = {
   o: OccurrenceDto;
   assignee: Member | null;
+  /** Member who actually completed this occurrence — may differ from
+   *  assignee when the task was transferred. Drives the checkbox tint
+   *  and the meta line so the user sees WHO finished it at a glance. */
+  completedBy?: Member | null;
   danger?: boolean;
   doneCard?: boolean;
   onToggle: () => void;
   onOpen: () => void;
 };
 
-function TaskCard({ o, assignee, danger, doneCard, onToggle, onOpen }: CardProps) {
+function TaskCard({
+  o,
+  assignee,
+  completedBy,
+  danger,
+  doneCard,
+  onToggle,
+  onOpen,
+}: CardProps) {
   const t = useT();
   const isEn = t.locale === 'en';
   const stripColor = assignee?.color ?? 'var(--softline)';
+  // For done cards: tint the checkbox with the completer's colour so the
+  // grid reads "Anna · Misha · Anna · …" at a glance. Falls back to ink
+  // when we don't know who completed it (e.g. legacy rows without
+  // `completedBy`). Mark colour flips based on bg luma so the glyph
+  // stays readable across the palette.
+  const doneBg = doneCard ? completedBy?.color ?? 'var(--ink)' : null;
+  const doneFg = doneBg ? pickInkOrPaper(doneBg) : 'var(--paper)';
   // Forecast rows have a synthetic id — they predict future queue
   // rotations and aren't backed by a real occurrence yet. Render as
   // read-only with dimmed styling.
@@ -405,7 +447,13 @@ function TaskCard({ o, assignee, danger, doneCard, onToggle, onOpen }: CardProps
               e.stopPropagation();
               onToggle();
             }}
-            style={{ cursor: 'pointer' }}
+            style={{
+              cursor: 'pointer',
+              // Override `.wf-check.done`'s ink background only when we
+              // have a completer colour to use; the CSS default keeps
+              // applying for the unknown-completer case.
+              ...(doneBg ? { background: doneBg, color: doneFg, borderColor: doneBg } : null),
+            }}
           >
             {doneCard && <Icon name="check" />}
           </span>
@@ -428,7 +476,9 @@ function TaskCard({ o, assignee, danger, doneCard, onToggle, onOpen }: CardProps
             {o.task.title}
           </span>
           <span className="wf-hint" style={danger ? { color: 'var(--danger)' } : undefined}>
-            {subText(o, assignee, danger, isEn)}
+            {doneCard && completedBy
+              ? `${isEn ? 'by' : ''} ${completedBy.name}${o.pointsAwarded ? ` · +${o.pointsAwarded}` : ''}`
+              : subText(o, assignee, danger, isEn)}
           </span>
           {o.subtasks && o.subtasks.length > 0 && (
             <span className="wf-tiny" style={{ marginTop: 2 }}>

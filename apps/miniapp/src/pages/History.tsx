@@ -6,10 +6,20 @@ import {
   type FamilySummary,
   type MeResponse,
   type OccurrenceDto,
+  type RedemptionDto,
 } from '../api';
 import { Av, Icon, Seg, Tag, WfBody, type Member } from '../design';
 import { PageHeader } from '../components/PageHeader';
 import { useT } from '../i18n';
+
+/**
+ * One row in the history feed — either a completed task (`occurrence`) or
+ * a granted reward redemption (`redemption`). Discriminated union so the
+ * renderer can branch on `kind` without losing type info.
+ */
+type HistoryItem =
+  | { kind: 'task'; at: string; userId: string | null; occ: OccurrenceDto }
+  | { kind: 'reward'; at: string; userId: string; red: RedemptionDto };
 
 type Props = {
   me: MeResponse;
@@ -32,16 +42,19 @@ function memberFromDto(dto: FamilyMemberDto): Member {
   };
 }
 
-/** Port of MoreV3 (History) from screens-more.jsx. */
+/** Port of MoreV3 (History) — now a combined feed of completed tasks +
+ *  granted reward redemptions, with per-author and per-type filters. */
 export function History({ me, family, onBack, onOpenDrawer }: Props) {
   const t = useT();
   const isEn = t.locale === 'en';
-  const FILTERS = [
-    t('common.everyone'),
-    t('common.mine'),
-    t('history.filter.withPhoto'),
-  ] as const;
-  const [filter, setFilter] = useState<string>(FILTERS[0]);
+  // Author filter (Seg): Все / Мои. Type filter (chips): all / tasks /
+  // rewards / with-photo. They're orthogonal so two controls is clearer
+  // than one mega-Seg.
+  const MINE = t('common.mine');
+  const ALL = t('common.everyone');
+  const [author, setAuthor] = useState<string>(ALL);
+  type TypeFilter = 'all' | 'tasks' | 'rewards' | 'photos';
+  const [typeFilter, setTypeFilter] = useState<TypeFilter>('all');
   const today = new Date();
   const from = new Date(today.getTime() - 90 * 86_400_000).toISOString().slice(0, 10);
   const to = today.toISOString().slice(0, 10);
@@ -49,6 +62,10 @@ export function History({ me, family, onBack, onOpenDrawer }: Props) {
   const occurrencesQuery = useQuery({
     queryKey: ['occurrences', family.id, from, to],
     queryFn: () => api.listOccurrences(family.id, from, to),
+  });
+  const redemptionsQuery = useQuery({
+    queryKey: ['redemptions', family.id, 'granted'],
+    queryFn: () => api.listRedemptions(family.id, 'granted'),
   });
   const membersQuery = useQuery({
     queryKey: ['members', family.id],
@@ -61,60 +78,141 @@ export function History({ me, family, onBack, onOpenDrawer }: Props) {
   );
   const memberById = useMemo(() => new Map(members.map((m) => [m.id, m])), [members]);
 
-  const done = useMemo(() => {
-    let list = (occurrencesQuery.data?.occurrences ?? []).filter(
-      (o) => o.status === 'done' && o.completedAt,
-    );
-    if (filter === FILTERS[1]) list = list.filter((o) => o.completedBy === me.id);
-    if (filter === FILTERS[2]) list = list.filter((o) => (o.photoIds?.length ?? 0) > 0);
-    list.sort((a, b) => (a.completedAt! > b.completedAt! ? -1 : 1));
-    return list;
-  }, [occurrencesQuery.data, filter, me.id, FILTERS]);
+  const items = useMemo(() => {
+    const out: HistoryItem[] = [];
+    // Completed tasks → task items.
+    if (typeFilter === 'all' || typeFilter === 'tasks' || typeFilter === 'photos') {
+      for (const o of occurrencesQuery.data?.occurrences ?? []) {
+        if (o.status !== 'done' || !o.completedAt) continue;
+        if (typeFilter === 'photos' && (o.photoIds?.length ?? 0) === 0) continue;
+        out.push({ kind: 'task', at: o.completedAt, userId: o.completedBy, occ: o });
+      }
+    }
+    // Granted reward redemptions → reward items. We use grantedAt so a
+    // request that's still pending doesn't pollute history (the inbox
+    // page shows those).
+    if (typeFilter === 'all' || typeFilter === 'rewards') {
+      for (const r of redemptionsQuery.data?.redemptions ?? []) {
+        if (r.status !== 'granted' || !r.grantedAt) continue;
+        out.push({ kind: 'reward', at: r.grantedAt, userId: r.userId, red: r });
+      }
+    }
+    // Author filter applies to both kinds — `userId` is the completer for
+    // tasks, the requester for rewards.
+    const filtered =
+      author === MINE ? out.filter((it) => it.userId === me.id) : out;
+    filtered.sort((a, b) => (a.at > b.at ? -1 : 1));
+    return filtered;
+  }, [
+    occurrencesQuery.data,
+    redemptionsQuery.data,
+    typeFilter,
+    author,
+    me.id,
+    MINE,
+  ]);
 
-  const grouped = useMemo(() => groupByDay(done), [done]);
+  const grouped = useMemo(() => groupByDay(items), [items]);
+  const isLoading = occurrencesQuery.isLoading || redemptionsQuery.isLoading;
 
   return (
     <WfBody onBack={onBack}>
       <PageHeader title={t('history.title')} onBack={onBack} onOpenDrawer={onOpenDrawer} />
-      <Seg
-        items={[...FILTERS]}
-        active={filter}
-        onChange={(v) => setFilter(v)}
-      />
+      <Seg items={[ALL, MINE]} active={author} onChange={setAuthor} />
 
-      {occurrencesQuery.isLoading && <span className="wf-hint">{t('common.loading')}</span>}
-      {!occurrencesQuery.isLoading && done.length === 0 && (
+      {/* Type filter chips — independent of the author Seg above. */}
+      <div className="wf-row wf-gap-6" style={{ flexWrap: 'wrap' }}>
+        {(
+          [
+            { key: 'all', label: t('history.type.all') },
+            { key: 'tasks', label: t('history.type.tasks') },
+            { key: 'rewards', label: t('history.type.rewards') },
+            { key: 'photos', label: t('history.type.photos') },
+          ] as Array<{ key: TypeFilter; label: string }>
+        ).map((c) => {
+          const active = typeFilter === c.key;
+          return (
+            <button
+              key={c.key}
+              type="button"
+              onClick={() => setTypeFilter(c.key)}
+              style={{
+                background: active ? 'var(--ink)' : 'transparent',
+                color: active ? 'var(--paper)' : 'var(--ink)',
+                border: `1.5px solid ${active ? 'var(--ink)' : 'var(--line)'}`,
+                borderRadius: 999,
+                padding: '4px 10px',
+                fontSize: 12,
+                fontWeight: 600,
+                cursor: 'pointer',
+                font: 'inherit',
+                lineHeight: 1.2,
+              }}
+            >
+              {c.label}
+            </button>
+          );
+        })}
+      </div>
+
+      {isLoading && <span className="wf-hint">{t('common.loading')}</span>}
+      {!isLoading && items.length === 0 && (
         <div className="wf-card subtle" style={{ textAlign: 'center', padding: 18 }}>
           <span className="wf-hint">{t('history.empty')}</span>
         </div>
       )}
 
-      {grouped.map(({ day, items }) => (
+      {grouped.map(({ day, items: dayItems }) => (
         <div key={day} className="wf-col" style={{ gap: 8 }}>
           <span className="wf-h3" style={{ marginTop: 4 }}>
             {dayHeading(day, isEn, t)}
           </span>
-          {items.map((o) => {
-            const m = o.completedBy ? memberById.get(o.completedBy) ?? null : null;
-            const hasPhoto = (o.photoIds?.length ?? 0) > 0;
+          {dayItems.map((it) => {
+            const m = it.userId ? memberById.get(it.userId) ?? null : null;
+            if (it.kind === 'task') {
+              const hasPhoto = (it.occ.photoIds?.length ?? 0) > 0;
+              return (
+                <div key={`task:${it.occ.id}`} className="wf-card">
+                  <div className="wf-row wf-gap-10">
+                    <Av m={m} size="sm" />
+                    <div className="wf-col" style={{ flex: 1 }}>
+                      <span className="wf-label">{it.occ.task.title}</span>
+                      <span className="wf-hint">
+                        {m?.name ?? '—'} · {fmtTime(it.at)}
+                      </span>
+                    </div>
+                    {hasPhoto && (
+                      <Tag>
+                        <Icon name="cam" />
+                      </Tag>
+                    )}
+                    {it.occ.pointsAwarded > 0 && (
+                      <span className="wf-tiny wf-mono">+{it.occ.pointsAwarded}</span>
+                    )}
+                  </div>
+                </div>
+              );
+            }
+            // reward row — slightly different shape: title is the prize,
+            // meta is "who · when", trailing is "-N ⭐" (spend).
+            const prize = it.red.rewardName
+              ? `${it.red.rewardEmoji ? it.red.rewardEmoji + ' ' : ''}${it.red.rewardName}`
+              : isEn
+                ? 'Reward'
+                : 'Приз';
             return (
-              <div key={o.id} className="wf-card">
+              <div key={`red:${it.red.id}`} className="wf-card">
                 <div className="wf-row wf-gap-10">
                   <Av m={m} size="sm" />
                   <div className="wf-col" style={{ flex: 1 }}>
-                    <span className="wf-label">{o.task.title}</span>
+                    <span className="wf-label">{prize}</span>
                     <span className="wf-hint">
-                      {m?.name ?? '—'} · {fmtTime(o.completedAt!)}
+                      {m?.name ?? '—'} · {t('history.reward.granted')} · {fmtTime(it.at)}
                     </span>
                   </div>
-                  {hasPhoto && (
-                    <Tag>
-                      <Icon name="cam" />
-                    </Tag>
-                  )}
-                  {o.pointsAwarded > 0 && (
-                    <span className="wf-tiny wf-mono">+{o.pointsAwarded}</span>
-                  )}
+                  <span className="wf-tiny wf-mono" style={{ color: 'var(--hint)' }}>
+                    −{it.red.costPoints} ⭐
+                  </span>
                 </div>
               </div>
             );
@@ -125,12 +223,12 @@ export function History({ me, family, onBack, onOpenDrawer }: Props) {
   );
 }
 
-function groupByDay(list: OccurrenceDto[]): Array<{ day: string; items: OccurrenceDto[] }> {
-  const map = new Map<string, OccurrenceDto[]>();
-  for (const o of list) {
-    const day = o.completedAt!.slice(0, 10);
+function groupByDay(list: HistoryItem[]): Array<{ day: string; items: HistoryItem[] }> {
+  const map = new Map<string, HistoryItem[]>();
+  for (const it of list) {
+    const day = it.at.slice(0, 10);
     if (!map.has(day)) map.set(day, []);
-    map.get(day)!.push(o);
+    map.get(day)!.push(it);
   }
   return Array.from(map.entries())
     .map(([day, items]) => ({ day, items }))

@@ -3,8 +3,15 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, type FamilySummary, type MeResponse } from '../api';
 import { Av, Icon, WfBody } from '../design';
 import { BottomSheet } from '../components/BottomSheet';
+import { ListRow } from '../components/ListRow';
 import { PageHeader } from '../components/PageHeader';
-import { useT, type Locale } from '../i18n';
+import {
+  DigestPicker,
+  LanguagePicker,
+  QuietHoursPicker,
+  ReminderPicker,
+} from '../components/SettingsPickers';
+import { normalizeLocale, useT, type Locale } from '../i18n';
 
 type Props = {
   me: MeResponse;
@@ -56,6 +63,24 @@ export function MyProfile({ me, family, onBack, onOpenDrawer }: Props) {
   const threeDays = () => new Date(Date.now() + 3 * 86_400_000).toISOString();
 
   const [tzPickerOpen, setTzPickerOpen] = useState(false);
+  // Notification + language pickers were moved here from the old Settings
+  // page when we split family-wide vs personal preferences. They're all
+  // per-user state (`me.notificationSettings`, `me.locale`) so they belong
+  // with My profile, not with the family.
+  const [digestOpen, setDigestOpen] = useState(false);
+  const [reminderOpen, setReminderOpen] = useState(false);
+  const [quietOpen, setQuietOpen] = useState(false);
+  const [langOpen, setLangOpen] = useState(false);
+  const notif = me.notificationSettings;
+  const localeLabel = normalizeLocale(me.locale) === 'en' ? 'English' : 'Русский';
+  const digestValue = notif.digestEnabled
+    ? notif.digestTime
+    : t('profile.notifications.quietHours.off');
+  const reminderValue = `${notif.defaultReminderBeforeMinutes} ${t('profile.notifications.reminder.value')}`;
+  const quietValue =
+    notif.quietHoursStart && notif.quietHoursEnd
+      ? `${notif.quietHoursStart} – ${notif.quietHoursEnd}`
+      : t('profile.notifications.quietHours.off');
 
   return (
     <WfBody onBack={onBack}>
@@ -187,6 +212,41 @@ export function MyProfile({ me, family, onBack, onOpenDrawer }: Props) {
         </div>
       </div>
 
+      {/* Notifications — moved here from Settings as part of the
+          family-wide vs personal split. */}
+      <span className="wf-h3" style={{ marginTop: 8 }}>
+        {t('profile.notifications.title')}
+      </span>
+      <ListRow
+        icon="bell"
+        label={t('profile.notifications.digest')}
+        value={digestValue}
+        onClick={() => setDigestOpen(true)}
+      />
+      <ListRow
+        icon="bell"
+        label={t('profile.notifications.reminder')}
+        value={reminderValue}
+        onClick={() => setReminderOpen(true)}
+      />
+      <ListRow
+        icon="bell"
+        label={t('profile.notifications.quietHours')}
+        value={quietValue}
+        onClick={() => setQuietOpen(true)}
+      />
+
+      {/* Language — personal preference, also moved from Settings. */}
+      <span className="wf-h3" style={{ marginTop: 8 }}>
+        {t('profile.language.title')}
+      </span>
+      <ListRow
+        icon="sett"
+        label={t('profile.language.row')}
+        value={localeLabel}
+        onClick={() => setLangOpen(true)}
+      />
+
       {tzPickerOpen && (
         <TimezonePicker
           current={me.timezone}
@@ -194,6 +254,50 @@ export function MyProfile({ me, family, onBack, onOpenDrawer }: Props) {
           onPick={(tz) => {
             updateMe.mutate({ timezone: tz });
             setTzPickerOpen(false);
+          }}
+        />
+      )}
+      {digestOpen && (
+        <DigestPicker
+          t={t}
+          settings={notif}
+          onClose={() => setDigestOpen(false)}
+          onSave={(patch) => {
+            updateMe.mutate({ notificationSettings: patch });
+            setDigestOpen(false);
+          }}
+        />
+      )}
+      {reminderOpen && (
+        <ReminderPicker
+          t={t}
+          settings={notif}
+          onClose={() => setReminderOpen(false)}
+          onSave={(patch) => {
+            updateMe.mutate({ notificationSettings: patch });
+            setReminderOpen(false);
+          }}
+        />
+      )}
+      {quietOpen && (
+        <QuietHoursPicker
+          t={t}
+          settings={notif}
+          onClose={() => setQuietOpen(false)}
+          onSave={(patch) => {
+            updateMe.mutate({ notificationSettings: patch });
+            setQuietOpen(false);
+          }}
+        />
+      )}
+      {langOpen && (
+        <LanguagePicker
+          t={t}
+          current={normalizeLocale(me.locale)}
+          onClose={() => setLangOpen(false)}
+          onPick={(loc) => {
+            updateMe.mutate({ locale: loc });
+            setLangOpen(false);
           }}
         />
       )}

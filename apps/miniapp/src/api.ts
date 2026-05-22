@@ -579,6 +579,10 @@ export type RewardDto = {
 export type RedemptionDto = {
   id: string;
   rewardId: string | null;
+  /** Reward name at fetch time. Server joins through `rewards.id`; null
+   *  when the reward was deleted/archived after this redemption was made. */
+  rewardName: string | null;
+  rewardEmoji: string | null;
   userId: string;
   familyId: string;
   costPoints: number;

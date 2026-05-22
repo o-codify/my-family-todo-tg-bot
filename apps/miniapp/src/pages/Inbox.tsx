@@ -136,12 +136,23 @@ export function Inbox({ me, family, onBack, onOpenDrawer }: Props) {
           </span>
           {redemptions.map((r) => {
             const user = memberById.get(r.userId);
+            // Reward name comes from the LEFT JOIN on the server; null
+            // means the reward was deleted/archived after the redemption
+            // was requested. Show "приз" as a fallback so the row still
+            // reads sensibly instead of just "хочет · 50 ⭐".
+            const rewardLabel = r.rewardName
+              ? `${r.rewardEmoji ? r.rewardEmoji + ' ' : ''}${r.rewardName}`
+              : t.locale === 'en'
+                ? 'a reward'
+                : 'приз';
             return (
               <div key={r.id} className="wf-card">
                 <div className="wf-row wf-gap-10">
                   <Av m={user ?? null} size="md" />
-                  <div className="wf-col" style={{ flex: 1 }}>
-                    <span className="wf-label">{user?.name ?? '—'}</span>
+                  <div className="wf-col" style={{ flex: 1, minWidth: 0 }}>
+                    <span className="wf-label">
+                      {user?.name ?? '—'} · {rewardLabel}
+                    </span>
                     <span className="wf-hint">
                       {t('inbox.reward.wants')} · {r.costPoints} ⭐
                     </span>

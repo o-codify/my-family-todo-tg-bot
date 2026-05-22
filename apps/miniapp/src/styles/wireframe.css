@@ -325,8 +325,13 @@ html, body { margin: 0; padding: 0; background: var(--bg); color: var(--ink); fo
   background: repeating-linear-gradient(135deg, var(--faint), var(--faint) 6px, transparent 6px, transparent 12px);
 }
 
-/* Make svg children inherit color */
-svg { color: var(--ink); }
+/* Make svg children inherit color from the nearest ancestor that set one.
+   Originally `var(--ink)` was hard-coded here, which broke any button that
+   needed a non-ink glyph (e.g. the white-on-black PageHeader back/burger
+   pill — its `color: var(--paper)` on the button was overridden, so the
+   icon rendered ink-on-ink and disappeared). `inherit` is what the
+   comment always meant. */
+svg { color: inherit; }
 
 /* Right-side queue avatar arrow row */
 .wf-arrow { color: var(--hint); font-size: 14px; }

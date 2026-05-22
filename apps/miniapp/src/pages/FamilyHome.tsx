@@ -352,6 +352,10 @@ export function FamilyHome({ me, families }: Props) {
           me={me}
           family={activeFamily}
           iso={route.iso}
+          // Day is always reached via in-app navigation (cell tap on
+          // Calendar), so a back target always exists. The fallback
+          // covers refresh-on-day → empty stack → still get back to
+          // Calendar instead of dead-ending.
           onBack={onBackFor ?? (() => setRoute({ kind: 'calendar' }))}
           onOpenTask={setOpenTask}
           onCreateTask={() => {
@@ -415,7 +419,13 @@ export function FamilyHome({ me, families }: Props) {
         <MyProfile
           me={me}
           family={activeFamily}
-          onBack={onBackFor ?? (() => setRoute({ kind: 'profile' }))}
+          // No fallback to Settings — when the user opened "Мой профиль"
+          // via the drawer, the back-stack is empty and the page should
+          // show the burger, NOT a back-to-Settings shortcut (that's
+          // wrong: they never came from Settings). Same logic for
+          // MemberProfile below — member is always reached via member
+          // tap, which always pushes a back target.
+          onBack={onBackFor}
           onOpenDrawer={onOpenDrawerFor}
         />
       )}
