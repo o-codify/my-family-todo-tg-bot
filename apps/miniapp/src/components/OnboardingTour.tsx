@@ -25,6 +25,14 @@ const STEPS: TourStep[] = [
   { titleKey: 'tour.step.settings.title', bodyKey: 'tour.step.settings.body' },
 ];
 
+// Stable dialog dimensions — the dialog should *not* visually grow/shrink
+// as the user steps through, otherwise the surrounding faded UI shifts and
+// the buttons jump under the thumb. We size to fit the longest body line
+// at the mini-app's standard ~360 px width.
+const DIALOG_WIDTH = 320;
+const TITLE_MIN_HEIGHT = 28;
+const BODY_MIN_HEIGHT = 110;
+
 type Props = {
   /** Called when the user finishes the last step or taps "Пропустить".
    *  Caller is responsible for persisting the dismissal (typically by
@@ -35,6 +43,7 @@ type Props = {
 export function OnboardingTour({ onClose }: Props) {
   const t = useT();
   const [idx, setIdx] = useState(0);
+  const isFirst = idx === 0;
   const isLast = idx === STEPS.length - 1;
   const step = STEPS[idx]!;
 
@@ -58,8 +67,11 @@ export function OnboardingTour({ onClose }: Props) {
         onClick={(e) => e.stopPropagation()}
         className="wf-card"
         style={{
-          maxWidth: 360,
-          width: '100%',
+          // Fixed width + min-heights on title/body keep the card from
+          // resizing as the user steps through. No scroll: the body slots
+          // are large enough for the longest copy at this width.
+          width: DIALOG_WIDTH,
+          maxWidth: 'calc(100vw - 32px)',
           background: 'var(--paper)',
           padding: 18,
           display: 'flex',
@@ -82,22 +94,48 @@ export function OnboardingTour({ onClose }: Props) {
           ))}
         </div>
 
-        <span className="wf-h2" style={{ marginTop: 4 }}>
+        <span
+          className="wf-h2"
+          style={{ marginTop: 4, minHeight: TITLE_MIN_HEIGHT }}
+        >
           {t(step.titleKey)}
         </span>
-        <span className="wf-body-text" style={{ color: 'var(--ink)', lineHeight: 1.4 }}>
+        <span
+          className="wf-body-text"
+          style={{
+            color: 'var(--ink)',
+            lineHeight: 1.4,
+            minHeight: BODY_MIN_HEIGHT,
+            // Word-wrap so a single long word doesn't blow the fixed width.
+            overflowWrap: 'anywhere',
+          }}
+        >
           {t(step.bodyKey)}
         </span>
 
+        {/* Actions row. Left side: Back when there's a previous step, else
+            Skip. We keep both buttons at the same baseline so the primary
+            "Next/Done" never jumps horizontally between steps. */}
         <div className="wf-row wf-gap-8" style={{ marginTop: 8 }}>
-          <button
-            type="button"
-            className="wf-btn ghost"
-            onClick={onClose}
-            style={{ cursor: 'pointer' }}
-          >
-            {t('tour.skip')}
-          </button>
+          {isFirst ? (
+            <button
+              type="button"
+              className="wf-btn ghost"
+              onClick={onClose}
+              style={{ cursor: 'pointer' }}
+            >
+              {t('tour.skip')}
+            </button>
+          ) : (
+            <button
+              type="button"
+              className="wf-btn ghost"
+              onClick={() => setIdx((i) => Math.max(0, i - 1))}
+              style={{ cursor: 'pointer' }}
+            >
+              {t('tour.back')}
+            </button>
+          )}
           <div style={{ flex: 1 }} />
           <button
             type="button"

@@ -52,6 +52,7 @@ const DICT: Record<string, Record<Locale, string>> = {
   'calendar.filter.pending': { ru: 'Не сделанные', en: 'Pending' },
   'calendar.filter.withPhoto': { ru: 'С фото', en: 'With photo' },
   'tour.skip': { ru: 'Пропустить', en: 'Skip' },
+  'tour.back': { ru: 'Назад', en: 'Back' },
   'tour.next': { ru: 'Дальше', en: 'Next' },
   'tour.done': { ru: 'Готово', en: 'Done' },
   'tour.step.create.title': { ru: 'Добавь задачу', en: 'Add a task' },
