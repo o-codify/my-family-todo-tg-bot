@@ -11,6 +11,7 @@ import {
 import { Icon, Seg, Tag, WfBody, type Member } from '../design';
 import { BottomSheet } from '../components/BottomSheet';
 import { pluralize, useT } from '../i18n';
+import { forecastQueueOccurrences } from '../utils/queueForecast';
 
 type Props = {
   me: MeResponse;
@@ -114,16 +115,35 @@ export function Day({ me, family, iso, onBack, onOpenTask, onCreateTask }: Props
   //     and the user expects to see their current turn in today's list
   const isToday = iso === todayIso;
   const rawOccurrences = occurrencesQuery.data?.occurrences ?? [];
-  const occurrences = rawOccurrences.filter((o) => {
-    if (o.scheduledDate !== null) return true;
-    if (o.status === 'done') {
-      if (!o.completedAt) return false;
-      return o.completedAt.slice(0, 10) === iso;
-    }
-    // null-date pending: only queue tasks, and only on today's view.
-    if (isToday && o.task.type === 'queued') return true;
-    return false;
-  });
+  const tasks = tasksQuery.data?.tasks ?? [];
+
+  // Queue forecast: if this day is in the future, project who's up by
+  // cadence (cooldownDays || 1) so the user sees rotations ahead. The
+  // forecast generator emits one row per task at iso === this day if
+  // the rotation lands here. See utils/queueForecast.ts.
+  const forecastedQueue = useMemo(() => {
+    if (iso <= todayIso) return [];
+    return forecastQueueOccurrences({
+      tasks,
+      occurrences: rawOccurrences,
+      todayIso,
+      toIso: iso,
+    }).filter((o) => o.scheduledDate === iso);
+  }, [tasks, rawOccurrences, todayIso, iso]);
+
+  const occurrences = [
+    ...rawOccurrences.filter((o) => {
+      if (o.scheduledDate !== null) return true;
+      if (o.status === 'done') {
+        if (!o.completedAt) return false;
+        return o.completedAt.slice(0, 10) === iso;
+      }
+      // null-date pending: only queue tasks, and only on today's view.
+      if (isToday && o.task.type === 'queued') return true;
+      return false;
+    }),
+    ...forecastedQueue,
+  ];
 
   // "Мои" already covers the current user, so don't list them again as a named filter.
   const otherMembers = members.filter((m) => m.id !== me.id);
@@ -348,23 +368,38 @@ function TaskCard({ o, assignee, danger, doneCard, onToggle, onOpen }: CardProps
   const t = useT();
   const isEn = t.locale === 'en';
   const stripColor = assignee?.color ?? 'var(--softline)';
+  // Forecast rows have a synthetic id — they predict future queue
+  // rotations and aren't backed by a real occurrence yet. Render as
+  // read-only with dimmed styling.
+  const isForecast = o.id.startsWith('queue-forecast:');
   return (
     <div
       className="wf-card"
-      style={danger ? { borderColor: 'var(--danger)' } : undefined}
-      onClick={onOpen}
+      style={{
+        ...(danger ? { borderColor: 'var(--danger)' } : null),
+        ...(isForecast ? { opacity: 0.55, cursor: 'default' } : null),
+      }}
+      onClick={isForecast ? undefined : onOpen}
     >
       <div className="wf-row wf-gap-10">
-        <span
-          className={'wf-check' + (doneCard ? ' done' : '')}
-          onClick={(e) => {
-            e.stopPropagation();
-            onToggle();
-          }}
-          style={{ cursor: 'pointer' }}
-        >
-          {doneCard && <Icon name="check" />}
-        </span>
+        {isForecast ? (
+          <span
+            className="wf-check"
+            style={{ pointerEvents: 'none', opacity: 0.4 }}
+            aria-hidden
+          />
+        ) : (
+          <span
+            className={'wf-check' + (doneCard ? ' done' : '')}
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggle();
+            }}
+            style={{ cursor: 'pointer' }}
+          >
+            {doneCard && <Icon name="check" />}
+          </span>
+        )}
         <span
           className="wf-mc"
           style={{

@@ -10,6 +10,7 @@ import {
 } from '../api';
 import { AvStack, Dot, Icon, Seg, Tag, WfBody, type Member } from '../design';
 import { pluralize, useT } from '../i18n';
+import { forecastQueueOccurrences } from '../utils/queueForecast';
 
 type Props = {
   me: MeResponse;
@@ -192,11 +193,34 @@ export function Calendar({
   });
 
   const rawOccurrences = occurrencesQuery.data?.occurrences ?? [];
+  const tasks = tasksQuery.data?.tasks ?? [];
   const members = useMemo(
     () => (membersQuery.data?.members ?? []).map(memberFromDto),
     [membersQuery.data],
   );
   const memberById = useMemo(() => new Map(members.map((m) => [m.id, m])), [members]);
+
+  const todayIso = toIso(new Date());
+
+  // Forecast future queue rotations — see utils/queueForecast.ts. Queue
+  // tasks are date-less in the DB, but we paint their predicted next
+  // turns on the calendar so the user can see who's up and when. The
+  // forecast respects per-task cooldown (or daily if none) and rotates
+  // through `queueUserIds` starting after the current real assignee.
+  const queueForecast = useMemo(
+    () =>
+      forecastQueueOccurrences({
+        tasks,
+        occurrences: rawOccurrences,
+        todayIso,
+        toIso: toIsoStr,
+      }),
+    [tasks, rawOccurrences, todayIso, toIsoStr],
+  );
+  const combinedOccurrences = useMemo(
+    () => [...rawOccurrences, ...queueForecast],
+    [rawOccurrences, queueForecast],
+  );
 
   // Filter Seg — Все / Мои / <member name>. Same shape as the Day screen
   // so navigating between them feels consistent. Applied before bucketing
@@ -207,14 +231,12 @@ export function Calendar({
   const filterItems: string[] = [ALL_LBL, MINE_LBL, ...otherMembers.map((m) => m.name)];
   const [filter, setFilter] = useState<string>(ALL_LBL);
   const occurrences = useMemo(() => {
-    if (filter === ALL_LBL) return rawOccurrences;
-    if (filter === MINE_LBL) return rawOccurrences.filter((o) => o.assigneeId === me.id);
+    if (filter === ALL_LBL) return combinedOccurrences;
+    if (filter === MINE_LBL) return combinedOccurrences.filter((o) => o.assigneeId === me.id);
     const named = members.find((m) => m.name === filter);
-    if (!named) return rawOccurrences;
-    return rawOccurrences.filter((o) => o.assigneeId === named.id);
-  }, [rawOccurrences, filter, me.id, members, ALL_LBL, MINE_LBL]);
-
-  const todayIso = toIso(new Date());
+    if (!named) return combinedOccurrences;
+    return combinedOccurrences.filter((o) => o.assigneeId === named.id);
+  }, [combinedOccurrences, filter, me.id, members, ALL_LBL, MINE_LBL]);
 
   const byDate = useMemo(() => {
     const map = new Map<string, OccurrenceDto[]>();
@@ -517,27 +539,45 @@ function DayTaskCard({
   const assignee = o.assigneeId ? memberById.get(o.assigneeId) ?? null : null;
   const done = o.status === 'done';
   const photoBlocked = o.task.photoRequired && !done;
+  // Forecast rows are predictions of future queue rotations — there's no
+  // real occurrence in the DB yet, so completing/opening them would 404.
+  // Render them dimmed and non-interactive; the user sees the schedule
+  // but can only act on the real "today" row.
+  const isForecast = o.id.startsWith('queue-forecast:');
   return (
     <div
       className="wf-card"
-      onClick={() => onOpenTask?.(o)}
-      style={{ cursor: onOpenTask ? 'pointer' : undefined }}
+      onClick={() => !isForecast && onOpenTask?.(o)}
+      style={{
+        cursor: !isForecast && onOpenTask ? 'pointer' : 'default',
+        opacity: isForecast ? 0.55 : 1,
+      }}
     >
       <div className="wf-row wf-gap-10">
-        <span
-          className={'wf-check' + (done ? ' done' : '')}
-          onClick={(e) => {
-            e.stopPropagation();
-            if (photoBlocked) {
-              onOpenTask?.(o);
-              return;
-            }
-            onToggle(o);
-          }}
-          style={{ cursor: 'pointer' }}
-        >
-          {done && <Icon name="check" />}
-        </span>
+        {isForecast ? (
+          // Placeholder dot instead of a checkbox so the row isn't tap-bait
+          // for someone trying to mark a future day done.
+          <span
+            className="wf-check"
+            style={{ pointerEvents: 'none', opacity: 0.4 }}
+            aria-hidden
+          />
+        ) : (
+          <span
+            className={'wf-check' + (done ? ' done' : '')}
+            onClick={(e) => {
+              e.stopPropagation();
+              if (photoBlocked) {
+                onOpenTask?.(o);
+                return;
+              }
+              onToggle(o);
+            }}
+            style={{ cursor: 'pointer' }}
+          >
+            {done && <Icon name="check" />}
+          </span>
+        )}
         <span
           className="wf-mc"
           style={{
