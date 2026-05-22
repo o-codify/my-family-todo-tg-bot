@@ -283,6 +283,10 @@ export function FamilyHome({ me, families }: Props) {
           family={activeFamily}
           taskId={route.taskId}
           onBack={() => setRoute({ kind: 'queues' })}
+          onEditTask={(id) => {
+            const t = tasksQuery.data?.tasks.find((x) => x.id === id);
+            if (t) setEditingTask(t);
+          }}
         />
       )}
       {route.kind === 'shop' && (
