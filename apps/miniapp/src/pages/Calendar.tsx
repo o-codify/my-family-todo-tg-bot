@@ -331,6 +331,9 @@ export function Calendar({
       {/* Task cards — port of lines 98-129 */}
       {occurrencesQuery.isLoading && <span className="wf-hint">{t('common.loading')}</span>}
       {!occurrencesQuery.isLoading && occurrences.length === 0 && (
+        // The FAB pill at the bottom already exposes "+ Добавить задачу", so
+        // we don't duplicate it inside the empty-state card. The hint text
+        // points at it ("кнопка «+» внизу") for discoverability.
         <div className="wf-card subtle" style={{ textAlign: 'center', padding: '18px 12px' }}>
           <div style={{ fontSize: 36 }}>📝</div>
           <span className="wf-h2" style={{ display: 'block', marginTop: 8 }}>
@@ -339,13 +342,6 @@ export function Calendar({
           <span className="wf-hint" style={{ display: 'block', marginTop: 4 }}>
             {t('calendar.empty.hint')}
           </span>
-          <button
-            className="wf-btn primary"
-            onClick={() => onCreateTask?.(selectedIso)}
-            style={{ marginTop: 12, cursor: 'pointer' }}
-          >
-            {t('calendar.empty.cta')}
-          </button>
         </div>
       )}
       {!occurrencesQuery.isLoading &&

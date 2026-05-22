@@ -250,7 +250,6 @@ export function Day({ me, family, iso, onBack, onOpenTask, onCreateTask }: Props
       {!occurrencesQuery.isLoading && filtered.length === 0 && (
         <FreeDay
           floatingCount={availableFloating.length}
-          onCreate={onCreateTask}
           onPickFloating={() => setPickerOpen(true)}
         />
       )}
@@ -445,16 +444,16 @@ function filterOccurrences(
   return list;
 }
 
-/** Port of `DayEmpty` from screens-extras.jsx :62-91 — two CTAs side by side
- *  (или, точнее, друг под другом): primary "+ Добавить на день" and the
- *  secondary "Взять из «Когда-нибудь» (N)" that user pointed out was missing. */
+/** Port of `DayEmpty` from screens-extras.jsx :62-91. Originally rendered
+ *  two CTAs ("+ Добавить на день" + "Взять из «Когда-нибудь» (N)"), but
+ *  the "+" duplicated the FAB pill at the bottom of the screen. Now we
+ *  only show the "Take from Someday" picker — it's the one action that
+ *  isn't available from the FAB. */
 function FreeDay({
   floatingCount,
-  onCreate,
   onPickFloating,
 }: {
   floatingCount: number;
-  onCreate: () => void;
   onPickFloating: () => void;
 }) {
   const t = useT();
@@ -467,26 +466,15 @@ function FreeDay({
       <span className="wf-hint" style={{ display: 'block', marginTop: 4 }}>
         {t('day.free.hint')}
       </span>
-      <div className="wf-col wf-gap-8" style={{ marginTop: 16 }}>
-        <button
-          className="wf-btn primary lg block"
-          onClick={onCreate}
-          style={{ cursor: 'pointer' }}
-        >
-          {t('day.free.add')}
-        </button>
+      {floatingCount > 0 && (
         <button
           className="wf-btn lg block"
           onClick={onPickFloating}
-          disabled={floatingCount === 0}
-          style={{
-            cursor: floatingCount === 0 ? 'not-allowed' : 'pointer',
-            opacity: floatingCount === 0 ? 0.5 : 1,
-          }}
+          style={{ marginTop: 16, cursor: 'pointer' }}
         >
           {t('day.free.takeSomeday')} ({floatingCount})
         </button>
-      </div>
+      )}
     </div>
   );
 }
