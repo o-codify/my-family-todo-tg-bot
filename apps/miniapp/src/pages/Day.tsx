@@ -12,6 +12,7 @@ import { Icon, Seg, Tag, WfBody, type Member } from '../design';
 import { PageHeader } from '../components/PageHeader';
 import { BottomSheet } from '../components/BottomSheet';
 import { FloatingSection } from '../components/FloatingSection';
+import { pickInkOrPaper } from '../utils/contrast';
 import { pluralize, useT } from '../i18n';
 import { forecastQueueOccurrences } from '../utils/queueForecast';
 
@@ -364,28 +365,6 @@ export function Day({ me, family, iso, onBack, onOpenTask, onCreateTask }: Props
       </div>
     </WfBody>
   );
-}
-
-/**
- * Pick a readable foreground colour (ink black vs paper white) against a
- * given background hex. Used to colour the checkmark on top of a done
- * task's checkbox — for typical pastel avatars the mark stays black, but
- * for a near-black avatar the mark flips to white so it stays visible.
- *
- * Falls back to ink when the colour isn't parseable as `#rrggbb`.
- */
-function pickInkOrPaper(bg: string): string {
-  const m = /^#([0-9a-f]{6})$/i.exec(bg.trim());
-  if (!m) return 'var(--ink)';
-  const v = parseInt(m[1]!, 16);
-  const r = (v >> 16) & 0xff;
-  const g = (v >> 8) & 0xff;
-  const b = v & 0xff;
-  // ITU-R BT.601 luma — same formula every contrast picker uses. Threshold
-  // 140 (slightly above mid-grey) keeps ink black on the typical pastel
-  // palette and only flips to paper for the darkest avatars.
-  const luma = 0.299 * r + 0.587 * g + 0.114 * b;
-  return luma > 140 ? 'var(--ink)' : 'var(--paper)';
 }
 
 type CardProps = {

@@ -12,6 +12,7 @@ import { AvStack, Dot, Icon, Seg, Tag, WfBody, type Member } from '../design';
 import { FloatingSection } from '../components/FloatingSection';
 import { usePreferences } from '../hooks/usePreferences';
 import { pluralize, useT } from '../i18n';
+import { pickInkOrPaper } from '../utils/contrast';
 import { forecastQueueOccurrences } from '../utils/queueForecast';
 
 type Props = {
@@ -635,6 +636,13 @@ function DayTaskCard({
   const isEn = t.locale === 'en';
   const assignee = o.assigneeId ? memberById.get(o.assigneeId) ?? null : null;
   const done = o.status === 'done';
+  // For done cards: tint the checkbox with the completer's colour so the
+  // day list reads "Anna · Misha · Anna · …" at a glance. Same logic as
+  // Day.tsx's TaskCard — kept in lockstep so the two surfaces look
+  // identical for the same occurrence.
+  const completedBy = done && o.completedBy ? memberById.get(o.completedBy) ?? null : null;
+  const doneBg = done ? completedBy?.color ?? 'var(--ink)' : null;
+  const doneFg = doneBg ? pickInkOrPaper(doneBg) : 'var(--paper)';
   const photoBlocked = o.task.photoRequired && !done;
   // Forecast rows are predictions of future queue rotations — there's no
   // real occurrence in the DB yet, so completing/opening them would 404.
@@ -670,7 +678,14 @@ function DayTaskCard({
               }
               onToggle(o);
             }}
-            style={{ cursor: 'pointer' }}
+            style={{
+              cursor: 'pointer',
+              // Override `.wf-check.done` ink-on-paper when we know the
+              // completer — tint to their avatar colour with a contrast-
+              // picked glyph so the day list visually identifies WHO
+              // closed each row.
+              ...(doneBg ? { background: doneBg, color: doneFg, borderColor: doneBg } : null),
+            }}
           >
             {done && <Icon name="check" />}
           </span>
@@ -692,7 +707,11 @@ function DayTaskCard({
           >
             {o.task.title}
           </span>
-          <span className="wf-hint">{taskSub(o, assignee, isEn)}</span>
+          <span className="wf-hint">
+            {done && completedBy
+              ? `${isEn ? 'by ' : ''}${completedBy.name}${o.pointsAwarded ? ` · +${o.pointsAwarded}` : ''}`
+              : taskSub(o, assignee, isEn)}
+          </span>
         </div>
         {tagForOccurrence(o, done, selectedIso, todayIso, isEn)}
       </div>
