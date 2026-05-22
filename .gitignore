@@ -32,4 +32,6 @@ coverage/
 # Local
 *.local
 
-design/
+# Only ignore the top-level `docs/design/` working files — NOT the
+# miniapp's `src/design/` component kit, which lives in source control.
+/docs/design/
