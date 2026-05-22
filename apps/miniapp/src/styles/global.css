@@ -211,10 +211,24 @@ input,
   overflow-x: hidden;
   overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
+  /* Hide the scrollbar visually while keeping scroll behavior. Avoids the
+     gap on the right edge that pushes content inwards on desktop /
+     Telegram-Web (mobile WebKit doesn't paint a persistent track at all,
+     but desktop Chromium and Firefox do). */
+  scrollbar-width: none;             /* Firefox */
+  -ms-overflow-style: none;          /* IE/old Edge */
   /* Default footer clearance: just the bottom-nav (~56 px incl. safe-area)
      plus ~20 px breathing room. Pages without a floating add-task pill
      should not have empty scrollable space hanging below the last card. */
   padding-bottom: calc(76px + env(safe-area-inset-bottom, 0px));
+}
+.wf-body::-webkit-scrollbar {
+  /* Chromium / WebKit — collapse the track to zero so the content fills
+     edge-to-edge. `display: none` works too but `width: 0` is safer in
+     case some platform paints a small ghost track. */
+  width: 0;
+  height: 0;
+  background: transparent;
 }
 
 /*
