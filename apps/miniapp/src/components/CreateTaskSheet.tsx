@@ -94,6 +94,7 @@ export function CreateTaskSheet({
         title: '',
         kind: (defaultKind ?? 'recurring') as TaskKind,
         date: defaultDate,
+        time: null as string | null,
         daysOfWeek: [1, 2, 3, 4, 5],
         cooldownDays: null as number | null,
         points: 0,
@@ -109,6 +110,10 @@ export function CreateTaskSheet({
   const [title, setTitle] = useState(initial.title);
   const [kind, setKind] = useState<TaskKind>(initial.kind);
   const [date, setDate] = useState(initial.date);
+  // Optional time-of-day (`HH:MM`). Null = "any time" — generator stores
+  // it on each occurrence's `scheduledTime`, used for sorting + a `до HH:MM`
+  // badge in the day list, and (eventually) reminder anchoring.
+  const [time, setTime] = useState<string | null>(initial.time);
   const [daysOfWeek, setDaysOfWeek] = useState<number[]>(initial.daysOfWeek);
   const [cooldownDays, setCooldownDays] = useState<number | null>(initial.cooldownDays);
   const [points, setPoints] = useState(initial.points);
@@ -150,6 +155,7 @@ export function CreateTaskSheet({
         title: title.trim(),
         kind,
         date,
+        time,
         daysOfWeek,
         cooldownDays,
         assigneeId,
@@ -341,21 +347,24 @@ export function CreateTaskSheet({
               </span>
             </div>
             {!noDate && (
-              <div className="wf-box" style={{ padding: '8px 10px' }}>
-                <input
-                  type="date"
-                  value={date}
-                  onChange={(e) => setDate(e.target.value)}
-                  className="wf-label"
-                  style={{
-                    width: '100%',
-                    border: 'none',
-                    background: 'transparent',
-                    outline: 'none',
-                    color: 'var(--ink)',
-                    font: 'inherit',
-                  }}
-                />
+              <div className="wf-row wf-gap-6">
+                <div className="wf-box" style={{ padding: '8px 10px', flex: 2 }}>
+                  <input
+                    type="date"
+                    value={date}
+                    onChange={(e) => setDate(e.target.value)}
+                    className="wf-label"
+                    style={{
+                      width: '100%',
+                      border: 'none',
+                      background: 'transparent',
+                      outline: 'none',
+                      color: 'var(--ink)',
+                      font: 'inherit',
+                    }}
+                  />
+                </div>
+                <TimeInput value={time} onChange={setTime} t={t} />
               </div>
             )}
             {noDate && <span className="wf-hint">{t('create.noDate.hint')}</span>}
@@ -382,6 +391,14 @@ export function CreateTaskSheet({
                   </span>
                 );
               })}
+            </div>
+            {/* Recurring tasks can also pin a time of day. Same TimeInput
+                as oneoff — null = "any time" (no badge, sorts last). */}
+            <div className="wf-row wf-gap-6">
+              <span className="wf-tiny" style={{ flex: 1 }}>
+                {t('create.field.time')}
+              </span>
+              <TimeInput value={time} onChange={setTime} t={t} />
             </div>
           </div>
         )}
@@ -763,6 +780,7 @@ function buildPayload(input: {
   title: string;
   kind: TaskKind;
   date: string;
+  time: string | null;
   daysOfWeek: number[];
   cooldownDays: number | null;
   assigneeId: string | null;
@@ -791,6 +809,11 @@ function buildPayload(input: {
     subtasks: input.subtasks.length > 0 ? input.subtasks : undefined,
     tagIds: input.tagIds,
   } as unknown as CreateTaskPayload;
+  // Time is optional and only meaningful for dated/recurring tasks. The
+  // server's `taskScheduleSchema` accepts an `HH:MM` string under the
+  // schedule's `time` key; we attach it conditionally so floating /
+  // queued payloads stay clean.
+  const tm = input.time?.trim() ? input.time : undefined;
   switch (input.kind) {
     case 'oneoff':
       // "Разовая без даты" → store as floating+singleShot so it lives in
@@ -798,15 +821,24 @@ function buildPayload(input: {
       if (input.noDate) {
         return { ...base, type: 'floating', schedule: { kind: 'floating' } };
       }
-      return { ...base, type: 'oneoff', schedule: { kind: 'oneoff', date: input.date } };
+      return {
+        ...base,
+        type: 'oneoff',
+        schedule: { kind: 'oneoff', date: input.date, ...(tm ? { time: tm } : {}) },
+      };
     case 'recurring':
       return {
         ...base,
         type: 'recurring',
         schedule:
           input.daysOfWeek.length === 7
-            ? { kind: 'recurring', recurrence: 'daily' }
-            : { kind: 'recurring', recurrence: 'weekly', daysOfWeek: input.daysOfWeek },
+            ? { kind: 'recurring', recurrence: 'daily', ...(tm ? { time: tm } : {}) }
+            : {
+                kind: 'recurring',
+                recurrence: 'weekly',
+                daysOfWeek: input.daysOfWeek,
+                ...(tm ? { time: tm } : {}),
+              },
       };
     case 'floating':
       return { ...base, type: 'floating', schedule: { kind: 'floating' } };
@@ -854,6 +886,7 @@ function extractFromTask(t: TaskDto): {
   title: string;
   kind: TaskKind;
   date: string;
+  time: string | null;
   daysOfWeek: number[];
   cooldownDays: number | null;
   points: number;
@@ -867,11 +900,12 @@ function extractFromTask(t: TaskDto): {
   tagIds: string[];
 } {
   const sched = t.schedule as
-    | { kind: 'oneoff'; date: string }
+    | { kind: 'oneoff'; date: string; time?: string }
     | {
         kind: 'recurring';
         recurrence: 'daily' | 'weekly' | 'interval';
         daysOfWeek?: number[];
+        time?: string;
       }
     | { kind: 'floating' }
     | { kind: 'queued' };
@@ -881,10 +915,15 @@ function extractFromTask(t: TaskDto): {
   } else if (sched.kind === 'recurring' && sched.recurrence === 'weekly' && sched.daysOfWeek) {
     days = sched.daysOfWeek;
   }
+  // Existing edit-mode payloads may carry `time` in `HH:MM:SS` form (from
+  // Postgres TIME column). Normalise to `HH:MM` for the <input type="time">.
+  const rawTime =
+    sched.kind === 'oneoff' || sched.kind === 'recurring' ? sched.time ?? null : null;
   return {
     title: t.title,
     kind: t.type,
     date: sched.kind === 'oneoff' ? sched.date : new Date().toISOString().slice(0, 10),
+    time: rawTime ? rawTime.slice(0, 5) : null,
     daysOfWeek: days,
     cooldownDays: t.cooldownDays,
     points: t.points,
@@ -981,6 +1020,63 @@ function TagPicker({
       >
         + {t('create.tags.add')}
       </button>
+    </div>
+  );
+}
+
+/**
+ * Small `<input type="time">` wrapper. Null means "any time" — the input
+ * renders blank and a short "В любое время" hint sits to the right so
+ * the field's intent is obvious before the user opens the picker. We
+ * also expose a clear button when a value is set.
+ */
+function TimeInput({
+  value,
+  onChange,
+  t,
+}: {
+  value: string | null;
+  onChange: (v: string | null) => void;
+  t: ReturnType<typeof useT>;
+}) {
+  return (
+    <div className="wf-row wf-gap-6" style={{ flex: 1 }}>
+      <div className="wf-box" style={{ padding: '8px 10px', flex: 1 }}>
+        <input
+          type="time"
+          value={value ?? ''}
+          onChange={(e) => onChange(e.target.value || null)}
+          className="wf-label"
+          style={{
+            width: '100%',
+            border: 'none',
+            background: 'transparent',
+            outline: 'none',
+            color: value ? 'var(--ink)' : 'var(--hint)',
+            font: 'inherit',
+          }}
+        />
+      </div>
+      {value ? (
+        <button
+          type="button"
+          onClick={() => onChange(null)}
+          aria-label={t('create.time.clear')}
+          style={{
+            background: 'transparent',
+            border: 'none',
+            cursor: 'pointer',
+            padding: 4,
+            color: 'var(--hint)',
+          }}
+        >
+          ×
+        </button>
+      ) : (
+        <span className="wf-tiny" style={{ color: 'var(--hint)' }}>
+          {t('create.time.any')}
+        </span>
+      )}
     </div>
   );
 }

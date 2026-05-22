@@ -165,8 +165,24 @@ export function Day({ me, family, iso, onBack, onOpenTask, onCreateTask }: Props
   );
 
   const isPast = iso < todayIso;
-  const overdue = isPast ? filtered.filter((o) => o.status === 'pending') : [];
-  const pending = isPast ? [] : filtered.filter((o) => o.status === 'pending');
+  // Sort pending tasks by scheduledTime: timed ones first (ascending),
+  // time-less ones after. Done tasks stay in completion order (already
+  // ordered by createdAt server-side). Stable sort preserves the
+  // server's original order within the same time slot.
+  const byTimeAsc = (a: OccurrenceDto, b: OccurrenceDto): number => {
+    const ta = a.scheduledTime ?? null;
+    const tb = b.scheduledTime ?? null;
+    if (ta == null && tb == null) return 0;
+    if (ta == null) return 1; // time-less goes after timed
+    if (tb == null) return -1;
+    return ta < tb ? -1 : ta > tb ? 1 : 0;
+  };
+  const overdue = isPast
+    ? [...filtered.filter((o) => o.status === 'pending')].sort(byTimeAsc)
+    : [];
+  const pending = isPast
+    ? []
+    : [...filtered.filter((o) => o.status === 'pending')].sort(byTimeAsc);
   const done = filtered.filter((o) => o.status === 'done');
 
   const [showDone, setShowDone] = useState(false);

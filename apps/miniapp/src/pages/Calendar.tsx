@@ -387,7 +387,19 @@ export function Calendar({
   const selectedDate = new Date(`${selectedIso}T00:00:00`);
   const todayCount = byDate.get(todayIso)?.length ?? 0;
   const selectedOccurrences = byDate.get(selectedIso) ?? [];
-  const selectedPending = selectedOccurrences.filter((o) => o.status !== 'done');
+  // Pending tasks sort by scheduledTime (timed first, ascending; time-less
+  // after). Same rule as Day.tsx — keeps the two surfaces consistent so a
+  // user planning their morning sees the same order in both lists.
+  const selectedPending = [...selectedOccurrences.filter((o) => o.status !== 'done')].sort(
+    (a, b) => {
+      const ta = a.scheduledTime ?? null;
+      const tb = b.scheduledTime ?? null;
+      if (ta == null && tb == null) return 0;
+      if (ta == null) return 1;
+      if (tb == null) return -1;
+      return ta < tb ? -1 : ta > tb ? 1 : 0;
+    },
+  );
   const selectedDone = selectedOccurrences.filter((o) => o.status === 'done');
   const dayHeading = isEn
     ? `${DOW_SHORT[selectedDate.getDay()]}, ${MONTH_GENITIVE[selectedDate.getMonth()]} ${selectedDate.getDate()}`

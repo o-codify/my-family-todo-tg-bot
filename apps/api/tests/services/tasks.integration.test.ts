@@ -51,6 +51,72 @@ describe('tasks service (integration)', () => {
     expect(occurrences[0]?.status).toBe('pending');
   });
 
+  it('propagates schedule.time → scheduledTime on every generated occurrence', async () => {
+    const owner = await makeUser();
+    const { family } = await makeFamily(owner);
+
+    // One-off with a fixed time of day.
+    const oneoff = await createTask({
+      familyId: family.id,
+      createdBy: owner.id,
+      data: {
+        title: 'Timed oneoff',
+        type: 'oneoff',
+        schedule: { kind: 'oneoff', date: futureDate(1), time: '08:30' },
+        points: 0,
+        photoRequired: false,
+        singleShot: false,
+      },
+    });
+    const oneoffOccs = await db
+      .select()
+      .from(taskOccurrences)
+      .where(eq(taskOccurrences.taskId, oneoff.id));
+    expect(oneoffOccs[0]?.scheduledTime).toBe('08:30:00');
+
+    // Daily recurring with a time — every generated row carries it.
+    const recurring = await createTask({
+      familyId: family.id,
+      createdBy: owner.id,
+      data: {
+        title: 'Timed daily',
+        type: 'recurring',
+        schedule: { kind: 'recurring', recurrence: 'daily', time: '21:00' },
+        points: 0,
+        photoRequired: false,
+        singleShot: false,
+      },
+    });
+    const recurringOccs = await db
+      .select()
+      .from(taskOccurrences)
+      .where(eq(taskOccurrences.taskId, recurring.id));
+    expect(recurringOccs.length).toBeGreaterThan(0);
+    for (const occ of recurringOccs) expect(occ.scheduledTime).toBe('21:00:00');
+  });
+
+  it('omits time → scheduledTime stays null', async () => {
+    const owner = await makeUser();
+    const { family } = await makeFamily(owner);
+    const task = await createTask({
+      familyId: family.id,
+      createdBy: owner.id,
+      data: {
+        title: 'Untimed',
+        type: 'oneoff',
+        schedule: { kind: 'oneoff', date: futureDate(1) },
+        points: 0,
+        photoRequired: false,
+        singleShot: false,
+      },
+    });
+    const occs = await db
+      .select()
+      .from(taskOccurrences)
+      .where(eq(taskOccurrences.taskId, task.id));
+    expect(occs[0]?.scheduledTime).toBeNull();
+  });
+
   it('creates a daily recurring task with 30 occurrences', async () => {
     const owner = await makeUser();
     const { family } = await makeFamily(owner);
