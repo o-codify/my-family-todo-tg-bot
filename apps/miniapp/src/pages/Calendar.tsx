@@ -244,16 +244,17 @@ export function Calendar({
     const map = new Map<string, OccurrenceDto[]>();
     for (const o of occurrences) {
       // Anchor logic for null-date rows:
-      //   - done   → the day completedAt landed on
-      //   - queued pending → today (queue tasks are date-less, but the
-      //     active turn should surface on today's card)
-      //   - floating pending → "Когда-нибудь" rollup (not on a calendar cell)
+      //   - done                 → the day completedAt landed on
+      //   - pending + assigned   → today (someone owes this; show it)
+      //   - pending + unassigned → "Когда-нибудь" rollup
+      // This covers both queued (always assigned) and floating tasks that
+      // were explicitly given to someone.
       let key: string;
       if (o.scheduledDate) {
         key = o.scheduledDate;
       } else if (o.status === 'done' && o.completedAt) {
         key = o.completedAt.slice(0, 10);
-      } else if (o.status === 'pending' && o.task.type === 'queued') {
+      } else if (o.status === 'pending' && o.assigneeId) {
         key = todayIso;
       } else {
         key = '__floating__';

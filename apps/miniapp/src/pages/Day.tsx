@@ -140,8 +140,10 @@ export function Day({ me, family, iso, onBack, onOpenTask, onCreateTask }: Props
         if (!o.completedAt) return false;
         return o.completedAt.slice(0, 10) === iso;
       }
-      // null-date pending: only queue tasks, and only on today's view.
-      if (isToday && o.task.type === 'queued') return true;
+      // null-date pending with an assignee: surface on today's view.
+      // Mirrors the Calendar anchor — assigned dateless tasks shouldn't
+      // disappear into "Когда-нибудь" while someone owes them.
+      if (isToday && o.assigneeId) return true;
       return false;
     }),
     ...forecastedQueue,
