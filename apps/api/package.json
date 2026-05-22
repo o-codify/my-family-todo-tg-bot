@@ -6,7 +6,7 @@
   "main": "dist/index.js",
   "scripts": {
     "dev": "tsx watch --conditions=development --env-file=../../.env src/index.ts",
-    "build": "tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.json && node ../../scripts/add-js-extensions.mjs dist",
     "start": "node --env-file=../../.env dist/index.js",
     "typecheck": "tsc --noEmit",
     "db:generate": "drizzle-kit generate",
@@ -18,16 +18,16 @@
   "dependencies": {
     "@family-todo/shared": "workspace:*",
     "@family-todo/tg-auth": "workspace:*",
-    "nanoid": "^5.0.9",
     "@hono/node-server": "^1.14.0",
     "@hono/zod-validator": "^0.4.2",
-    "hono": "^4.6.16",
-    "drizzle-orm": "^0.38.3",
-    "postgres": "^3.4.5",
-    "ioredis": "^5.4.2",
     "bullmq": "^5.34.5",
+    "drizzle-orm": "^0.38.3",
+    "hono": "^4.6.16",
+    "ioredis": "^5.4.2",
+    "nanoid": "^5.0.9",
     "pino": "^9.5.0",
     "pino-pretty": "^13.0.0",
+    "postgres": "^3.4.5",
     "zod": "^3.24.1"
   },
   "devDependencies": {
