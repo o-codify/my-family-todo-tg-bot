@@ -18,6 +18,7 @@ import {
   createTask,
   getTaskInFamily,
   listFamilyTasks,
+  restoreTask,
   serializeTask,
   updateTask,
 } from '../services/tasks';
@@ -114,4 +115,29 @@ tasksRouter.delete('/:taskId', async (c) => {
 
   await archiveTask(task.id);
   return c.body(null, 204);
+});
+
+/**
+ * Undo for `DELETE /tasks/:taskId`. The miniapp shows a 5-second toast
+ * "Удалено · Отменить" after deletion — tapping it POSTs here. Permission:
+ * same as delete (caller must be allowed to manage this task in the first
+ * place).
+ */
+tasksRouter.post('/:taskId/restore', async (c) => {
+  const user = c.get('user');
+  const familyId = c.get('familyId');
+  // Note: getTaskInFamily includes archived rows since it doesn't filter
+  // by archivedAt — that's exactly what we need for restore.
+  const task = await getTaskInFamily(c.req.param('taskId'), familyId);
+  if (!task) return c.json({ error: 'task_not_found' }, 404);
+
+  const isOwn = task.createdBy === user.id;
+  const needed: Permission = isOwn ? 'task.delete.own' : 'task.delete.any';
+  if (!c.get('permissions').includes(needed)) {
+    return c.json({ error: 'forbidden', permission: needed }, 403);
+  }
+
+  const restored = await restoreTask(task.id);
+  if (!restored) return c.json({ error: 'task_not_found' }, 404);
+  return c.json({ task: serializeTask(restored) });
 });

@@ -10,6 +10,7 @@ import {
 } from '../api';
 import { AvStack, Dot, Icon, Seg, Tag, WfBody, type Member } from '../design';
 import { FloatingSection } from '../components/FloatingSection';
+import { usePreferences } from '../hooks/usePreferences';
 import { pluralize, useT } from '../i18n';
 import { forecastQueueOccurrences } from '../utils/queueForecast';
 
@@ -24,6 +25,9 @@ type Props = {
   /** Banner "Invite your family" tap target — sends user to Profile where
    *  the actual InviteCard (copy/share buttons) lives. */
   onOpenInvite?: () => void;
+  /** Burger button at the top-left opens this. Top-level pages get a burger
+   *  in their header to access the navigation drawer; sub-pages don't. */
+  onOpenDrawer?: () => void;
 };
 
 const WK_RU = ['пн', 'вт', 'ср', 'чт', 'пт', 'сб', 'вс'];
@@ -123,6 +127,7 @@ export function Calendar({
   onOpenTask,
   onCreateTask,
   onOpenInvite,
+  onOpenDrawer,
 }: Props) {
   const queryClient = useQueryClient();
   const t = useT();
@@ -234,13 +239,50 @@ export function Calendar({
   const MINE_LBL = t('common.mine');
   const filterItems: string[] = [ALL_LBL, MINE_LBL, ...otherMembers.map((m) => m.name)];
   const [filter, setFilter] = useState<string>(ALL_LBL);
+  // Persistent secondary filters (chip row): pending-only, with-photo.
+  // Stored in the per-user `preferences.calendarFilters` so a refresh keeps
+  // the active filter shape.
+  const { prefs, set: setPrefs } = usePreferences(me);
+  const calFilters = (prefs.calendarFilters ?? {}) as {
+    onlyPending?: boolean;
+    onlyWithPhoto?: boolean;
+  };
+  const onlyPending = calFilters.onlyPending === true;
+  const onlyWithPhoto = calFilters.onlyWithPhoto === true;
+  const toggleFilter = (key: 'onlyPending' | 'onlyWithPhoto') => {
+    setPrefs({
+      calendarFilters: {
+        ...calFilters,
+        [key]: !calFilters[key],
+      },
+    });
+  };
+
   const occurrences = useMemo(() => {
-    if (filter === ALL_LBL) return combinedOccurrences;
-    if (filter === MINE_LBL) return combinedOccurrences.filter((o) => o.assigneeId === me.id);
-    const named = members.find((m) => m.name === filter);
-    if (!named) return combinedOccurrences;
-    return combinedOccurrences.filter((o) => o.assigneeId === named.id);
-  }, [combinedOccurrences, filter, me.id, members, ALL_LBL, MINE_LBL]);
+    let list = combinedOccurrences;
+    if (filter === MINE_LBL) {
+      list = list.filter((o) => o.assigneeId === me.id);
+    } else if (filter !== ALL_LBL) {
+      const named = members.find((m) => m.name === filter);
+      if (named) list = list.filter((o) => o.assigneeId === named.id);
+    }
+    if (onlyPending) {
+      list = list.filter((o) => o.status === 'pending');
+    }
+    if (onlyWithPhoto) {
+      list = list.filter((o) => o.photoIds != null && o.photoIds.length > 0);
+    }
+    return list;
+  }, [
+    combinedOccurrences,
+    filter,
+    me.id,
+    members,
+    ALL_LBL,
+    MINE_LBL,
+    onlyPending,
+    onlyWithPhoto,
+  ]);
 
   const byDate = useMemo(() => {
     const map = new Map<string, OccurrenceDto[]>();
@@ -300,6 +342,15 @@ export function Calendar({
       {/* Header — port of lines 52-64 */}
       <div className="wf-spread">
         <div className="wf-row wf-gap-6">
+          {onOpenDrawer && (
+            <button
+              onClick={onOpenDrawer}
+              style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 0, color: 'var(--ink)' }}
+              aria-label={t('nav.menu')}
+            >
+              <Icon name="menu" />
+            </button>
+          )}
           <button
             onClick={() => setView((m) => new Date(m.getFullYear(), m.getMonth() - 1, 1))}
             style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 0, color: 'var(--ink)' }}
@@ -396,6 +447,22 @@ export function Calendar({
       {members.length > 1 && (
         <Seg items={filterItems} active={filter} onChange={setFilter} />
       )}
+
+      {/* Secondary filter chips — "Не сделанные" / "С фото". Persisted in
+          user preferences so a refresh keeps the active filter. Tags will
+          slot in here once Phase B adds them. */}
+      <div className="wf-row wf-gap-6" style={{ flexWrap: 'wrap' }}>
+        <FilterChip
+          active={onlyPending}
+          label={t('calendar.filter.pending')}
+          onClick={() => toggleFilter('onlyPending')}
+        />
+        <FilterChip
+          active={onlyWithPhoto}
+          label={t('calendar.filter.withPhoto')}
+          onClick={() => toggleFilter('onlyWithPhoto')}
+        />
+      </div>
 
       {/* Day heading — port of lines 93-96 */}
       <div
@@ -684,5 +751,41 @@ function pluralTaskI18n(n: number, isEn: boolean): string {
     n,
     ['задача', 'задачи', 'задач'],
     ['task', 'tasks'],
+  );
+}
+
+/**
+ * Toggle chip used for secondary calendar filters. Visually a pill that
+ * fills in when active. We don't reuse `<Seg>` here because Seg is a
+ * mutually-exclusive segmented control; these are independent toggles.
+ */
+function FilterChip({
+  active,
+  label,
+  onClick,
+}: {
+  active: boolean;
+  label: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      style={{
+        background: active ? 'var(--ink)' : 'transparent',
+        color: active ? 'var(--paper)' : 'var(--ink)',
+        border: `1.5px solid ${active ? 'var(--ink)' : 'var(--line)'}`,
+        borderRadius: 999,
+        padding: '4px 10px',
+        fontSize: 12,
+        fontWeight: 600,
+        cursor: 'pointer',
+        font: 'inherit',
+        lineHeight: 1.2,
+      }}
+    >
+      {label}
+    </button>
   );
 }

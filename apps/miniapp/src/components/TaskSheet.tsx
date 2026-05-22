@@ -11,6 +11,7 @@ import {
 } from '../api';
 import { Av, Bar, Icon, Tag, type Member } from '../design';
 import { BottomSheet } from './BottomSheet';
+import { useToast } from './Toast';
 import { useT } from '../i18n';
 
 type Props = {
@@ -110,14 +111,42 @@ export function TaskSheet({ me, family, occurrence, onClose, onEdit, onTransfer 
       queryClient.invalidateQueries({ queryKey: ['occurrence', family.id, o.id] });
     },
   });
+  const toast = useToast();
   const stopRepeatMut = useMutation({
     mutationFn: () => api.deleteTask(family.id, o.taskId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['occurrences', family.id] });
       queryClient.invalidateQueries({ queryKey: ['tasks', family.id] });
+      // Undo toast — soft-delete on the backend (archivedAt) lets us POST
+      // restore from here. Capture `o.taskId` in the closure since the
+      // sheet animates closed immediately after this success runs.
+      const taskId = o.taskId;
+      toast.show({
+        message: t('common.deleted'),
+        variant: 'success',
+        durationMs: 5000,
+        action: {
+          label: t('common.undo'),
+          onClick: () => {
+            api
+              .restoreTask(family.id, taskId)
+              .then(() => {
+                queryClient.invalidateQueries({ queryKey: ['occurrences', family.id] });
+                queryClient.invalidateQueries({ queryKey: ['tasks', family.id] });
+              })
+              .catch(() => {
+                toast.show({ message: t('common.restoreFailed'), variant: 'error' });
+              });
+          },
+        },
+      });
     },
   });
   const [rescheduleOpen, setRescheduleOpen] = useState(false);
+  // Snooze opens a small inline popover with preset offsets (tomorrow / +3 /
+  // weekend / week). It piggybacks on `rescheduleMut` — same backend call
+  // with a precomputed date — so we don't need a second mutation.
+  const [snoozeOpen, setSnoozeOpen] = useState(false);
 
   // Photos live in Telegram now — we list them by occurrence (or task for
   // synth floating). `o.photoIds` from older completions is ignored.
@@ -417,16 +446,25 @@ export function TaskSheet({ me, family, occurrence, onClose, onEdit, onTransfer 
                 >
                   {t('task.action.transfer')}
                 </button>
-                {/* Reschedule is only meaningful for dated occurrences.
-                    Floating tasks have no scheduledDate, so we hide it. */}
+                {/* Reschedule + Snooze are only meaningful for dated
+                    occurrences. Floating tasks have no scheduledDate. */}
                 {!o.id.startsWith('floating:') && o.task.type !== 'floating' && (
-                  <button
-                    className="wf-btn"
-                    onClick={() => setRescheduleOpen(true)}
-                    style={{ cursor: 'pointer' }}
-                  >
-                    {t('task.action.reschedule')}
-                  </button>
+                  <>
+                    <button
+                      className="wf-btn"
+                      onClick={() => setSnoozeOpen((v) => !v)}
+                      style={{ cursor: 'pointer' }}
+                    >
+                      {t('task.action.snooze')}
+                    </button>
+                    <button
+                      className="wf-btn"
+                      onClick={() => setRescheduleOpen(true)}
+                      style={{ cursor: 'pointer' }}
+                    >
+                      {t('task.action.reschedule')}
+                    </button>
+                  </>
                 )}
                 <button
                   className="wf-btn primary"
@@ -463,6 +501,49 @@ export function TaskSheet({ me, family, occurrence, onClose, onEdit, onTransfer 
             )}
           </div>
         ) : null}
+        {snoozeOpen && !done && (
+          <div
+            className="wf-card"
+            style={{
+              marginTop: 8,
+              padding: 6,
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 2,
+            }}
+          >
+            {snoozeOptions(o.scheduledDate, t).map((opt) => (
+              <button
+                key={opt.key}
+                type="button"
+                onClick={() => {
+                  rescheduleMut.mutate(opt.iso, {
+                    onSuccess: () => {
+                      setSnoozeOpen(false);
+                      close();
+                    },
+                  });
+                }}
+                disabled={rescheduleMut.isPending}
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  cursor: 'pointer',
+                  textAlign: 'left',
+                  padding: '8px 10px',
+                  borderRadius: 8,
+                  font: 'inherit',
+                  color: 'var(--ink)',
+                }}
+              >
+                <span>{opt.label}</span>
+                <span className="wf-tiny" style={{ marginLeft: 8, color: 'var(--hint)' }}>
+                  {opt.iso}
+                </span>
+              </button>
+            ))}
+          </div>
+        )}
         {photoMissing && (
           <span
             className="wf-tiny"
@@ -777,6 +858,40 @@ function describeError(err: ApiError, t: ReturnType<typeof useT>): string {
   if (body?.error === 'photo_required') return t('task.err.photo');
   if (body?.error === 'forbidden') return t('task.err.forbidden');
   return err.message;
+}
+
+/**
+ * Snooze presets (relative to today). We anchor to *today* rather than to
+ * the occurrence's `scheduledDate` because the user is saying "move this
+ * forward from where I am right now" — anchoring to the original date
+ * would surprise anyone snoozing a past-due task.
+ *
+ * "До выходных" finds the upcoming Saturday; if today is already Saturday
+ * or Sunday, we jump to *next* Saturday so the option still means "later".
+ */
+function snoozeOptions(
+  _currentIso: string | null,
+  t: ReturnType<typeof useT>,
+): Array<{ key: string; label: string; iso: string }> {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const addDays = (n: number) => {
+    const d = new Date(today);
+    d.setDate(d.getDate() + n);
+    return d.toISOString().slice(0, 10);
+  };
+  // 0 = Sun, 6 = Sat. We want the *next* Saturday; if today already is
+  // Sat/Sun, jump a full week forward to next Saturday so the offset is
+  // meaningfully "later".
+  const dow = today.getDay();
+  const daysToNextSaturday = dow === 6 ? 7 : dow === 0 ? 6 : 6 - dow;
+  return [
+    { key: 'tomorrow', label: t('task.snooze.tomorrow'), iso: addDays(1) },
+    { key: 'dayAfter', label: t('task.snooze.dayAfter'), iso: addDays(2) },
+    { key: 'weekend', label: t('task.snooze.weekend'), iso: addDays(daysToNextSaturday) },
+    { key: '3days', label: t('task.snooze.3days'), iso: addDays(3) },
+    { key: 'week', label: t('task.snooze.week'), iso: addDays(7) },
+  ];
 }
 
 function describeRescheduleError(err: ApiError, t: ReturnType<typeof useT>): string {

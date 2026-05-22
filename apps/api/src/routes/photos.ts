@@ -7,6 +7,7 @@ import {
   deletePhoto,
   getPhotoById,
   getPhotoDownloadUrl,
+  listPhotosForFamily,
   listPhotosForOccurrence,
   listPhotosForTask,
   sendTaskPhoto,
@@ -99,6 +100,28 @@ photosRouter.post('/occurrences/:occurrenceId/photos', async (c) => {
     logger.error({ err }, 'sendTaskPhoto failed');
     throw err;
   }
+});
+
+/**
+ * Family-wide photo gallery (used by MemberProfile's "Фото-отчёты").
+ * Query params:
+ *   userId?     — narrow to one member's photos
+ *   limit?      — page size (1..200, default 60)
+ *   before?     — ISO timestamp cursor for keyset pagination (createdAt < before)
+ */
+photosRouter.get('/photos', async (c) => {
+  const familyId = c.get('familyId');
+  const url = new URL(c.req.url);
+  const userIdParam = url.searchParams.get('userId') ?? undefined;
+  const limitParam = url.searchParams.get('limit');
+  const beforeIso = url.searchParams.get('before') ?? undefined;
+  const rows = await listPhotosForFamily({
+    familyId,
+    userId: userIdParam,
+    limit: limitParam ? Number(limitParam) : undefined,
+    beforeIso,
+  });
+  return c.json({ photos: rows.map(serializePhoto) });
 });
 
 photosRouter.get('/tasks/:taskId/photos', async (c) => {

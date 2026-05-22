@@ -17,7 +17,9 @@ import { pluralize, useT, type TFn } from '../i18n';
 type Props = {
   me: MeResponse;
   family: FamilySummary;
-  onBack: () => void;
+  /** Burger button → opens the nav drawer. Shop is a top-level destination
+   *  (not a back-able sub-page), so we render a burger instead of `chevL`. */
+  onOpenDrawer?: () => void;
 };
 
 type ShopTab = 'points' | 'streaks' | 'shop';
@@ -39,7 +41,7 @@ function memberFromDto(dto: FamilyMemberDto): Member {
  * and the GameShop reward grid (Магазин) from screens-gamification.jsx
  * and screens-extras.jsx.
  */
-export function Shop({ me, family, onBack }: Props) {
+export function Shop({ me, family, onOpenDrawer }: Props) {
   const t = useT();
   const TABS: { id: ShopTab; label: string }[] = [
     { id: 'points', label: t('shop.tab.points') },
@@ -152,15 +154,17 @@ export function Shop({ me, family, onBack }: Props) {
   const [createOpen, setCreateOpen] = useState(false);
 
   return (
-    <WfBody onBack={onBack}>
+    <WfBody>
       <div className="wf-row wf-gap-8">
-        <button
-          onClick={onBack}
-          aria-label={t('common.back')}
-          style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 0, color: 'var(--ink)' }}
-        >
-          <Icon name="chevL" />
-        </button>
+        {onOpenDrawer && (
+          <button
+            onClick={onOpenDrawer}
+            aria-label={t('nav.menu')}
+            style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 0, color: 'var(--ink)' }}
+          >
+            <Icon name="menu" />
+          </button>
+        )}
         <span className="wf-h2" style={{ flex: 1 }}>
           {t('shop.title')}
         </span>

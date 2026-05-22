@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, type FamilySummary, type MeResponse, type OccurrenceDto, type TaskDto } from '../api';
-import { Icon, type IconName } from '../design';
 import { Calendar } from './Calendar';
 import { Catalog } from './Catalog';
 import { Day } from './Day';
@@ -19,8 +18,11 @@ import { Stats } from './Stats';
 import { Templates } from './Templates';
 import { TaskSheet } from '../components/TaskSheet';
 import { CreateTaskSheet } from '../components/CreateTaskSheet';
+import { NavDrawer, type NavKey } from '../components/NavDrawer';
+import { OnboardingTour } from '../components/OnboardingTour';
 import { Transfer } from './Transfer';
 import { useFamilyEvents } from '../hooks/useFamilyEvents';
+import { usePreferences } from '../hooks/usePreferences';
 import { useT } from '../i18n';
 
 type Props = {
@@ -49,13 +51,20 @@ type Route =
   // with the occurrence id baked into the URL so refresh restores state.
   | { kind: 'transfer'; occurrenceId: string };
 
-type Tab = 'calendar' | 'queues' | 'shop' | 'profile';
-
-const TAB_ROUTE: Record<Tab, Route> = {
+/** A drawer-nav key maps to the route a tap should navigate to. */
+const NAV_ROUTE: Record<NavKey, Route> = {
   calendar: { kind: 'calendar' },
   queues: { kind: 'queues' },
   shop: { kind: 'shop' },
   profile: { kind: 'profile' },
+  'my-profile': { kind: 'my-profile' },
+  inbox: { kind: 'inbox' },
+  search: { kind: 'search' },
+  history: { kind: 'history' },
+  stats: { kind: 'stats' },
+  catalog: { kind: 'catalog' },
+  templates: { kind: 'templates' },
+  roles: { kind: 'roles' },
 };
 
 /**
@@ -166,10 +175,10 @@ function parseRoute(hash: string): Route {
   }
 }
 
-function tabForRoute(r: Route): Tab {
-  // Profile sub-pages (stats/history/…) all keep the Profile tab highlighted;
-  // queue detail belongs under Queues; day + transfer belong under Calendar
-  // (Transfer is always launched from a task, which lives in the calendar).
+/** Which drawer entry should appear "active" for the current route. Sub-pages
+ *  collapse to their nearest top-level (day → calendar, queue → queues,
+ *  member → my-profile if it's you, otherwise profile/Settings). */
+function navKeyForRoute(r: Route): NavKey {
   switch (r.kind) {
     case 'day':
     case 'transfer':
@@ -180,7 +189,24 @@ function tabForRoute(r: Route): Tab {
       return 'queues';
     case 'shop':
       return 'shop';
-    default:
+    case 'inbox':
+      return 'inbox';
+    case 'search':
+      return 'search';
+    case 'history':
+      return 'history';
+    case 'stats':
+      return 'stats';
+    case 'catalog':
+      return 'catalog';
+    case 'templates':
+      return 'templates';
+    case 'roles':
+      return 'roles';
+    case 'my-profile':
+      return 'my-profile';
+    case 'member':
+    case 'profile':
       return 'profile';
   }
 }
@@ -199,7 +225,15 @@ export function FamilyHome({ me, families }: Props) {
   const [route, setRoute] = useState<Route>(() =>
     typeof window === 'undefined' ? { kind: 'calendar' } : parseRoute(window.location.hash),
   );
-  const tab: Tab = tabForRoute(route);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const activeNav: NavKey = navKeyForRoute(route);
+
+  // Onboarding tour shown once per user. The flag lives in `preferences`
+  // (PATCH /me); after dismissal it's persisted so refresh/re-launch won't
+  // re-trigger. We read straight off the `me` prop so server is the source
+  // of truth — local toggling doesn't drift.
+  const { prefs, set: setPrefs } = usePreferences(me);
+  const tourSeen = prefs.viewedTutorial === true;
 
   // Keep the hash in sync with the active route, and react to back/forward.
   useEffect(() => {
@@ -243,9 +277,13 @@ export function FamilyHome({ me, families }: Props) {
       </div>
     );
 
-  // Tab state is derived from the route, so picking a tab is "just" a route
-  // change — `setTab` no longer exists.
-  const goTab = (next: Tab) => setRoute(TAB_ROUTE[next]);
+  // The drawer turns any logical destination into a route flip. Closing the
+  // drawer happens inside `NavDrawer` (it runs the slide-out first).
+  const openDrawer = () => setDrawerOpen(true);
+  const onNavigate = (key: NavKey) => {
+    setRoute(NAV_ROUTE[key]);
+    setDrawerOpen(false);
+  };
 
   return (
     <>
@@ -264,6 +302,7 @@ export function FamilyHome({ me, families }: Props) {
             setCreateOpen(true);
           }}
           onOpenInvite={() => setRoute({ kind: 'profile' })}
+          onOpenDrawer={openDrawer}
         />
       )}
       {route.kind === 'day' && (
@@ -290,6 +329,7 @@ export function FamilyHome({ me, families }: Props) {
             setCreateDefaultKind('queued');
             setCreateOpen(true);
           }}
+          onOpenDrawer={openDrawer}
         />
       )}
       {route.kind === 'queue' && (
@@ -308,7 +348,7 @@ export function FamilyHome({ me, families }: Props) {
         <Shop
           me={me}
           family={activeFamily}
-          onBack={() => setRoute({ kind: 'calendar' })}
+          onOpenDrawer={openDrawer}
         />
       )}
       {route.kind === 'profile' && (
@@ -330,6 +370,7 @@ export function FamilyHome({ me, families }: Props) {
           onOpenRoles={() => setRoute({ kind: 'roles' })}
           onOpenSearch={() => setRoute({ kind: 'search' })}
           onOpenInbox={() => setRoute({ kind: 'inbox' })}
+          onOpenDrawer={openDrawer}
         />
       )}
       {route.kind === 'my-profile' && (
@@ -418,33 +459,26 @@ export function FamilyHome({ me, families }: Props) {
         />
       )}
 
-      {/* Bottom tab bar */}
-      <nav className="bottom-nav">
-        <BottomTab
-          icon="cal"
-          label={t('nav.calendar')}
-          active={tab === 'calendar'}
-          onClick={() => goTab('calendar')}
+      {/* Burger drawer — replaces the old 4-tab bottom-nav. Each top-level
+          page exposes an `onOpenDrawer` callback wired to open this. */}
+      {drawerOpen && (
+        <NavDrawer
+          me={me}
+          family={activeFamily}
+          families={families}
+          active={activeNav}
+          onClose={() => setDrawerOpen(false)}
+          onNavigate={onNavigate}
+          onSwitchFamily={setActiveFamilyId}
         />
-        <BottomTab
-          icon="repeat"
-          label={t('nav.queues')}
-          active={tab === 'queues'}
-          onClick={() => goTab('queues')}
-        />
-        <BottomTab
-          icon="star"
-          label={t('nav.shop')}
-          active={tab === 'shop'}
-          onClick={() => goTab('shop')}
-        />
-        <BottomTab
-          icon="user"
-          label={t('nav.profile')}
-          active={tab === 'profile'}
-          onClick={() => goTab('profile')}
-        />
-      </nav>
+      )}
+
+      {/* First-run tour — single overlay that walks through 5 destinations.
+          Persist the dismissal so it never reappears unless preferences are
+          cleared server-side. */}
+      {!tourSeen && (
+        <OnboardingTour onClose={() => setPrefs({ viewedTutorial: true })} />
+      )}
 
       {openTask && (
         <TaskSheet
@@ -489,26 +523,3 @@ export function FamilyHome({ me, families }: Props) {
   );
 }
 
-function BottomTab({
-  icon,
-  label,
-  active,
-  onClick,
-}: {
-  icon: IconName;
-  label: string;
-  active: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className="bottom-nav__tab"
-      data-active={active ? '1' : '0'}
-      aria-label={label}
-    >
-      <Icon name={icon} />
-      <span className="bottom-nav__label">{label}</span>
-    </button>
-  );
-}

@@ -142,6 +142,43 @@ export async function updateTask(input: {
   return updated;
 }
 
+/**
+ * Undo of `archiveTask`. Flips `archivedAt` back to null and regenerates
+ * the task's future occurrences (archive wiped them). Reminders are
+ * re-scheduled after commit, mirroring `createTask`.
+ *
+ * Intended for the "Удалено · Отменить" toast in the miniapp — restore
+ * window is short (5s) but we don't enforce that here; the caller decides
+ * when restore is OK.
+ */
+export async function restoreTask(taskId: string): Promise<TaskRow | null> {
+  const task = await db.query.tasks.findFirst({ where: eq(tasks.id, taskId) });
+  if (!task || !task.archivedAt) return task ?? null;
+
+  const restored = await db.transaction(async (tx) => {
+    const [t] = await tx
+      .update(tasks)
+      .set({ archivedAt: null, updatedAt: new Date() })
+      .where(eq(tasks.id, taskId))
+      .returning();
+    if (!t) return null;
+    await syncOccurrencesForTask(t, tx);
+    if (t.type === 'queued') {
+      await ensureQueuedOccurrence(t, tx);
+    }
+    return t;
+  });
+
+  if (restored) {
+    void scheduleRemindersForTask(restored.id).catch((err) =>
+      logger.warn({ err, taskId: restored.id }, 'restoreTask: schedule reminders failed'),
+    );
+    void publishFamilyEvent(restored.familyId, { kind: 'invalidate', scope: 'tasks' });
+    void publishFamilyEvent(restored.familyId, { kind: 'invalidate', scope: 'occurrences' });
+  }
+  return restored;
+}
+
 export async function archiveTask(taskId: string): Promise<void> {
   // Cancel reminders BEFORE we delete the occurrence rows — the cancel
   // helper looks them up by id.

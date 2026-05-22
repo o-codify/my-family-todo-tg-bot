@@ -2,7 +2,13 @@ import { and, eq } from 'drizzle-orm';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { db } from '../../src/db/client';
 import { taskOccurrences } from '../../src/db/schema';
-import { createTask, archiveTask, updateTask, getTaskInFamily } from '../../src/services/tasks';
+import {
+  archiveTask,
+  createTask,
+  getTaskInFamily,
+  restoreTask,
+  updateTask,
+} from '../../src/services/tasks';
 import {
   OccurrenceActionError,
   getOccurrenceInFamily,
@@ -122,6 +128,56 @@ describe('tasks service (integration)', () => {
 
     const occ = await db.select().from(taskOccurrences).where(eq(taskOccurrences.taskId, task.id));
     expect(occ).toHaveLength(0);
+  });
+
+  it('restoreTask flips archivedAt back and regenerates occurrences', async () => {
+    const owner = await makeUser();
+    const { family } = await makeFamily(owner);
+
+    const task = await createTask({
+      familyId: family.id,
+      createdBy: owner.id,
+      data: {
+        title: 'ToRestore',
+        type: 'recurring',
+        schedule: { kind: 'recurring', recurrence: 'daily' },
+        points: 0,
+        photoRequired: false,
+        singleShot: false,
+      },
+    });
+
+    await archiveTask(task.id);
+    const restored = await restoreTask(task.id);
+    expect(restored).not.toBeNull();
+    expect(restored?.archivedAt).toBeNull();
+
+    const occ = await db.select().from(taskOccurrences).where(eq(taskOccurrences.taskId, task.id));
+    // Same regen rule as createTask — 30-day window for daily recurring.
+    expect(occ.length).toBeGreaterThan(0);
+  });
+
+  it('restoreTask is a no-op (idempotent) for a non-archived task', async () => {
+    const owner = await makeUser();
+    const { family } = await makeFamily(owner);
+    const task = await createTask({
+      familyId: family.id,
+      createdBy: owner.id,
+      data: {
+        title: 'Live',
+        type: 'oneoff',
+        schedule: { kind: 'oneoff', date: futureDate(1) },
+        points: 0,
+        photoRequired: false,
+        singleShot: false,
+      },
+    });
+
+    const restored = await restoreTask(task.id);
+    expect(restored?.archivedAt).toBeNull();
+    // Did not duplicate the occurrence — still exactly one.
+    const occ = await db.select().from(taskOccurrences).where(eq(taskOccurrences.taskId, task.id));
+    expect(occ).toHaveLength(1);
   });
 
   it('floating task has no occurrences until completion', async () => {

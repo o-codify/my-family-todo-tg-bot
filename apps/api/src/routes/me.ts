@@ -7,7 +7,7 @@ import { users } from '../db/schema';
 import { tgAuth, type AuthVariables } from '../middleware/auth';
 import { logger } from '../logger';
 import { rescheduleDigestForUser } from '../queue/digest';
-import { serializeUser } from '../services/users';
+import { mergePreferences, serializeUser } from '../services/users';
 
 export const meRouter = new Hono<{ Variables: AuthVariables }>().use('*', tgAuth);
 
@@ -37,6 +37,9 @@ meRouter.patch('/', zValidator('json', updateMeSchema), async (c) => {
   }
   if (patch.awayReason !== undefined) {
     next.awayReason = patch.awayReason;
+  }
+  if (patch.preferences !== undefined) {
+    next.preferences = mergePreferences(user.preferences, patch.preferences);
   }
 
   const [updated] = await db.update(users).set(next).where(eq(users.id, user.id)).returning();

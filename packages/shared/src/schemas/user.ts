@@ -10,6 +10,13 @@ export const notificationSettingsSchema = z.object({
 
 export type NotificationSettings = z.infer<typeof notificationSettingsSchema>;
 
+// Per-user client preferences. Schema-less bag — the backend round-trips it
+// without inspecting individual keys, so adding a new preference is just a
+// frontend change. Keep entries additive: never reshape an existing key.
+export const userPreferencesSchema = z.record(z.unknown());
+
+export type UserPreferences = z.infer<typeof userPreferencesSchema>;
+
 export const userSchema = z.object({
   id: z.string().uuid(),
   telegramId: z.string(),
@@ -23,6 +30,7 @@ export const userSchema = z.object({
   notificationSettings: notificationSettingsSchema,
   awayUntil: z.string().datetime().nullable(),
   awayReason: z.enum(['vacation', 'sick']).nullable(),
+  preferences: userPreferencesSchema,
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime(),
 });
@@ -36,6 +44,10 @@ export const updateMeSchema = z.object({
   notificationSettings: notificationSettingsSchema.partial().optional(),
   awayUntil: z.string().datetime().nullable().optional(),
   awayReason: z.enum(['vacation', 'sick']).nullable().optional(),
+  // Partial preferences merge with the existing record server-side. Pass
+  // `{ preferences: { foo: null } }` to clear a single key; or pass a fresh
+  // object to overwrite the whole record (rarely useful).
+  preferences: userPreferencesSchema.optional(),
 });
 
 export type UpdateMeInput = z.infer<typeof updateMeSchema>;

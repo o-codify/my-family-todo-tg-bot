@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { api, type FamilySummary, type MeResponse } from '../api';
+import { api, type FamilySummary, type MeResponse, type PhotoDto } from '../api';
 import { Av, Icon, Tag, WfBody } from '../design';
 import { useT, type Locale } from '../i18n';
 
@@ -42,6 +42,15 @@ export function MemberProfile({ me, family, userId, onBack }: Props) {
     () => stats?.byMember.find((b) => b.userId === userId) ?? null,
     [stats, userId],
   );
+
+  // Photo gallery — newest first, cap at 60 (server default). For longer
+  // histories we'll wire the keyset cursor; 60 covers a few months of
+  // photo-verified chores for typical families.
+  const photosQuery = useQuery({
+    queryKey: ['photos', 'family', family.id, userId],
+    queryFn: () => api.listFamilyPhotos(family.id, { userId, limit: 60 }),
+  });
+  const photos: PhotoDto[] = photosQuery.data?.photos ?? [];
 
   return (
     <WfBody onBack={onBack}>
@@ -134,6 +143,30 @@ export function MemberProfile({ me, family, userId, onBack }: Props) {
               </div>
             </div>
           </div>
+
+          {/* Photo gallery — newest-first grid of fotó-reports this member
+              attached to completions. Tap → fresh Telegram CDN URL, opened
+              full-bleed in a new tab (we don't lightbox-overlay for v1). */}
+          {photos.length > 0 && (
+            <div className="wf-card">
+              <span className="wf-tiny">
+                {isEn ? 'Photo reports' : 'Фото-отчёты'}{' '}
+                <span className="wf-hint">· {photos.length}</span>
+              </span>
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(3, 1fr)',
+                  gap: 6,
+                  marginTop: 8,
+                }}
+              >
+                {photos.map((p) => (
+                  <PhotoThumb key={p.id} familyId={family.id} photo={p} />
+                ))}
+              </div>
+            </div>
+          )}
         </>
       )}
     </WfBody>
@@ -161,4 +194,45 @@ function fmtDate(iso: string, locale: Locale = 'ru'): string {
   return locale === 'en'
     ? `${months[d.getMonth()]} ${d.getDate()}`
     : `${d.getDate()} ${months[d.getMonth()]}`;
+}
+
+/**
+ * Single thumbnail in the photo gallery. We fetch a fresh Telegram CDN URL
+ * lazily — Telegram's URLs expire ~1h, so we don't precompute them in the
+ * batch listing. Once loaded, the thumbnail renders inline; tapping opens
+ * the full image in a new tab (Telegram WebView intercepts external links
+ * fine; lightbox UX can come later).
+ */
+function PhotoThumb({ familyId, photo }: { familyId: string; photo: PhotoDto }) {
+  const urlQuery = useQuery({
+    queryKey: ['photo-url', familyId, photo.id],
+    queryFn: () => api.getPhotoUrl(familyId, photo.id),
+    // Slightly under Telegram's ~1h expiry so we refresh proactively.
+    staleTime: 45 * 60 * 1000,
+  });
+  return (
+    <a
+      href={urlQuery.data?.url}
+      target="_blank"
+      rel="noopener noreferrer"
+      style={{
+        display: 'block',
+        aspectRatio: '1 / 1',
+        background: 'var(--faint)',
+        borderRadius: 8,
+        overflow: 'hidden',
+        border: '1px solid var(--line)',
+      }}
+    >
+      {urlQuery.data?.url ? (
+        <img
+          src={urlQuery.data.url}
+          alt=""
+          style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+        />
+      ) : (
+        <span style={{ display: 'block', width: '100%', height: '100%' }} />
+      )}
+    </a>
+  );
 }

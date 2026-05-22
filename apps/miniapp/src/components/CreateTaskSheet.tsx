@@ -11,6 +11,7 @@ import {
 } from '../api';
 import { Av, Icon, Seg, type Member } from '../design';
 import { BottomSheet } from './BottomSheet';
+import { useToast } from './Toast';
 import { useT } from '../i18n';
 
 type Props = {
@@ -200,6 +201,7 @@ export function CreateTaskSheet({
     },
   });
 
+  const toast = useToast();
   const deleteMut = useMutation({
     mutationFn: () => {
       if (!editingTask) throw new Error('not editing');
@@ -208,6 +210,32 @@ export function CreateTaskSheet({
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['occurrences', family.id] });
       queryClient.invalidateQueries({ queryKey: ['tasks', family.id] });
+      // Surface an undo toast — the backend keeps the task as soft-deleted
+      // (archivedAt), so restore is just a POST. We capture `editingTask.id`
+      // in the closure because by the time the user taps Undo this sheet
+      // is already closed and `editingTask` may have been cleared.
+      const taskId = editingTask?.id;
+      if (taskId) {
+        toast.show({
+          message: t('common.deleted'),
+          variant: 'success',
+          durationMs: 5000,
+          action: {
+            label: t('common.undo'),
+            onClick: () => {
+              api
+                .restoreTask(family.id, taskId)
+                .then(() => {
+                  queryClient.invalidateQueries({ queryKey: ['occurrences', family.id] });
+                  queryClient.invalidateQueries({ queryKey: ['tasks', family.id] });
+                })
+                .catch(() => {
+                  toast.show({ message: t('common.restoreFailed'), variant: 'error' });
+                });
+            },
+          },
+        });
+      }
     },
   });
 

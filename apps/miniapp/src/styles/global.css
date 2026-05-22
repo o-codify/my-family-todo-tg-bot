@@ -217,10 +217,10 @@ input,
      but desktop Chromium and Firefox do). */
   scrollbar-width: none;             /* Firefox */
   -ms-overflow-style: none;          /* IE/old Edge */
-  /* Default footer clearance: just the bottom-nav (~56 px incl. safe-area)
-     plus ~20 px breathing room. Pages without a floating add-task pill
-     should not have empty scrollable space hanging below the last card. */
-  padding-bottom: calc(76px + env(safe-area-inset-bottom, 0px));
+  /* Footer clearance: bottom-nav is gone (replaced by a burger drawer); we
+     just need a hair of breathing room below the last card + the device's
+     safe-area inset. Pages with a `.wf-fab` add extra below (override). */
+  padding-bottom: calc(20px + env(safe-area-inset-bottom, 0px));
 }
 .wf-body::-webkit-scrollbar {
   /* Chromium / WebKit — collapse the track to zero so the content fills
@@ -238,7 +238,7 @@ input,
  * scoping the larger padding here keeps the no-fab pages tight.
  */
 .wf-body:has(.wf-fab) {
-  padding-bottom: calc(132px + env(safe-area-inset-bottom, 0px));
+  padding-bottom: calc(76px + env(safe-area-inset-bottom, 0px));
 }
 
 /*
@@ -310,15 +310,116 @@ input,
 }
 
 /*
+ * Drawer — left-side slide-in panel housing the burger menu's navigation.
+ * Mirrors the sheet's backdrop pattern but anchors content to the left edge.
+ * Keep durations in lockstep with `ANIM_MS` in components/Drawer.tsx.
+ */
+.wf-drawer-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.35);
+  display: flex;
+  align-items: stretch;
+  justify-content: flex-start;
+  animation: wf-backdrop-in 0.22s ease;
+}
+
+.wf-drawer-backdrop.is-closing {
+  animation: wf-backdrop-out 0.22s ease forwards;
+}
+
+.wf-drawer {
+  width: min(84vw, 320px);
+  background: var(--paper);
+  border-right: 1.5px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  padding: 14px 12px calc(14px + env(safe-area-inset-bottom, 0px));
+  gap: 4px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.wf-drawer--animated {
+  animation: wf-drawer-in 0.26s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.wf-drawer--animated.is-closing {
+  animation: wf-drawer-out 0.24s ease forwards;
+}
+
+@keyframes wf-drawer-in {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+@keyframes wf-drawer-out {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-100%);
+  }
+}
+
+/* Toast entrance — used by the global Toast/Snackbar (components/Toast.tsx).
+   A tiny rise + fade so multiple toasts stacking look ordered rather than
+   popping in simultaneously. */
+@keyframes wf-toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Drawer item styling — a row pattern reused for nav entries. Active row
+   reads as the selected destination (filled background, ink text). */
+.wf-drawer__item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  cursor: pointer;
+  color: var(--ink);
+  font-size: 15px;
+  background: transparent;
+  border: none;
+  text-align: left;
+  width: 100%;
+  font: inherit;
+}
+
+.wf-drawer__item[data-active='1'] {
+  background: var(--faint);
+}
+
+.wf-drawer__section {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--hint);
+  padding: 12px 12px 4px;
+}
+
+/*
  * FAB redesign — used to be a 52×52 round "+" stuck in the corner. Per user
- * request: now a centered pill "+ Добавить задачу" floating right above the
- * bottom-nav. Markup stays `<div className="wf-fab">+ Добавить задачу</div>`,
- * we just override the prototype's circular shape with pill styling here.
+ * request: now a centered pill "+ Добавить задачу" floating near the bottom.
+ * Originally sat above the bottom-nav; with the nav gone (burger drawer
+ * replaces it) the pill anchors directly to the safe-area inset.
  */
 .wf-fab {
   position: fixed;
   left: 50%;
-  bottom: calc(64px + env(safe-area-inset-bottom, 0px));
+  bottom: calc(16px + env(safe-area-inset-bottom, 0px));
   transform: translateX(-50%);
   /* Reset the prototype's circular sizing. Slim pill height + generous gap
      between the "+" glyph and the label — gap only fires because the JSX

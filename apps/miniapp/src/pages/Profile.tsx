@@ -27,6 +27,8 @@ type Props = {
   onOpenInbox?: () => void;
   onOpenMyProfile?: () => void;
   onOpenMember?: (userId: string) => void;
+  /** Burger button → opens the nav drawer. Top-level page only. */
+  onOpenDrawer?: () => void;
 };
 
 function memberFromDto(dto: FamilyMemberDto): Member {
@@ -61,6 +63,7 @@ export function Profile({
   onOpenInbox,
   onOpenMyProfile,
   onOpenMember,
+  onOpenDrawer,
 }: Props) {
   const queryClient = useQueryClient();
   const membersQuery = useQuery({
@@ -151,6 +154,24 @@ export function Profile({
 
   return (
     <WfBody scrollKey="profile">
+      {/* Top row: burger + page title. Settings is a top-level destination,
+          so this is where the drawer is opened from. Family selector below
+          stays where it was. */}
+      <div className="wf-row wf-gap-8">
+        {onOpenDrawer && (
+          <button
+            onClick={onOpenDrawer}
+            aria-label={t('nav.menu')}
+            style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 0, color: 'var(--ink)' }}
+          >
+            <Icon name="menu" />
+          </button>
+        )}
+        <span className="wf-h1" style={{ flex: 1 }}>
+          {t('nav.profile')}
+        </span>
+      </div>
+
       {/* Family selector (if multiple) */}
       {families.length > 1 && (
         <select

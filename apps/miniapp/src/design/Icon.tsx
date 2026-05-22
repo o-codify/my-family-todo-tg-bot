@@ -29,7 +29,8 @@ export type IconName =
   | 'invite'
   | 'pkg'
   | 'clock'
-  | 'flag';
+  | 'flag'
+  | 'menu';
 
 /** Verbatim port of I (wireframe-kit.jsx lines 34-67) — same SVG paths. */
 export function Icon({ name }: { name: IconName }) {
@@ -172,4 +173,5 @@ const PATHS: Record<IconName, ReactNode> = {
       <path d="M5 21V4h11l-2 4 2 4H5" />
     </g>
   ),
+  menu: <path d="M3 6h18M3 12h18M3 18h18" />,
 };

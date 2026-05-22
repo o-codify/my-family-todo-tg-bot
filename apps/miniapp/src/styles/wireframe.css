@@ -293,7 +293,7 @@ html, body { margin: 0; padding: 0; background: var(--bg); color: var(--ink); fo
 .wf-callout.right { right: -150px; } .wf-callout.left { left: -150px; }
 
 /* ─── Density ──────────────────────────────────────── */
-[data-density="compact"] .wf-body { gap: 6px; padding-bottom: 60px; }
+[data-density="compact"] .wf-body { gap: 6px; padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px)); }
 [data-density="compact"] .wf-card { padding: 7px 9px; }
 [data-density="compact"] .wf-cal .cell { min-height: 38px; }
 [data-density="relaxed"] .wf-body { gap: 14px; }

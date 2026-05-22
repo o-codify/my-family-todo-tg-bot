@@ -96,6 +96,21 @@ export type NotificationSettings = {
   defaultReminderBeforeMinutes: number;
 };
 
+/** Client-side preferences bag round-tripped through `users.preferences`.
+ *  Loose by design — the backend stores opaquely. Add new keys here as
+ *  features need them; never reshape an existing key. */
+export type UserPreferences = {
+  viewedTutorial?: boolean;
+  calendarViewMode?: 'month' | 'week' | 'agenda';
+  calendarFilters?: {
+    onlyMine?: boolean;
+    onlyPending?: boolean;
+    onlyWithPhoto?: boolean;
+    tagIds?: string[];
+  };
+  [key: string]: unknown;
+};
+
 export type MeResponse = {
   id: string;
   telegramId: string;
@@ -109,6 +124,7 @@ export type MeResponse = {
   notificationSettings: NotificationSettings;
   awayUntil: string | null;
   awayReason: 'vacation' | 'sick' | null;
+  preferences: UserPreferences;
 };
 
 export type FamilySummary = {
@@ -230,6 +246,9 @@ export const api = {
     awayUntil?: string | null;
     awayReason?: 'vacation' | 'sick' | null;
     notificationSettings?: Partial<NotificationSettings>;
+    /** Shallow-merged into the existing preferences bag server-side. Set a
+     *  key to `null` to clear it; pass `{}` to no-op. */
+    preferences?: Partial<UserPreferences>;
   }) =>
     request<MeResponse>('/api/v1/me', {
       method: 'PATCH',
@@ -326,6 +345,12 @@ export const api = {
     }),
   deleteTask: (familyId: string, taskId: string) =>
     request<null>(`/api/v1/families/${familyId}/tasks/${taskId}`, { method: 'DELETE' }),
+  /** Undo of `deleteTask`. Used by the "Удалено · Отменить" toast — flips
+   *  `archivedAt` back to null and regenerates future occurrences. */
+  restoreTask: (familyId: string, taskId: string) =>
+    request<{ task: TaskDto }>(`/api/v1/families/${familyId}/tasks/${taskId}/restore`, {
+      method: 'POST',
+    }),
 
   listCatalog: (familyId: string, q?: string) =>
     request<{ items: CatalogItemDto[] }>(
@@ -450,6 +475,20 @@ export const api = {
     request<{ photos: PhotoDto[] }>(
       `/api/v1/families/${familyId}/occurrences/${occurrenceId}/photos`,
     ),
+  /** Family-wide gallery. Optionally narrow to one author via `userId`. */
+  listFamilyPhotos: (
+    familyId: string,
+    opts?: { userId?: string; limit?: number; beforeIso?: string },
+  ) => {
+    const qs = new URLSearchParams();
+    if (opts?.userId) qs.set('userId', opts.userId);
+    if (opts?.limit != null) qs.set('limit', String(opts.limit));
+    if (opts?.beforeIso) qs.set('before', opts.beforeIso);
+    const suffix = qs.toString() ? `?${qs.toString()}` : '';
+    return request<{ photos: PhotoDto[] }>(
+      `/api/v1/families/${familyId}/photos${suffix}`,
+    );
+  },
   /** Returns a short-lived Telegram CDN URL for the photo. */
   getPhotoUrl: (familyId: string, photoId: string) =>
     request<{ url: string; ttlSeconds: number }>(

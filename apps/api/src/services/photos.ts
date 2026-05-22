@@ -1,4 +1,4 @@
-import { and, desc, eq } from 'drizzle-orm';
+import { and, desc, eq, sql } from 'drizzle-orm';
 import { db } from '../db/client';
 import {
   taskPhotos,
@@ -212,6 +212,38 @@ export async function listPhotosForTask(taskId: string): Promise<TaskPhotoRow[]>
     .from(taskPhotos)
     .where(eq(taskPhotos.taskId, taskId))
     .orderBy(desc(taskPhotos.createdAt));
+}
+
+/**
+ * All photos taken inside a family, optionally narrowed to one author.
+ *
+ * Used by the MemberProfile "Фото-отчёты" gallery. Joins through `tasks`
+ * so we can family-scope without trusting the client's `userId` — even an
+ * invalid one only returns rows where the photo's task is in this family.
+ *
+ * Returns newest-first; pagination is via `limit` + `beforeIso` cursor on
+ * `createdAt` (simple keyset to avoid OFFSET cost on long histories).
+ */
+export async function listPhotosForFamily(input: {
+  familyId: string;
+  userId?: string;
+  limit?: number;
+  beforeIso?: string;
+}): Promise<TaskPhotoRow[]> {
+  const limit = Math.min(Math.max(input.limit ?? 60, 1), 200);
+  const conds = [eq(tasks.familyId, input.familyId)];
+  if (input.userId) conds.push(eq(taskPhotos.userId, input.userId));
+  if (input.beforeIso) {
+    conds.push(sql`${taskPhotos.createdAt} < ${new Date(input.beforeIso)}`);
+  }
+  const rows = await db
+    .select({ photo: taskPhotos })
+    .from(taskPhotos)
+    .innerJoin(tasks, eq(taskPhotos.taskId, tasks.id))
+    .where(and(...conds))
+    .orderBy(desc(taskPhotos.createdAt))
+    .limit(limit);
+  return rows.map((r) => r.photo);
 }
 
 export async function listPhotosForOccurrence(occurrenceId: string): Promise<TaskPhotoRow[]> {

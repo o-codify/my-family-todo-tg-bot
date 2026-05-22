@@ -66,6 +66,28 @@ export async function upsertTelegramUser(tg: TelegramInitDataUser): Promise<User
   return inserted!;
 }
 
+/**
+ * Shallow-merge a partial preferences patch into the existing bag.
+ *
+ * The client posts a partial (e.g. `{ calendarViewMode: 'week' }`) and we
+ * layer it on top of the stored row. Keys explicitly set to `null` clear
+ * that entry — strip them so storage stays compact and a getter can rely
+ * on "key absent === key cleared".
+ *
+ * Exported as its own function so it's covered by unit tests without
+ * touching the database.
+ */
+export function mergePreferences(
+  existing: Record<string, unknown> | null | undefined,
+  patch: Record<string, unknown>,
+): Record<string, unknown> {
+  const merged: Record<string, unknown> = { ...(existing ?? {}), ...patch };
+  for (const k of Object.keys(merged)) {
+    if (merged[k] === null) delete merged[k];
+  }
+  return merged;
+}
+
 export function serializeUser(row: UserRow) {
   return {
     id: row.id,
@@ -80,6 +102,7 @@ export function serializeUser(row: UserRow) {
     notificationSettings: row.notificationSettings,
     awayUntil: row.awayUntil?.toISOString() ?? null,
     awayReason: (row.awayReason as 'vacation' | 'sick' | null) ?? null,
+    preferences: row.preferences ?? {},
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
   };

@@ -57,6 +57,13 @@
       "when": 1779452417029,
       "tag": "0007_great_lord_hawal",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1779455878952,
+      "tag": "0008_fearless_phantom_reporter",
+      "breakpoints": true
     }
   ]
 }
