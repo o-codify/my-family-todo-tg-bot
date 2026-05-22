@@ -51,6 +51,11 @@ export function WfBody({
   const [progress, setProgress] = useState(0);
   const [committedView, setCommittedView] = useState(false);
   const [busy, setBusy] = useState(false);
+  // For the back gesture we anchor the indicator to the finger's Y
+  // position (so it appears next to the thumb, not stuck in viewport
+  // center). For refresh the indicator stays at the top — that's where
+  // the user is dragging from.
+  const [anchorY, setAnchorY] = useState(0);
 
   // ── Scroll restoration ───────────────────────────────────────────────
   useLayoutEffect(() => {
@@ -173,6 +178,9 @@ export function WfBody({
         setGesture('back');
         setProgress(p);
         setCommittedView(committed);
+        // Anchor indicator to current finger Y so it stays next to the
+        // thumb regardless of where the gesture started.
+        setAnchorY(t.clientY);
         e.preventDefault();
       } else if (active === 'refresh') {
         const dyClamped = Math.min(Math.max(dy, 0), MAX_PULL_PX);
@@ -270,7 +278,10 @@ export function WfBody({
                   transform: `translate(-50%, ${4 + progress * INDICATOR_MAX_TRAVEL}px)`,
                 }
               : {
-                  top: '50%',
+                  // Anchor to finger Y so the indicator sits next to the
+                  // thumb. Clamp into the viewport with a 24px safe margin
+                  // top/bottom so it doesn't get clipped near the chrome.
+                  top: `${Math.max(24, Math.min(anchorY, (typeof window !== 'undefined' ? window.innerHeight : 800) - 24))}px`,
                   left: 0,
                   transform: `translate(${4 + progress * INDICATOR_MAX_TRAVEL}px, -50%)`,
                 }),
