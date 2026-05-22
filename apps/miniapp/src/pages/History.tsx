@@ -175,7 +175,12 @@ export function History({ me, family, onBack, onOpenDrawer }: Props) {
                       </Tag>
                     )}
                     {it.occ.pointsAwarded > 0 && (
-                      <span className="wf-tiny wf-mono">+{it.occ.pointsAwarded}</span>
+                      // Match the reward row's trailing format ("−N ⭐")
+                      // so both kinds of history rows read the same: a
+                      // signed point delta followed by the star glyph.
+                      <span className="wf-tiny wf-mono">
+                        +{it.occ.pointsAwarded} ⭐
+                      </span>
                     )}
                   </div>
                 </div>
