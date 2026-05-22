@@ -51,6 +51,13 @@ const DICT: Record<string, Record<Locale, string>> = {
   'common.mine': { ru: 'Мои', en: 'Mine' },
   'calendar.filter.pending': { ru: 'Не сделанные', en: 'Pending' },
   'calendar.filter.withPhoto': { ru: 'С фото', en: 'With photo' },
+  'calendar.view.month': { ru: 'Месяц', en: 'Month' },
+  'calendar.view.week': { ru: 'Неделя', en: 'Week' },
+  'calendar.view.agenda': { ru: 'Лента', en: 'Agenda' },
+  'calendar.agenda.empty': {
+    ru: 'Ничего не запланировано на ближайшие 30 дней',
+    en: 'Nothing scheduled in the next 30 days',
+  },
   'history.type.all': { ru: 'Все', en: 'All' },
   'history.type.tasks': { ru: 'Задачи', en: 'Tasks' },
   'history.type.rewards': { ru: 'Призы', en: 'Rewards' },

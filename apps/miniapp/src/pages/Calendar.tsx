@@ -263,6 +263,16 @@ export function Calendar({
     });
   };
 
+  // View mode: month grid (default), week expanded list, or 30-day agenda.
+  // Persisted in preferences so refresh keeps the user's pick. Agenda is
+  // a forward-looking flat list so it ignores the prev/next month chevrons.
+  type ViewMode = 'month' | 'week' | 'agenda';
+  const viewMode: ViewMode =
+    prefs.calendarViewMode === 'week' || prefs.calendarViewMode === 'agenda'
+      ? prefs.calendarViewMode
+      : 'month';
+  const setViewMode = (m: ViewMode) => setPrefs({ calendarViewMode: m });
+
   const occurrences = useMemo(() => {
     let list = combinedOccurrences;
     // "Мои" / "<member name>" filters match on assignee OR completer.
@@ -433,49 +443,69 @@ export function Calendar({
         </div>
       </div>
 
-      {/* Calendar grid — port of lines 66-91 */}
-      <div className="wf-cal">
-        {WK.map((w) => (
-          <div key={w} className="wkd">
-            {w}
-          </div>
-        ))}
-        {cells.map((c, i) => {
-          const occ = byDate.get(c.iso) ?? [];
-          const overdue = !c.dim && c.iso < todayIso && occ.some((o) => o.status === 'pending');
-          const isToday = sameMonthAsView && !c.dim && c.n === todayDay;
-          const isSel = !c.dim && c.iso === selectedIso && c.n === selectedDay;
-          const cls = ['cell'];
-          if (c.dim) cls.push('dim');
-          if (isToday) cls.push('today');
-          if (isSel) cls.push('selected');
-          if (overdue) cls.push('has-overdue');
-          const shown = occ.slice(0, 3);
-          const more = occ.length - shown.length;
-          return (
-            <div
-              key={i}
-              className={cls.join(' ')}
-              // Single tap selects the day, two taps within 350ms drill
-              // into the Day screen. See `handleCellTap` above — manual
-              // tracking is more reliable than `onDoubleClick` on mobile.
-              onClick={() => !c.dim && handleCellTap(c.iso)}
-              style={{ cursor: c.dim ? 'default' : 'pointer', userSelect: 'none' }}
-            >
-              <span className="n">{c.n}</span>
-              <span className="dots">
-                {shown.map((o) => (
-                  <Dot
-                    key={o.id}
-                    m={o.assigneeId ? memberById.get(o.assigneeId) ?? null : null}
-                  />
-                ))}
-                {more > 0 && <span className="more">+{more}</span>}
-              </span>
+      {/* View-mode toggle — Месяц / Неделя / Лента. Persisted in
+          preferences.calendarViewMode. */}
+      <Seg
+        items={[t('calendar.view.month'), t('calendar.view.week'), t('calendar.view.agenda')]}
+        active={
+          viewMode === 'week'
+            ? t('calendar.view.week')
+            : viewMode === 'agenda'
+              ? t('calendar.view.agenda')
+              : t('calendar.view.month')
+        }
+        onChange={(v) => {
+          if (v === t('calendar.view.week')) setViewMode('week');
+          else if (v === t('calendar.view.agenda')) setViewMode('agenda');
+          else setViewMode('month');
+        }}
+        full
+      />
+
+      {viewMode === 'month' && (
+        // Month grid — port of lines 66-91. Tap a cell to select it (and
+        // re-render the day list below); double-tap drills into Day.
+        <div className="wf-cal">
+          {WK.map((w) => (
+            <div key={w} className="wkd">
+              {w}
             </div>
-          );
-        })}
-      </div>
+          ))}
+          {cells.map((c, i) => {
+            const occ = byDate.get(c.iso) ?? [];
+            const overdue =
+              !c.dim && c.iso < todayIso && occ.some((o) => o.status === 'pending');
+            const isToday = sameMonthAsView && !c.dim && c.n === todayDay;
+            const isSel = !c.dim && c.iso === selectedIso && c.n === selectedDay;
+            const cls = ['cell'];
+            if (c.dim) cls.push('dim');
+            if (isToday) cls.push('today');
+            if (isSel) cls.push('selected');
+            if (overdue) cls.push('has-overdue');
+            const shown = occ.slice(0, 3);
+            const more = occ.length - shown.length;
+            return (
+              <div
+                key={i}
+                className={cls.join(' ')}
+                onClick={() => !c.dim && handleCellTap(c.iso)}
+                style={{ cursor: c.dim ? 'default' : 'pointer', userSelect: 'none' }}
+              >
+                <span className="n">{c.n}</span>
+                <span className="dots">
+                  {shown.map((o) => (
+                    <Dot
+                      key={o.id}
+                      m={o.assigneeId ? memberById.get(o.assigneeId) ?? null : null}
+                    />
+                  ))}
+                  {more > 0 && <span className="more">+{more}</span>}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      )}
 
       {/* Filter Seg — Все / Мои / <member>. Same shape as Day so the user
           can stay in their preferred view as they switch screens. Affects
@@ -506,7 +536,11 @@ export function Calendar({
         </span>
       </div>
 
-      {/* Day heading — port of lines 93-96 */}
+      {/* Month view: selected-day heading + list. Week / Agenda render
+          their own day-grouped sections below; everything from the
+          heading down through the done-collapsible belongs to month
+          mode only. */}
+      {viewMode === 'month' && (<>
       <div
         className="wf-spread"
         style={{ marginTop: 4, cursor: onOpenDay ? 'pointer' : undefined }}
@@ -516,7 +550,6 @@ export function Calendar({
         <span className="wf-hint">{daySub}</span>
       </div>
 
-      {/* Task cards — port of lines 98-129 */}
       {occurrencesQuery.isLoading && <span className="wf-hint">{t('common.loading')}</span>}
       {!occurrencesQuery.isLoading && occurrences.length === 0 && (
         // The FAB pill at the bottom already exposes "+ Добавить задачу", so
@@ -612,6 +645,40 @@ export function Calendar({
             onToggle={(occ) => uncompleteMut.mutate(occ.id)}
           />
         ))}
+      </>)}
+
+      {viewMode === 'week' && (
+        <WeekView
+          anchor={selectedIso || todayIso}
+          byDate={byDate}
+          memberById={memberById}
+          todayIso={todayIso}
+          onOpenTask={onOpenTask}
+          onOpenDay={onOpenDay}
+          onToggle={(occ) => {
+            if (occ.status === 'done') uncompleteMut.mutate(occ.id);
+            else completeMut.mutate(occ.id);
+          }}
+          isEn={isEn}
+          t={t}
+        />
+      )}
+
+      {viewMode === 'agenda' && (
+        <AgendaView
+          occurrences={occurrences}
+          memberById={memberById}
+          todayIso={todayIso}
+          onOpenTask={onOpenTask}
+          onOpenDay={onOpenDay}
+          onToggle={(occ) => {
+            if (occ.status === 'done') uncompleteMut.mutate(occ.id);
+            else completeMut.mutate(occ.id);
+          }}
+          isEn={isEn}
+          t={t}
+        />
+      )}
 
       {/* "Когда-нибудь" — floating + queued tasks without a scheduled date.
          Port of CalV1 :131-135. The dateless rollup respects the same
@@ -824,3 +891,195 @@ function pluralTaskI18n(n: number, isEn: boolean): string {
   );
 }
 
+
+/**
+ * Week view — 7 expanded day rows for the week containing the anchor
+ * date. Each row carries its own header (day name + ordinal) and the
+ * tasks for that day inline. Reuses `byDate` from the month-wide fetch
+ * so we don't reissue a query when toggling between Month and Week
+ * (both views look at the same range; Week just lays it out vertically).
+ */
+function WeekView({
+  anchor,
+  byDate,
+  memberById,
+  todayIso,
+  onOpenTask,
+  onOpenDay,
+  onToggle,
+  isEn,
+  t,
+}: {
+  anchor: string;
+  byDate: Map<string, OccurrenceDto[]>;
+  memberById: Map<string, Member>;
+  todayIso: string;
+  onOpenTask?: (occurrence: OccurrenceDto) => void;
+  onOpenDay?: (iso: string) => void;
+  onToggle: (o: OccurrenceDto) => void;
+  isEn: boolean;
+  t: ReturnType<typeof useT>;
+}) {
+  const days = useMemo(() => {
+    const d = new Date(`${anchor}T00:00:00`);
+    // ISO week: Monday-based. Roll back to Monday.
+    const dow = (d.getDay() + 6) % 7;
+    d.setDate(d.getDate() - dow);
+    const out: string[] = [];
+    for (let i = 0; i < 7; i++) {
+      const di = new Date(d);
+      di.setDate(d.getDate() + i);
+      out.push(toIso(di));
+    }
+    return out;
+  }, [anchor]);
+  return (
+    <div className="wf-col" style={{ gap: 8 }}>
+      {days.map((iso) => {
+        const occ = byDate.get(iso) ?? [];
+        const pending = occ.filter((o) => o.status !== 'done');
+        const done = occ.filter((o) => o.status === 'done');
+        return (
+          <div key={iso} className="wf-col" style={{ gap: 4 }}>
+            <div
+              className="wf-spread"
+              style={{ marginTop: 2, cursor: onOpenDay ? 'pointer' : undefined }}
+              onClick={() => onOpenDay?.(iso)}
+            >
+              <span className="wf-h3" style={iso === todayIso ? { color: 'var(--ink)' } : { color: 'var(--hint)' }}>
+                {fmtDayLabel(iso, todayIso, isEn)}
+              </span>
+              <span className="wf-tiny">
+                {occ.length
+                  ? `${occ.length} ${pluralTaskI18n(occ.length, isEn)}`
+                  : isEn
+                    ? 'no tasks'
+                    : 'нет задач'}
+              </span>
+            </div>
+            {pending.map((o) => (
+              <DayTaskCard
+                key={o.id}
+                o={o}
+                memberById={memberById}
+                selectedIso={iso}
+                todayIso={todayIso}
+                onOpenTask={onOpenTask}
+                onToggle={onToggle}
+              />
+            ))}
+            {done.map((o) => (
+              <DayTaskCard
+                key={o.id}
+                o={o}
+                memberById={memberById}
+                selectedIso={iso}
+                todayIso={todayIso}
+                onOpenTask={onOpenTask}
+                onToggle={onToggle}
+              />
+            ))}
+          </div>
+        );
+      })}
+      <span className="wf-tiny" style={{ display: 'block', textAlign: 'center', marginTop: 4 }}>
+        {isEn ? 'For more weeks, switch to Month' : 'Чтобы посмотреть другие недели — переключись на Месяц'}
+      </span>
+    </div>
+  );
+}
+
+/**
+ * Agenda view — flat forward-looking list. Skips empty days (unlike
+ * Week which always shows all 7) so the user sees only what's actually
+ * scheduled in the coming weeks. The list is derived from the month
+ * fetch + queue forecast; for days past the current month we just
+ * surface whatever the parent already loaded.
+ */
+function AgendaView({
+  occurrences,
+  memberById,
+  todayIso,
+  onOpenTask,
+  onOpenDay,
+  onToggle,
+  isEn,
+  t,
+}: {
+  occurrences: OccurrenceDto[];
+  memberById: Map<string, Member>;
+  todayIso: string;
+  onOpenTask?: (occurrence: OccurrenceDto) => void;
+  onOpenDay?: (iso: string) => void;
+  onToggle: (o: OccurrenceDto) => void;
+  isEn: boolean;
+  t: ReturnType<typeof useT>;
+}) {
+  const grouped = useMemo(() => {
+    const map = new Map<string, OccurrenceDto[]>();
+    for (const o of occurrences) {
+      // Agenda is forward-looking — anchor each row by its scheduled
+      // date (skip nulls and past days; "Когда-нибудь" lives in its own
+      // section, completed history lives on the History screen).
+      if (!o.scheduledDate || o.scheduledDate < todayIso) continue;
+      if (!map.has(o.scheduledDate)) map.set(o.scheduledDate, []);
+      map.get(o.scheduledDate)!.push(o);
+    }
+    return Array.from(map.entries())
+      .sort((a, b) => (a[0] < b[0] ? -1 : 1))
+      .map(([iso, items]) => ({ iso, items }));
+  }, [occurrences, todayIso]);
+
+  if (grouped.length === 0) {
+    return (
+      <div className="wf-card subtle" style={{ textAlign: 'center', padding: '18px 12px' }}>
+        <span className="wf-hint">{t('calendar.agenda.empty')}</span>
+      </div>
+    );
+  }
+  return (
+    <div className="wf-col" style={{ gap: 8 }}>
+      {grouped.map(({ iso, items }) => (
+        <div key={iso} className="wf-col" style={{ gap: 4 }}>
+          <div
+            className="wf-spread"
+            style={{ marginTop: 2, cursor: onOpenDay ? 'pointer' : undefined }}
+            onClick={() => onOpenDay?.(iso)}
+          >
+            <span className="wf-h3">{fmtDayLabel(iso, todayIso, isEn)}</span>
+            <span className="wf-tiny">
+              {items.length} {pluralTaskI18n(items.length, isEn)}
+            </span>
+          </div>
+          {items.map((o) => (
+            <DayTaskCard
+              key={o.id}
+              o={o}
+              memberById={memberById}
+              selectedIso={iso}
+              todayIso={todayIso}
+              onOpenTask={onOpenTask}
+              onToggle={onToggle}
+            />
+          ))}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** Human-friendly day label for Week + Agenda headers. "Сегодня" for
+ *  today, "Завтра" for tomorrow, otherwise "пн, 22 мая" / "Mon, May 22". */
+function fmtDayLabel(iso: string, todayIso: string, isEn: boolean): string {
+  if (iso === todayIso) return isEn ? 'Today' : 'Сегодня';
+  const tomorrow = new Date(`${todayIso}T00:00:00`);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  if (iso === toIso(tomorrow)) return isEn ? 'Tomorrow' : 'Завтра';
+  const d = new Date(`${iso}T00:00:00`);
+  const dowShort = isEn ? DOW_SHORT_EN : DOW_SHORT_RU;
+  const monthGen = isEn ? MONTH_GENITIVE_EN : MONTH_GENITIVE_RU;
+  const w = dowShort[d.getDay()];
+  const day = d.getDate();
+  const month = monthGen[d.getMonth()];
+  return isEn ? `${w}, ${month} ${day}` : `${w}, ${day} ${month}`;
+}
