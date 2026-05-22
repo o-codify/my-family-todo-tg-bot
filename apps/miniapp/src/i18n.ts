@@ -342,6 +342,7 @@ const DICT: Record<string, Record<Locale, string>> = {
   'shop.rewards.dream': { ru: 'мечта', en: 'dream' },
   'shop.rewards.remaining': { ru: 'осталось {n}', en: '{n} to go' },
   'shop.rewards.all': { ru: 'Все призы', en: 'All rewards' },
+  'shop.rewards.add': { ru: 'Добавить приз', en: 'Add reward' },
   'shop.rewards.take': { ru: 'Забрать', en: 'Claim' },
   'shop.rewards.points.short': { ru: 'очков', en: 'pts' },
   'shop.rewards.notEnough': { ru: 'Не хватает очков', en: 'Not enough points' },

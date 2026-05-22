@@ -20,6 +20,11 @@ type Props = {
  */
 const scrollCache = new Map<string, number>();
 
+/** How long after mount we keep retrying the scroll restoration as
+ *  content streams in via async queries. After this window we stop —
+ *  the user is most likely already interacting. */
+const RESTORE_WINDOW_MS = 1500;
+
 /**
  * Live equivalent of the prototype's Phone shell — the chrome (notch, status
  * bar, home indicator) comes from Telegram in production, so we just expose the
@@ -28,16 +33,76 @@ const scrollCache = new Map<string, number>();
 export function WfBody({ children, style, scrollKey }: Props) {
   const ref = useRef<HTMLDivElement | null>(null);
 
-  // Restore before paint so the user never sees the page flash at scroll 0.
   useLayoutEffect(() => {
     if (!scrollKey) return;
     const el = ref.current;
+    if (!el) return;
     const saved = scrollCache.get(scrollKey);
-    if (el && saved != null) el.scrollTop = saved;
+    if (saved == null || saved === 0) return;
+
+    // First attempt — sync, before paint. Works when the content was already
+    // laid out (cached queries, no async data).
+    el.scrollTop = saved;
+
+    // Async content keeps growing the page after mount (TanStack Query
+    // hydrates a few hundred ms later). If `saved` exceeds current
+    // maxScroll, the browser clamps to 0 and we lose the restoration.
+    // ResizeObserver retries each time the scrollHeight grows, up to a
+    // hard cap. Stop early if the user starts scrolling — we don't want
+    // to override their input.
+    let userInteracted = false;
+    let timedOut = false;
+    const startedAt = Date.now();
+
+    const tryRestore = () => {
+      if (userInteracted || timedOut) return;
+      const max = el.scrollHeight - el.clientHeight;
+      const target = Math.min(saved, max);
+      if (Math.abs(el.scrollTop - target) > 1) {
+        el.scrollTop = target;
+      }
+      // Once we hit the saved value exactly (content is tall enough), stop.
+      if (max >= saved) {
+        ro.disconnect();
+      }
+    };
+
+    const onUserScroll = (e: Event) => {
+      // Wheel / touchmove / keydown are real user input. Programmatic
+      // `el.scrollTop = ...` fires `scroll` but not `wheel`/`touchmove`.
+      void e;
+      userInteracted = true;
+      ro.disconnect();
+    };
+
+    const ro = new ResizeObserver(tryRestore);
+    ro.observe(el);
+    // Also observe the children container — `el` itself may not grow
+    // (it has flex), but its first child (the content) does.
+    if (el.firstElementChild) ro.observe(el.firstElementChild);
+
+    el.addEventListener('wheel', onUserScroll, { passive: true });
+    el.addEventListener('touchmove', onUserScroll, { passive: true });
+
+    const watchdog = setTimeout(() => {
+      timedOut = true;
+      ro.disconnect();
+    }, RESTORE_WINDOW_MS);
+
+    return () => {
+      ro.disconnect();
+      clearTimeout(watchdog);
+      el.removeEventListener('wheel', onUserScroll);
+      el.removeEventListener('touchmove', onUserScroll);
+      // Final save on unmount: at this point the user's last scroll position
+      // is the source of truth for next mount.
+      void startedAt;
+      scrollCache.set(scrollKey, el.scrollTop);
+    };
   }, [scrollKey]);
 
-  // Live update on each scroll event (cheap — single number assignment per
-  // frame) so navigating away after a fast tap captures the latest position.
+  // Update the cache on every scroll while mounted (cheap — one number
+  // per frame). Belt-and-braces alongside the unmount save.
   useEffect(() => {
     if (!scrollKey) return;
     const el = ref.current;
@@ -54,9 +119,6 @@ export function WfBody({ children, style, scrollKey }: Props) {
     return () => {
       el.removeEventListener('scroll', onScroll);
       if (frame) cancelAnimationFrame(frame);
-      // Final write on unmount in case the user scrolled then immediately
-      // hit a nav link before the next rAF tick fired.
-      scrollCache.set(scrollKey, el.scrollTop);
     };
   }, [scrollKey]);
 

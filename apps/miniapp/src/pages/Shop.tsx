@@ -10,6 +10,7 @@ import {
   type RewardDto,
 } from '../api';
 import { Av, Bar, Icon, Seg, Tag, WfBody, type Member } from '../design';
+import { BottomSheet } from '../components/BottomSheet';
 import { pluralize, useT, type TFn } from '../i18n';
 
 type Props = {
@@ -106,6 +107,23 @@ export function Shop({ me, family, onBack }: Props) {
     },
   });
 
+  // Reward creation. Server check `reward.manage` — Child role gets a
+  // 403, but rather than hide the button entirely we let the backend
+  // decide and surface its error in the sheet. Most calls are from
+  // Owner/Adult, this keeps the UX discoverable.
+  const createRewardMut = useMutation({
+    mutationFn: (payload: {
+      name: string;
+      emoji?: string | null;
+      description?: string | null;
+      costPoints: number;
+    }) => api.createReward(family.id, payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['rewards', family.id] });
+    },
+  });
+  const [createOpen, setCreateOpen] = useState(false);
+
   return (
     <WfBody>
       <div className="wf-row wf-gap-8">
@@ -162,9 +180,30 @@ export function Shop({ me, family, onBack }: Props) {
           myPts={myPts}
           loading={rewardsQuery.isLoading}
           onRedeem={(id) => redeemMut.mutate(id)}
+          onAdd={() => setCreateOpen(true)}
           error={redeemMut.error as ApiError | null}
           isPending={redeemMut.isPending}
           t={t}
+        />
+      )}
+
+      {createOpen && (
+        <CreateRewardSheet
+          t={t}
+          isPending={createRewardMut.isPending}
+          error={createRewardMut.error as ApiError | null}
+          onClose={() => {
+            createRewardMut.reset();
+            setCreateOpen(false);
+          }}
+          onSubmit={(payload) =>
+            createRewardMut.mutate(payload, {
+              onSuccess: () => {
+                createRewardMut.reset();
+                setCreateOpen(false);
+              },
+            })
+          }
         />
       )}
     </WfBody>
@@ -605,6 +644,7 @@ function ShopList({
   myPts,
   loading,
   onRedeem,
+  onAdd,
   error,
   isPending,
   t,
@@ -613,6 +653,7 @@ function ShopList({
   myPts: number;
   loading: boolean;
   onRedeem: (id: string) => void;
+  onAdd: () => void;
   error: ApiError | null;
   isPending: boolean;
   t: TFn;
@@ -628,6 +669,13 @@ function ShopList({
         <span className="wf-hint" style={{ display: 'block', marginTop: 4 }}>
           {t('shop.rewards.empty.hint')}
         </span>
+        <button
+          className="wf-btn primary"
+          onClick={onAdd}
+          style={{ marginTop: 12, cursor: 'pointer' }}
+        >
+          + {t('shop.rewards.add')}
+        </button>
       </div>
     );
   }
@@ -683,7 +731,17 @@ function ShopList({
         </div>
       )}
 
-      <span className="wf-hint">{t('shop.rewards.all')}</span>
+      <div className="wf-spread">
+        <span className="wf-hint">{t('shop.rewards.all')}</span>
+        <button
+          type="button"
+          onClick={onAdd}
+          className="wf-btn"
+          style={{ padding: '4px 10px', fontSize: 13, cursor: 'pointer' }}
+        >
+          + {t('shop.rewards.add')}
+        </button>
+      </div>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
         {sorted.map((r) => {
           const can = myPts >= r.costPoints;
@@ -817,4 +875,215 @@ function pluralDaysI18n(n: number, isEn: boolean): string {
     ['day', 'days'],
   );
 }
+
+/* ─── Create-reward bottom sheet ─────────────────────────
+ * Lives here (rather than its own page) because reward creation is a
+ * single-form action — name + emoji + cost. The backend gates this on
+ * `reward.manage` permission; for users without it we still show the
+ * button and surface the 403 inside the sheet as a readable error. */
+function CreateRewardSheet({
+  t,
+  isPending,
+  error,
+  onClose,
+  onSubmit,
+}: {
+  t: TFn;
+  isPending: boolean;
+  error: ApiError | null;
+  onClose: () => void;
+  onSubmit: (payload: {
+    name: string;
+    emoji?: string | null;
+    description?: string | null;
+    costPoints: number;
+  }) => void;
+}) {
+  const [name, setName] = useState('');
+  const [emoji, setEmoji] = useState('🎁');
+  const [description, setDescription] = useState('');
+  const [costPoints, setCostPoints] = useState('50');
+  const isEn = t.locale === 'en';
+  const trimmedName = name.trim();
+  const cost = Number.parseInt(costPoints, 10);
+  const canSave =
+    trimmedName.length > 0 && Number.isFinite(cost) && cost > 0 && !isPending;
+
+  return (
+    <BottomSheet onClose={onClose} zIndex={12}>
+      {({ close }) => (
+        <>
+          <div className="handle" />
+          <div className="wf-row wf-gap-8" style={{ marginBottom: 8 }}>
+            <span className="wf-h2" style={{ flex: 1 }}>
+              {isEn ? 'New reward' : 'Новый приз'}
+            </span>
+            <button
+              onClick={() => close()}
+              aria-label={t('common.close')}
+              style={{
+                background: 'transparent',
+                border: 'none',
+                cursor: 'pointer',
+                padding: 0,
+                color: 'var(--ink)',
+              }}
+            >
+              <Icon name="x" />
+            </button>
+          </div>
+
+          {/* Name */}
+          <span className="wf-tiny" style={{ display: 'block', marginBottom: 4 }}>
+            {isEn ? 'Name' : 'Название'}
+          </span>
+          <div className="wf-box" style={{ padding: '8px 10px', marginBottom: 10 }}>
+            <input
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              maxLength={60}
+              autoFocus
+              placeholder={isEn ? 'e.g. Movie night' : 'например, поход в кино'}
+              className="wf-label"
+              style={{
+                width: '100%',
+                border: 'none',
+                background: 'transparent',
+                outline: 'none',
+                color: 'var(--ink)',
+                font: 'inherit',
+              }}
+            />
+          </div>
+
+          {/* Emoji + cost row */}
+          <div className="wf-row wf-gap-8" style={{ marginBottom: 10 }}>
+            <div className="wf-col wf-gap-2" style={{ flex: 'none', width: 84 }}>
+              <span className="wf-tiny">{isEn ? 'Emoji' : 'Эмодзи'}</span>
+              <div className="wf-box" style={{ padding: '8px 10px', textAlign: 'center' }}>
+                <input
+                  type="text"
+                  value={emoji}
+                  onChange={(e) => setEmoji(e.target.value.slice(0, 4))}
+                  maxLength={4}
+                  className="wf-h2"
+                  style={{
+                    width: '100%',
+                    border: 'none',
+                    background: 'transparent',
+                    outline: 'none',
+                    textAlign: 'center',
+                    color: 'var(--ink)',
+                    font: 'inherit',
+                  }}
+                />
+              </div>
+            </div>
+            <div className="wf-col wf-gap-2" style={{ flex: 1 }}>
+              <span className="wf-tiny">{isEn ? 'Cost (points)' : 'Стоимость (очков)'}</span>
+              <div className="wf-box" style={{ padding: '8px 10px' }}>
+                <input
+                  type="number"
+                  inputMode="numeric"
+                  min={1}
+                  step={1}
+                  value={costPoints}
+                  onChange={(e) => setCostPoints(e.target.value)}
+                  className="wf-label"
+                  style={{
+                    width: '100%',
+                    border: 'none',
+                    background: 'transparent',
+                    outline: 'none',
+                    color: 'var(--ink)',
+                    font: 'inherit',
+                  }}
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Description */}
+          <span className="wf-tiny" style={{ display: 'block', marginBottom: 4 }}>
+            {isEn ? 'Description (optional)' : 'Описание (необязательно)'}
+          </span>
+          <div className="wf-box" style={{ padding: '8px 10px', marginBottom: 10 }}>
+            <textarea
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              rows={2}
+              maxLength={240}
+              placeholder={isEn ? 'A few words about the prize…' : 'Пара слов о призе…'}
+              className="wf-label"
+              style={{
+                width: '100%',
+                border: 'none',
+                background: 'transparent',
+                outline: 'none',
+                resize: 'vertical',
+                color: 'var(--ink)',
+                font: 'inherit',
+              }}
+            />
+          </div>
+
+          {error && (
+            <div
+              className="wf-card"
+              style={{
+                borderColor: 'var(--danger)',
+                color: 'var(--danger)',
+                marginBottom: 10,
+              }}
+            >
+              {describeRewardError(error, isEn)}
+            </div>
+          )}
+
+          <div className="wf-row wf-gap-8">
+            <button
+              className="wf-btn"
+              onClick={() => close()}
+              style={{ cursor: 'pointer' }}
+            >
+              {t('common.cancel')}
+            </button>
+            <button
+              className="wf-btn primary"
+              disabled={!canSave}
+              onClick={() => {
+                if (!canSave) return;
+                onSubmit({
+                  name: trimmedName,
+                  emoji: emoji.trim() || null,
+                  description: description.trim() || null,
+                  costPoints: cost,
+                });
+              }}
+              style={{
+                flex: 1,
+                cursor: canSave ? 'pointer' : 'not-allowed',
+                opacity: canSave ? 1 : 0.5,
+              }}
+            >
+              {isPending ? '…' : t('common.save')}
+            </button>
+          </div>
+        </>
+      )}
+    </BottomSheet>
+  );
+}
+
+function describeRewardError(err: ApiError, isEn: boolean): string {
+  const body = err.body as { error?: string; permission?: string } | null;
+  if (body?.error === 'forbidden') {
+    return isEn
+      ? 'Your role can’t manage rewards. Ask an adult.'
+      : 'Твоя роль не может создавать призы. Попроси взрослого.';
+  }
+  return err.message;
+}
+
 

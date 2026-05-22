@@ -169,7 +169,17 @@ export function QueueDetail({ me, family, taskId, onBack }: Props) {
         <div style={{ margin: '8px 0' }}>
           <Av m={current} size="xl" />
         </div>
-        <div className="wf-h2">{current?.name ?? '—'}</div>
+        <div
+          className="wf-h2"
+          style={{
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+          }}
+          title={current?.name}
+        >
+          {current?.name ?? '—'}
+        </div>
         <span className="wf-hint">{completionsByCurrentSince}</span>
         {/* Action buttons only when the queue is on the current user.
             Other family members see the row read-only — they can't
@@ -238,7 +248,17 @@ export function QueueDetail({ me, family, taskId, onBack }: Props) {
             return (
               <div key={id} className="wf-row wf-gap-6">
                 <Av m={m ?? null} size="xs" />
-                <span className="wf-tiny" style={{ width: 36 }}>
+                <span
+                  className="wf-tiny"
+                  style={{
+                    flex: '0 1 35%',
+                    minWidth: 0,
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                  }}
+                  title={m?.name}
+                >
                   {m?.name ?? '—'}
                 </span>
                 <Bar pct={(v / max) * 100} color={m?.color} />

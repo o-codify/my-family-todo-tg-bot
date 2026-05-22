@@ -160,9 +160,19 @@ function QCard({ name, current, next, count, balance, memberById, onClick }: QCa
       <div className="wf-row" style={{ marginTop: 8, alignItems: 'center' }}>
         <div className="wf-row wf-gap-8" style={{ flex: 1, minWidth: 0 }}>
           <Av m={current} size="lg" />
-          <div className="wf-col wf-gap-2" style={{ minWidth: 0 }}>
+          <div className="wf-col wf-gap-2" style={{ minWidth: 0, flex: 1 }}>
             <span className="wf-tiny">{t('queues.now')}</span>
-            <span className="wf-label">{current?.name ?? t('queues.nobody')}</span>
+            <span
+              className="wf-label"
+              style={{
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+              }}
+              title={current?.name}
+            >
+              {current?.name ?? t('queues.nobody')}
+            </span>
           </div>
         </div>
         <span className="wf-arrow" style={{ padding: '0 10px' }}>
@@ -170,9 +180,19 @@ function QCard({ name, current, next, count, balance, memberById, onClick }: QCa
         </span>
         <div className="wf-row wf-gap-8" style={{ flex: 1, minWidth: 0 }}>
           <Av m={next} size="lg" />
-          <div className="wf-col wf-gap-2" style={{ minWidth: 0 }}>
+          <div className="wf-col wf-gap-2" style={{ minWidth: 0, flex: 1 }}>
             <span className="wf-tiny">{t('queues.next')}</span>
-            <span className="wf-label">{next?.name ?? '—'}</span>
+            <span
+              className="wf-label"
+              style={{
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+              }}
+              title={next?.name}
+            >
+              {next?.name ?? '—'}
+            </span>
           </div>
         </div>
       </div>
@@ -186,7 +206,19 @@ function QCard({ name, current, next, count, balance, memberById, onClick }: QCa
           return (
             <div key={id} className="wf-row wf-gap-6" style={{ opacity: away ? 0.4 : 1 }}>
               <Av m={m ?? null} size="xs" />
-              <span className="wf-tiny" style={{ width: 36 }}>
+              {/* Was a fixed 36px slot that visually clipped long usernames.
+                  Now flex-shared with a hard cap so the bar still has room. */}
+              <span
+                className="wf-tiny"
+                style={{
+                  flex: '0 1 35%',
+                  minWidth: 0,
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                }}
+                title={m?.name}
+              >
                 {m?.name ?? '—'}
               </span>
               <span className="wf-bar" style={{ flex: 1 }}>
