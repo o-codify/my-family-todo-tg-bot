@@ -18,6 +18,7 @@ import { publishFamilyEvent } from '../realtime/pubsub';
 import { decideAfterFloatingCompletion, isFloatingAvailable } from './cooldown';
 import { ensureQueuedOccurrence } from './queue-tasks';
 import { awardPointsForCompletion } from './rewards';
+import { evaluateBadgesForUser } from './badges';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -175,6 +176,17 @@ export async function completeOccurrence(input: {
   void cancelReminderForOccurrence(occurrence.id).catch((err) =>
     logger.warn({ err, occurrenceId: occurrence.id }, 'cancel reminder on complete failed'),
   );
+  // Re-evaluate badges inline — completion may unlock one. We wait
+  // before returning so the response carries any freshly-earned slugs
+  // (and integration tests can rely on badges being settled before
+  // they tear down test data — async eval otherwise races TRUNCATE
+  // CASCADE with FK violations and lock deadlocks). The catch makes
+  // a badge-aggregation hiccup a logged warning, not a failed request.
+  try {
+    await evaluateBadgesForUser({ familyId: occurrence.task.familyId, userId });
+  } catch (err) {
+    logger.warn({ err, userId, familyId: occurrence.task.familyId }, 'evaluateBadges failed');
+  }
   void publishFamilyEvent(occurrence.task.familyId, { kind: 'invalidate', scope: 'occurrences' });
 
   return updated!;
@@ -371,6 +383,20 @@ export async function completeFloatingTask(input: {
     }
 
     return completedRow;
+  }).then(async (row) => {
+    // Re-evaluate badges after the tx commits — completion may unlock one.
+    // Same inline-await pattern as the regular completion path; keeps
+    // tests deterministic and a follow-up read after complete includes
+    // freshly-awarded slugs.
+    try {
+      await evaluateBadgesForUser({ familyId: task.familyId, userId });
+    } catch (err) {
+      logger.warn(
+        { err, userId, familyId: task.familyId },
+        'evaluateBadges (floating) failed',
+      );
+    }
+    return row;
   });
 }
 

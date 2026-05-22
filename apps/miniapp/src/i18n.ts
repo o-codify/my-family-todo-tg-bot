@@ -103,6 +103,11 @@ const DICT: Record<string, Record<Locale, string>> = {
   'create.time.clear': { ru: 'Убрать', en: 'Clear' },
   'common.deleted': { ru: 'Удалено', en: 'Deleted' },
   'common.restoreFailed': { ru: 'Не удалось восстановить', en: 'Could not restore' },
+  'badges.title': { ru: 'Бейджи', en: 'Badges' },
+  'badges.empty': {
+    ru: 'Пока ни одного — продолжай в том же духе',
+    en: 'None yet — keep going',
+  },
   'task.action.snooze': { ru: 'Отложить', en: 'Snooze' },
   'task.snooze.tomorrow': { ru: 'Завтра', en: 'Tomorrow' },
   'task.snooze.dayAfter': { ru: 'Послезавтра', en: 'Day after' },

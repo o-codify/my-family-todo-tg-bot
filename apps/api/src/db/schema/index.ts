@@ -10,3 +10,4 @@ export * from './transfers';
 export * from './photos';
 export * from './notifications';
 export * from './tags';
+export * from './badges';

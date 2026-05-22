@@ -214,6 +214,26 @@ export type TagDto = {
   createdAt: string;
 };
 
+/** One earned badge as the server hands it to the client. The server has
+ *  already localized name/description for the requesting user — the
+ *  miniapp just renders. */
+export type BadgeDto = {
+  slug: string;
+  name: string;
+  description: string;
+  icon: string;
+  earnedAt: string;
+};
+
+/** Catalog entry — same shape as BadgeDto minus the per-user
+ *  `earnedAt`. Used by the "all possible badges" picker. */
+export type BadgeCatalogEntryDto = {
+  slug: string;
+  name: string;
+  description: string;
+  icon: string;
+};
+
 export type CreateTaskPayload = {
   title: string;
   type: TaskType;
@@ -376,6 +396,15 @@ export const api = {
 
   listTags: (familyId: string) =>
     request<{ tags: TagDto[] }>(`/api/v1/families/${familyId}/tags`),
+
+  listMyBadges: (familyId: string) =>
+    request<{ badges: BadgeDto[] }>(`/api/v1/families/${familyId}/badges/mine`),
+  listMemberBadges: (familyId: string, userId: string) =>
+    request<{ badges: BadgeDto[] }>(`/api/v1/families/${familyId}/badges/${userId}`),
+  listBadgeCatalog: (familyId: string) =>
+    request<{ badges: BadgeCatalogEntryDto[] }>(
+      `/api/v1/families/${familyId}/badges/catalog`,
+    ),
   createTag: (familyId: string, payload: { name: string; color?: string | null }) =>
     request<{ tag: TagDto }>(`/api/v1/families/${familyId}/tags`, {
       method: 'POST',

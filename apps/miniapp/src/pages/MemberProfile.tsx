@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { api, type FamilySummary, type MeResponse, type PhotoDto } from '../api';
 import { Av, Icon, Tag, WfBody } from '../design';
+import { BadgeGrid } from '../components/BadgeGrid';
 import { PageHeader } from '../components/PageHeader';
 import { pluralize, useT, type Locale } from '../i18n';
 
@@ -55,6 +56,12 @@ export function MemberProfile({ me, family, userId, onBack }: Props) {
     queryFn: () => api.listFamilyPhotos(family.id, { userId, limit: 60 }),
   });
   const photos: PhotoDto[] = photosQuery.data?.photos ?? [];
+
+  const badgesQuery = useQuery({
+    queryKey: ['badges', family.id, userId],
+    queryFn: () => api.listMemberBadges(family.id, userId),
+  });
+  const badges = badgesQuery.data?.badges ?? [];
 
   return (
     <WfBody onBack={onBack}>
@@ -136,6 +143,17 @@ export function MemberProfile({ me, family, userId, onBack }: Props) {
               </div>
             </div>
           </div>
+
+          {/* Earned badges — same grid component as MyProfile so both
+              pages read the same. Hidden when the member has none. */}
+          {badges.length > 0 && (
+            <div className="wf-card">
+              <span className="wf-tiny">{t('badges.title')}</span>
+              <div style={{ marginTop: 8 }}>
+                <BadgeGrid badges={badges} />
+              </div>
+            </div>
+          )}
 
           {/* Photo gallery — newest-first grid of fotó-reports this member
               attached to completions. Tap → fresh Telegram CDN URL, opened

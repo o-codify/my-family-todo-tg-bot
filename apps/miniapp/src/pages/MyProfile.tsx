@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, type FamilySummary, type MeResponse } from '../api';
 import { Av, Icon, Tag, WfBody } from '../design';
+import { BadgeGrid } from '../components/BadgeGrid';
 import { BottomSheet } from '../components/BottomSheet';
 import { ListRow } from '../components/ListRow';
 import { PageHeader } from '../components/PageHeader';
@@ -101,6 +102,12 @@ export function MyProfile({ me, family, onBack, onOpenDrawer }: Props) {
   });
   const myStreak = statsQuery.data?.byMember.find((b) => b.userId === me.id)?.streak ?? null;
 
+  const badgesQuery = useQuery({
+    queryKey: ['badges', family.id, 'mine'],
+    queryFn: () => api.listMyBadges(family.id),
+  });
+  const badges = badgesQuery.data?.badges ?? [];
+
   return (
     <WfBody onBack={onBack}>
       <PageHeader
@@ -140,6 +147,18 @@ export function MyProfile({ me, family, onBack, onOpenDrawer }: Props) {
           </div>
         )}
       </div>
+
+      {/* Earned badges — tiles with icon + name. Hidden entirely if the
+          user has no badges yet (the empty state in BadgeGrid is for the
+          "you've never had one" case; here the section just disappears). */}
+      {badges.length > 0 && (
+        <div className="wf-card">
+          <span className="wf-tiny">{t('badges.title')}</span>
+          <div style={{ marginTop: 8 }}>
+            <BadgeGrid badges={badges} />
+          </div>
+        </div>
+      )}
 
       {/* Color */}
       <div className="wf-card">
