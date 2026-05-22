@@ -214,6 +214,8 @@ export function Shop({ me, family, onOpenDrawer, onBack }: Props) {
           myRedemptions={myRedemptions}
           rewardById={rewardById}
           memberById={memberById}
+          occurrences={occurrences}
+          myId={me.id}
           t={t}
         />
       )}
@@ -681,6 +683,8 @@ function ShopList({
   myRedemptions,
   rewardById,
   memberById,
+  occurrences,
+  myId,
   t,
 }: {
   rewards: RewardDto[];
@@ -693,6 +697,10 @@ function ShopList({
   myRedemptions: RedemptionDto[];
   rewardById: Map<string, RewardDto>;
   memberById: Map<string, Member>;
+  /** Family-wide occurrences (already-fetched range covers ~14 days back).
+   *  Used to estimate "~N tasks until this reward". */
+  occurrences: OccurrenceDto[];
+  myId: string;
   t: TFn;
 }) {
   void memberById;
@@ -718,11 +726,40 @@ function ShopList({
     );
   }
 
-  // Sort: affordable first, then by cost
+  // Average points-per-task over the last 14 days of MY completions —
+  // drives the "~N tasks until this reward" estimate. We skip zero-point
+  // completions (giveaway tasks) so the divisor reflects effort, not raw
+  // count. Falls back to 1 when there's no recent history yet — the
+  // estimate is best-effort, not precise math.
+  const cutoffMs = Date.now() - 14 * 86_400_000;
+  const myRecentPoints = occurrences.filter(
+    (o) =>
+      o.status === 'done' &&
+      o.completedBy === myId &&
+      o.completedAt &&
+      new Date(o.completedAt).getTime() >= cutoffMs &&
+      o.pointsAwarded > 0,
+  );
+  const totalPts = myRecentPoints.reduce((s, o) => s + o.pointsAwarded, 0);
+  const avgPointsPerTask =
+    myRecentPoints.length > 0 ? Math.max(1, totalPts / myRecentPoints.length) : 1;
+  const tasksUntil = (reward: RewardDto) =>
+    Math.max(0, Math.ceil((reward.costPoints - myPts) / avgPointsPerTask));
+
+  // Two sort modes, the user picks via a small Seg below the headline:
+  //   - "cost": affordable first, then ascending price (default — same as before)
+  //   - "closest": cheapest gap first, so the "next achievable" reward
+  //     sits at the top. Affordable items still come first since their
+  //     gap is 0.
+  type Sort = 'cost' | 'closest';
+  const [sortMode, setSortMode] = useState<Sort>('cost');
   const sorted = [...rewards].sort((a, b) => {
     const aCan = myPts >= a.costPoints ? 0 : 1;
     const bCan = myPts >= b.costPoints ? 0 : 1;
     if (aCan !== bCan) return aCan - bCan;
+    if (sortMode === 'closest') {
+      return Math.max(0, a.costPoints - myPts) - Math.max(0, b.costPoints - myPts);
+    }
     return a.costPoints - b.costPoints;
   });
 
@@ -763,6 +800,8 @@ function ShopList({
               </div>
               <span className="wf-hint" style={{ fontSize: 11, marginTop: 4 }}>
                 {t('shop.rewards.remaining', { n: headline.costPoints - myPts })}
+                {' · ~'}
+                {tasksUntil(headline)} {t('shop.rewards.tasksUntil')}
               </span>
             </div>
           </div>
@@ -780,6 +819,16 @@ function ShopList({
           + {t('shop.rewards.add')}
         </button>
       </div>
+      {/* Sort mode toggle — cheapest first vs closest-to-goal. Affordable
+          items stay on top regardless; the toggle only reorders the
+          locked ones. */}
+      <Seg
+        items={[t('shop.sort.cost'), t('shop.sort.closest')]}
+        active={sortMode === 'closest' ? t('shop.sort.closest') : t('shop.sort.cost')}
+        onChange={(v) =>
+          setSortMode(v === t('shop.sort.closest') ? 'closest' : 'cost')
+        }
+      />
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
         {sorted.map((r) => {
           const can = myPts >= r.costPoints;
@@ -812,6 +861,14 @@ function ShopList({
                   {can ? (isPending ? '…' : t('shop.rewards.take')) : `−${r.costPoints - myPts}`}
                 </button>
               </div>
+              {!can && (
+                // "до приза: ~N задач" — back-of-envelope estimate from
+                // the user's last-14-day average. We round up so a non-
+                // zero gap never reads as "0 tasks left".
+                <span className="wf-tiny" style={{ display: 'block', marginTop: 4, color: 'var(--hint)' }}>
+                  ~{tasksUntil(r)} {t('shop.rewards.tasksUntil')}
+                </span>
+              )}
             </div>
           );
         })}
