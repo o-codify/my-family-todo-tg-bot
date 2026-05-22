@@ -608,12 +608,22 @@ export function Calendar({
         ))}
 
       {/* "Когда-нибудь" — floating + queued tasks without a scheduled date.
-         Port of CalV1 :131-135. */}
+         Port of CalV1 :131-135. The dateless rollup respects the same
+         member filter as the day list: pass the user id when the active
+         filter is "Мои" or a specific member; pass `undefined` for "Все"
+         so all floating tasks show. */}
       <FloatingSection
         tasks={tasksQuery.data?.tasks ?? []}
         occurrences={occurrences}
         memberById={memberById}
         onOpen={(o) => onOpenTask?.(o)}
+        filterUserId={
+          filter === ALL_LBL
+            ? undefined
+            : filter === MINE_LBL
+              ? me.id
+              : members.find((m) => m.name === filter)?.id
+        }
       />
 
       {/* Add-task pill — centered above the bottom-nav. */}

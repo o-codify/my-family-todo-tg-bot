@@ -15,11 +15,18 @@ export function FloatingSection({
   occurrences,
   memberById,
   onOpen,
+  filterUserId,
 }: {
   tasks: TaskDto[];
   occurrences: OccurrenceDto[];
   memberById: Map<string, Member>;
   onOpen: (occurrence: OccurrenceDto) => void;
+  /** When set, only floating tasks assigned to this user are shown.
+   *  `undefined` = no member filter active (the page is in "Все" mode),
+   *  show everything. Tasks with `assigneeId === null` (unassigned —
+   *  anyone in the family can grab them) are intentionally hidden under
+   *  a per-member filter: they don't belong to that person yet. */
+  filterUserId?: string | null;
 }) {
   const t = useT();
   const [open, setOpen] = useState(false);
@@ -36,6 +43,9 @@ export function FloatingSection({
     if (tk.type !== 'floating' || tk.archivedAt) return false;
     const pending = pendingByTask.get(tk.id);
     if (pending?.availableAt && new Date(pending.availableAt).getTime() > now) {
+      return false;
+    }
+    if (filterUserId != null && tk.assigneeId !== filterUserId) {
       return false;
     }
     return true;

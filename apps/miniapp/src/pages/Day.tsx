@@ -350,13 +350,22 @@ export function Day({ me, family, iso, onBack, onOpenTask, onCreateTask }: Props
           />
         ))}
 
-      {/* "Когда-нибудь" — same collapsible block as on Calendar, so the
-          user can pick a dateless floating task without leaving Day. */}
+      {/* "Когда-нибудь" — same collapsible block as on Calendar. Mirror
+          the day's member filter into the rollup: under "Мои" / "<name>"
+          only show floating tasks assigned to that person — they don't
+          belong to anyone else's filter. */}
       <FloatingSection
         tasks={tasks}
         occurrences={rawOccurrences}
         memberById={memberById}
         onOpen={(o) => onOpenTask(o)}
+        filterUserId={
+          filter === ALL_LBL
+            ? undefined
+            : filter === MINE_LBL
+              ? me.id
+              : members.find((m) => m.name === filter)?.id
+        }
       />
 
       <div className="wf-fab" onClick={onCreateTask} role="button" aria-label={t('day.fab')}>
