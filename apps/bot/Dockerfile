@@ -31,12 +31,15 @@ RUN corepack enable
 WORKDIR /app
 ENV NODE_ENV=production
 
+# pnpm workspaces keep deps in per-package node_modules (symlinks into the
+# shared ./node_modules/.pnpm/<pkg>@<ver> store). Copying just /app/node_modules
+# misses apps/bot/node_modules where grammy & friends actually live as
+# symlinks. Copy the whole app + the shared store so resolution works.
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/pnpm-workspace.yaml ./pnpm-workspace.yaml
 COPY --from=build /app/package.json ./package.json
 COPY --from=build /app/packages ./packages
-COPY --from=build /app/apps/bot/package.json ./apps/bot/package.json
-COPY --from=build /app/apps/bot/dist ./apps/bot/dist
+COPY --from=build /app/apps/bot ./apps/bot
 
 # Optional — only used in webhook mode. Long-polling doesn't bind a port.
 EXPOSE 3001

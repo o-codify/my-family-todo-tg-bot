@@ -41,16 +41,15 @@ RUN corepack enable
 WORKDIR /app
 ENV NODE_ENV=production
 
-# Copy the workspace skeleton + all node_modules. Then drop dev deps to
-# shrink the layer. We need workspaces resolved for the runtime imports
-# (`@family-todo/shared` etc.) to work, hence the full workspace structure.
+# pnpm workspaces keep deps in per-package node_modules (symlinks into the
+# shared ./node_modules/.pnpm/<pkg>@<ver> store). Copying just /app/node_modules
+# misses apps/api/node_modules where hono / drizzle / etc. live as symlinks.
+# Copy the whole app + the shared store so Node's resolver finds everything.
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/pnpm-workspace.yaml ./pnpm-workspace.yaml
 COPY --from=build /app/package.json ./package.json
 COPY --from=build /app/packages ./packages
-COPY --from=build /app/apps/api/package.json ./apps/api/package.json
-COPY --from=build /app/apps/api/dist ./apps/api/dist
-COPY --from=build /app/apps/api/src/db/migrations ./apps/api/src/db/migrations
+COPY --from=build /app/apps/api ./apps/api
 
 EXPOSE 3000
 CMD ["node", "apps/api/dist/index.js"]
