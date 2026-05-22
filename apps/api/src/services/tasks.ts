@@ -107,6 +107,19 @@ export async function updateTask(input: {
     if (scheduleChanged) {
       await clearFutureOccurrences(u!.id, tx);
       await syncOccurrencesForTask(u!, tx);
+      // syncOccurrencesForTask is a no-op for queued tasks (they're
+      // date-less and only ever have one pending row at a time). After
+      // clearing future occurrences we'd be left with no pending row at
+      // all — which made the task vanish from Calendar/Day. Mirror the
+      // createTask path: spawn the next pending turn explicitly.
+      if (u!.type === 'queued') {
+        await ensureQueuedOccurrence(u!, tx);
+      }
+    } else if (data.queueUserIds !== undefined && u!.type === 'queued') {
+      // Edited the queue roster without changing the schedule. The
+      // existing pending row may now be assigned to someone who's no
+      // longer in the queue — recompute the assignee.
+      await ensureQueuedOccurrence(u!, tx);
     }
     return u!;
   });
