@@ -10,6 +10,7 @@ import {
 import { publishFamilyEvent } from '../realtime/pubsub';
 import { clearFutureOccurrences, inputToSubtaskTemplate, syncOccurrencesForTask } from './occurrences';
 import { ensureQueuedOccurrence } from './queue-tasks';
+import { setTaskTags } from './tags';
 
 export async function listFamilyTasks(familyId: string): Promise<TaskRow[]> {
   return db
@@ -59,6 +60,14 @@ export async function createTask(input: {
     }
     return t!;
   });
+
+  // Attach tags after the task insert tx — runs in its own tx so a tag
+  // miss (e.g. caller passed a stale id) doesn't roll back the task.
+  // Missing/stranger tag ids are silently dropped by the FK check on
+  // the join row, which is the right behaviour for a soft "add label" UX.
+  if (data.tagIds && data.tagIds.length > 0) {
+    await setTaskTags(task.id, data.tagIds);
+  }
 
   // Schedule reminders after the tx commits — the BullMQ producer holds a
   // separate Redis connection, and we don't want a Redis hiccup to roll
@@ -123,6 +132,13 @@ export async function updateTask(input: {
     }
     return u!;
   });
+
+  // Tag changes are independent of schedule/assignee — rewrite the
+  // join rows only when the caller actually passed `tagIds`. Undefined
+  // means "leave them alone"; an empty array means "clear all".
+  if (data.tagIds !== undefined) {
+    await setTaskTags(updated.id, data.tagIds);
+  }
 
   if (remindersAffected) {
     void (async () => {
@@ -198,7 +214,7 @@ export async function archiveTask(taskId: string): Promise<void> {
   }
 }
 
-export function serializeTask(row: TaskRow) {
+export function serializeTask(row: TaskRow, tagIds: string[] = []) {
   return {
     id: row.id,
     familyId: row.familyId,
@@ -216,6 +232,7 @@ export function serializeTask(row: TaskRow) {
     subtasksTemplate: row.subtasksTemplate,
     createdBy: row.createdBy,
     archivedAt: row.archivedAt?.toISOString() ?? null,
+    tagIds,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
   };

@@ -251,9 +251,11 @@ export function Calendar({
   const calFilters = (prefs.calendarFilters ?? {}) as {
     onlyPending?: boolean;
     onlyWithPhoto?: boolean;
+    tagIds?: string[];
   };
   const onlyPending = calFilters.onlyPending === true;
   const onlyWithPhoto = calFilters.onlyWithPhoto === true;
+  const filterTagIds = Array.isArray(calFilters.tagIds) ? calFilters.tagIds : [];
   const toggleFilter = (key: 'onlyPending' | 'onlyWithPhoto') => {
     setPrefs({
       calendarFilters: {
@@ -262,6 +264,20 @@ export function Calendar({
       },
     });
   };
+  const toggleTagFilter = (tagId: string) => {
+    const next = filterTagIds.includes(tagId)
+      ? filterTagIds.filter((x) => x !== tagId)
+      : [...filterTagIds, tagId];
+    setPrefs({ calendarFilters: { ...calFilters, tagIds: next } });
+  };
+  // Family's tag dictionary — used by the filter chip row + lookup for
+  // task → tag membership during filtering.
+  const tagsQuery = useQuery({
+    queryKey: ['tags', family.id],
+    queryFn: () => api.listTags(family.id),
+  });
+  const allTags = tagsQuery.data?.tags ?? [];
+  const taskById = useMemo(() => new Map(tasks.map((tk) => [tk.id, tk])), [tasks]);
 
   // View mode: month grid (default), week expanded list, or 30-day agenda.
   // Persisted in preferences so refresh keeps the user's pick. Agenda is
@@ -296,6 +312,18 @@ export function Calendar({
     if (onlyWithPhoto) {
       list = list.filter((o) => o.photoIds != null && o.photoIds.length > 0);
     }
+    if (filterTagIds.length > 0) {
+      // Occurrences carry the task by id only — look up the task's tagIds
+      // through the map and check overlap. Forecast rows synthesise the
+      // task client-side so they may not be in `taskById`; treat missing
+      // as "no tags" which excludes them under any tag filter.
+      const wanted = new Set(filterTagIds);
+      list = list.filter((o) => {
+        const tk = taskById.get(o.taskId);
+        const ids = tk?.tagIds ?? [];
+        return ids.some((id) => wanted.has(id));
+      });
+    }
     return list;
   }, [
     combinedOccurrences,
@@ -306,6 +334,8 @@ export function Calendar({
     MINE_LBL,
     onlyPending,
     onlyWithPhoto,
+    filterTagIds,
+    taskById,
   ]);
 
   const byDate = useMemo(() => {
@@ -518,7 +548,7 @@ export function Calendar({
           independent toggles (not mutually exclusive like a normal Seg),
           so we reuse `.wf-seg`'s pill styling but add `.on` per-item
           rather than to a single active one. Visually matches the
-          author Seg above for consistency. Tags slot in here in Phase B. */}
+          author Seg above for consistency. */}
       <div className="wf-seg">
         <span
           className={onlyPending ? 'on' : ''}
@@ -535,6 +565,39 @@ export function Calendar({
           {t('calendar.filter.withPhoto')}
         </span>
       </div>
+
+      {/* Tag filter row — only when the family has at least one tag. Each
+          chip is independent (OR semantics: a task matching ANY active
+          tag is shown). Tinted with the tag's own colour when active so
+          the chip reads as "the tag itself, selected". */}
+      {allTags.length > 0 && (
+        <div className="wf-row wf-gap-6" style={{ flexWrap: 'wrap' }}>
+          {allTags.map((tg) => {
+            const active = filterTagIds.includes(tg.id);
+            return (
+              <button
+                key={tg.id}
+                type="button"
+                onClick={() => toggleTagFilter(tg.id)}
+                style={{
+                  background: active ? tg.color ?? 'var(--ink)' : 'transparent',
+                  color: active ? 'var(--paper)' : 'var(--ink)',
+                  border: `1.5px solid ${active ? tg.color ?? 'var(--ink)' : 'var(--line)'}`,
+                  borderRadius: 999,
+                  padding: '4px 10px',
+                  fontSize: 12,
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  font: 'inherit',
+                  lineHeight: 1.2,
+                }}
+              >
+                {tg.name}
+              </button>
+            );
+          })}
+        </div>
+      )}
 
       {/* Month view: selected-day heading + list. Week / Agenda render
           their own day-grouped sections below; everything from the

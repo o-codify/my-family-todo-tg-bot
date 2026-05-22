@@ -44,6 +44,10 @@ export const createTaskSchema = z.object({
   singleShot: z.boolean().default(false),
   cooldownDays: z.number().int().min(1).max(365).nullable().optional(),
   subtasks: z.array(z.object({ title: z.string().min(1).max(200) })).max(50).optional(),
+  // Tag IDs to attach. The API rebuilds the task_tags join on each
+  // create/update — omitting the key on update leaves the existing
+  // attachments untouched (so callers don't need to refetch + resend).
+  tagIds: z.array(z.string().uuid()).max(20).optional(),
 });
 
 export type CreateTaskInput = z.infer<typeof createTaskSchema>;

@@ -64,6 +64,13 @@
       "when": 1779455878952,
       "tag": "0008_fearless_phantom_reporter",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1779463413279,
+      "tag": "0009_regular_shiva",
+      "breakpoints": true
     }
   ]
 }

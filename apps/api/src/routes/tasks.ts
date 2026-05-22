@@ -22,6 +22,7 @@ import {
   serializeTask,
   updateTask,
 } from '../services/tasks';
+import { getTagIdsForTasks } from '../services/tags';
 
 export const tasksRouter = new Hono<{ Variables: AuthVariables & FamilyVariables }>()
   .use('*', tgAuth)
@@ -30,7 +31,10 @@ export const tasksRouter = new Hono<{ Variables: AuthVariables & FamilyVariables
 tasksRouter.get('/', async (c) => {
   const familyId = c.get('familyId');
   const tasks = await listFamilyTasks(familyId);
-  return c.json({ tasks: tasks.map(serializeTask) });
+  // Batch-lookup tag attachments so we don't run N+1 queries while
+  // serializing. Tasks without any tags just get an empty array.
+  const tagMap = await getTagIdsForTasks(tasks.map((t) => t.id));
+  return c.json({ tasks: tasks.map((t) => serializeTask(t, tagMap.get(t.id) ?? [])) });
 });
 
 tasksRouter.post(
@@ -42,7 +46,8 @@ tasksRouter.post(
     const familyId = c.get('familyId');
     const data = c.req.valid('json');
     const task = await createTask({ familyId, createdBy: user.id, data });
-    return c.json({ task: serializeTask(task) }, 201);
+    const tagMap = await getTagIdsForTasks([task.id]);
+    return c.json({ task: serializeTask(task, tagMap.get(task.id) ?? []) }, 201);
   },
 );
 
@@ -50,7 +55,8 @@ tasksRouter.get('/:taskId', async (c) => {
   const familyId = c.get('familyId');
   const task = await getTaskInFamily(c.req.param('taskId'), familyId);
   if (!task) return c.json({ error: 'task_not_found' }, 404);
-  return c.json({ task: serializeTask(task) });
+  const tagMap = await getTagIdsForTasks([task.id]);
+  return c.json({ task: serializeTask(task, tagMap.get(task.id) ?? []) });
 });
 
 tasksRouter.patch(
@@ -73,7 +79,8 @@ tasksRouter.patch(
     }
 
     const updated = await updateTask({ task, data: c.req.valid('json') });
-    return c.json({ task: serializeTask(updated) });
+    const tagMap = await getTagIdsForTasks([updated.id]);
+    return c.json({ task: serializeTask(updated, tagMap.get(updated.id) ?? []) });
   },
 );
 
@@ -139,5 +146,6 @@ tasksRouter.post('/:taskId/restore', async (c) => {
 
   const restored = await restoreTask(task.id);
   if (!restored) return c.json({ error: 'task_not_found' }, 404);
-  return c.json({ task: serializeTask(restored) });
+  const tagMap = await getTagIdsForTasks([restored.id]);
+  return c.json({ task: serializeTask(restored, tagMap.get(restored.id) ?? []) });
 });

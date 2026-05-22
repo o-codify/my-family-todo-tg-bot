@@ -191,8 +191,19 @@ export type TaskDto = {
   subtasksTemplate: Array<{ id: string; title: string; position: number }> | null;
   createdBy: string;
   archivedAt: string | null;
+  /** Ids of tags attached to this task. Sorted ascending so re-renders
+   *  don't reshuffle the chip order. */
+  tagIds: string[];
   createdAt: string;
   updatedAt: string;
+};
+
+export type TagDto = {
+  id: string;
+  familyId: string;
+  name: string;
+  color: string | null;
+  createdAt: string;
 };
 
 export type CreateTaskPayload = {
@@ -215,6 +226,9 @@ export type CreateTaskPayload = {
   queueUserIds?: string[] | null;
   points?: number;
   photoRequired?: boolean;
+  /** Tag ids to attach. Server rewrites the task_tags join — omit to
+   *  leave the existing attachments untouched (on PATCH). */
+  tagIds?: string[];
 };
 
 export const api = {
@@ -351,6 +365,25 @@ export const api = {
     request<{ task: TaskDto }>(`/api/v1/families/${familyId}/tasks/${taskId}/restore`, {
       method: 'POST',
     }),
+
+  listTags: (familyId: string) =>
+    request<{ tags: TagDto[] }>(`/api/v1/families/${familyId}/tags`),
+  createTag: (familyId: string, payload: { name: string; color?: string | null }) =>
+    request<{ tag: TagDto }>(`/api/v1/families/${familyId}/tags`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+  updateTag: (
+    familyId: string,
+    tagId: string,
+    patch: { name?: string; color?: string | null },
+  ) =>
+    request<{ tag: TagDto }>(`/api/v1/families/${familyId}/tags/${tagId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(patch),
+    }),
+  deleteTag: (familyId: string, tagId: string) =>
+    request<null>(`/api/v1/families/${familyId}/tags/${tagId}`, { method: 'DELETE' }),
 
   listCatalog: (familyId: string, q?: string) =>
     request<{ items: CatalogItemDto[] }>(

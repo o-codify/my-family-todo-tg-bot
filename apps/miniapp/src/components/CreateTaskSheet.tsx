@@ -104,6 +104,7 @@ export function CreateTaskSheet({
         noDate: false,
         singleShot: false,
         subtasks: [] as string[],
+        tagIds: [] as string[],
       };
   const [title, setTitle] = useState(initial.title);
   const [kind, setKind] = useState<TaskKind>(initial.kind);
@@ -129,6 +130,9 @@ export function CreateTaskSheet({
   // the existing template, plain-create starts empty. An empty trailing
   // input always exists so adding feels frictionless (Enter to commit).
   const [subtaskTitles, setSubtaskTitles] = useState<string[]>(initial.subtasks);
+  // Tag attachments — multi-select chips. Tag list fetched lazily; users
+  // can also create a new tag from inside the sheet (small "+" chip).
+  const [tagIds, setTagIds] = useState<string[]>(initial.tagIds);
 
   const membersQuery = useQuery({
     queryKey: ['members', family.id],
@@ -159,6 +163,7 @@ export function CreateTaskSheet({
           .map((s) => s.trim())
           .filter(Boolean)
           .map((titleStr) => ({ title: titleStr })),
+        tagIds,
       });
       if (editingTask) {
         return api.updateTask(family.id, editingTask.id, payload);
@@ -517,6 +522,13 @@ export function CreateTaskSheet({
           </div>
         </div>
 
+        {/* Tags — multi-select chips. Tag list fetched lazily; pressing
+            "+" prompts for a name to spin up a new tag inline. */}
+        <span className="wf-tiny" style={{ marginTop: 10 }}>
+          {t('create.tags.title')}
+        </span>
+        <TagPicker familyId={family.id} value={tagIds} onChange={setTagIds} />
+
         {/* Subtasks — checklist editor. Empty list = no checklist.
             Each non-empty line becomes a subtask on save. The bottom input
             is always an empty row for fast adding (Enter = commit + new row). */}
@@ -761,6 +773,7 @@ function buildPayload(input: {
   noDate: boolean;
   singleShot: boolean;
   subtasks: Array<{ title: string }>;
+  tagIds: string[];
 }): CreateTaskPayload {
   const base = {
     title: input.title,
@@ -776,6 +789,7 @@ function buildPayload(input: {
     singleShot: input.singleShot || (input.kind === 'oneoff' && input.noDate),
     cooldownDays: input.cooldownDays,
     subtasks: input.subtasks.length > 0 ? input.subtasks : undefined,
+    tagIds: input.tagIds,
   } as unknown as CreateTaskPayload;
   switch (input.kind) {
     case 'oneoff':
@@ -850,6 +864,7 @@ function extractFromTask(t: TaskDto): {
   noDate: boolean;
   singleShot: boolean;
   subtasks: string[];
+  tagIds: string[];
 } {
   const sched = t.schedule as
     | { kind: 'oneoff'; date: string }
@@ -880,5 +895,92 @@ function extractFromTask(t: TaskDto): {
     noDate: false,
     singleShot: t.singleShot,
     subtasks: (t.subtasksTemplate ?? []).map((s) => s.title),
+    tagIds: t.tagIds ?? [],
   };
+}
+
+/**
+ * Inline multi-select for tag attachments. Fetches the family's tag list
+ * lazily (TanStack cache) and renders each as a toggle chip; tapping
+ * flips its membership in `value`. Pressing the "+ Новый тег" chip
+ * prompts for a name and creates a tag on the fly, then auto-selects it.
+ * Empty state collapses to just the "+" — discoverable without yelling
+ * if the family hasn't created any tags yet.
+ */
+function TagPicker({
+  familyId,
+  value,
+  onChange,
+}: {
+  familyId: string;
+  value: string[];
+  onChange: (next: string[]) => void;
+}) {
+  const t = useT();
+  const queryClient = useQueryClient();
+  const tagsQuery = useQuery({
+    queryKey: ['tags', familyId],
+    queryFn: () => api.listTags(familyId),
+  });
+  const createMut = useMutation({
+    mutationFn: (name: string) => api.createTag(familyId, { name }),
+    onSuccess: (res) => {
+      queryClient.invalidateQueries({ queryKey: ['tags', familyId] });
+      onChange([...value, res.tag.id]);
+    },
+  });
+  const tags = tagsQuery.data?.tags ?? [];
+  const toggle = (id: string) =>
+    onChange(value.includes(id) ? value.filter((x) => x !== id) : [...value, id]);
+  return (
+    <div className="wf-row wf-gap-6" style={{ flexWrap: 'wrap', marginTop: 4 }}>
+      {tags.map((tg) => {
+        const active = value.includes(tg.id);
+        return (
+          <button
+            key={tg.id}
+            type="button"
+            onClick={() => toggle(tg.id)}
+            style={{
+              background: active ? tg.color ?? 'var(--ink)' : 'transparent',
+              color: active ? 'var(--paper)' : 'var(--ink)',
+              border: `1.5px solid ${active ? tg.color ?? 'var(--ink)' : 'var(--line)'}`,
+              borderRadius: 999,
+              padding: '4px 10px',
+              fontSize: 12,
+              fontWeight: 600,
+              cursor: 'pointer',
+              font: 'inherit',
+              lineHeight: 1.2,
+            }}
+          >
+            {tg.name}
+          </button>
+        );
+      })}
+      <button
+        type="button"
+        onClick={() => {
+          const name = window.prompt(t('create.tags.namePrompt'));
+          if (!name?.trim()) return;
+          createMut.mutate(name.trim());
+        }}
+        disabled={createMut.isPending}
+        style={{
+          background: 'transparent',
+          color: 'var(--hint)',
+          border: '1.5px dashed var(--softline)',
+          borderRadius: 999,
+          padding: '4px 10px',
+          fontSize: 12,
+          fontWeight: 600,
+          cursor: 'pointer',
+          font: 'inherit',
+          lineHeight: 1.2,
+        }}
+      >
+        + {t('create.tags.add')}
+      </button>
+    </div>
+  );
 }
