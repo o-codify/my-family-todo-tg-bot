@@ -98,6 +98,7 @@ export function CreateTaskSheet({
         photoRequired: false,
         deadlineAt: null as string | null,
         assigneeId: me.id as string | null,
+        queueUserIds: null as string[] | null,
         noDate: false,
         singleShot: false,
         subtasks: [] as string[],
@@ -111,6 +112,9 @@ export function CreateTaskSheet({
   const [photoRequired, setPhotoRequired] = useState(initial.photoRequired);
   const [deadlineAt, setDeadlineAt] = useState<string | null>(initial.deadlineAt);
   const [assigneeId, setAssigneeId] = useState<string | null>(initial.assigneeId);
+  // queueUserIds: explicit roster for `queued` tasks. `null` means "all
+  // family members" (server default). Editing flips to an explicit list.
+  const [queueUserIds, setQueueUserIds] = useState<string[] | null>(initial.queueUserIds);
   const [addToCatalog, setAddToCatalog] = useState(false);
   const [saveAsTemplate, setSaveAsTemplate] = useState(false);
   // "Разовая без даты" — when set on a oneoff task, payload becomes
@@ -143,6 +147,7 @@ export function CreateTaskSheet({
         daysOfWeek,
         cooldownDays,
         assigneeId,
+        queueUserIds,
         points,
         photoRequired,
         deadlineAt,
@@ -367,6 +372,74 @@ export function CreateTaskSheet({
               onChange={setCooldownDays}
               options={COOLDOWN_OPTIONS}
             />
+          </div>
+        )}
+
+        {/* Queue roster — multi-select for queued tasks. null means "all
+            members" (server default); flipping any checkbox opts into an
+            explicit list. Owner of the queue isn't auto-selected — the
+            user picks who shares the chore. */}
+        {kind === 'queued' && members.length > 0 && (
+          <div className="wf-col wf-gap-4" style={{ marginTop: 10 }}>
+            <div className="wf-spread">
+              <span className="wf-tiny">
+                {t.locale === 'en' ? 'Queue members' : 'Участники очереди'}
+              </span>
+              <span className="wf-hint" style={{ fontSize: 11 }}>
+                {queueUserIds === null
+                  ? t.locale === 'en'
+                    ? 'all'
+                    : 'все'
+                  : `${queueUserIds.length}/${members.length}`}
+              </span>
+            </div>
+            <div className="wf-col wf-gap-2">
+              {members.map((m) => {
+                const explicit = queueUserIds;
+                const selected = explicit === null ? true : explicit.includes(m.id);
+                return (
+                  <div
+                    key={m.id}
+                    className="wf-row wf-gap-8"
+                    onClick={() => {
+                      // Switch from implicit "all" to explicit list on
+                      // first interaction, then toggle the clicked member.
+                      const base = explicit === null ? members.map((mm) => mm.id) : [...explicit];
+                      const idx = base.indexOf(m.id);
+                      if (idx >= 0) base.splice(idx, 1);
+                      else base.push(m.id);
+                      // If the user ended up unchecking everyone, fall back to
+                      // null (server default = all) so the task isn't broken.
+                      setQueueUserIds(base.length === 0 ? null : base);
+                    }}
+                    style={{
+                      padding: '6px 4px',
+                      cursor: 'pointer',
+                      borderRadius: 6,
+                    }}
+                  >
+                    <span
+                      className={'wf-check' + (selected ? ' done' : '')}
+                      style={{ pointerEvents: 'none' }}
+                    >
+                      {selected && <Icon name="check" />}
+                    </span>
+                    <Av m={m} size="sm" />
+                    <span
+                      className="wf-label"
+                      style={{
+                        flex: 1,
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {m.name}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
           </div>
         )}
 
@@ -652,6 +725,7 @@ function buildPayload(input: {
   daysOfWeek: number[];
   cooldownDays: number | null;
   assigneeId: string | null;
+  queueUserIds: string[] | null;
   points: number;
   photoRequired: boolean;
   deadlineAt: string | null;
@@ -662,6 +736,9 @@ function buildPayload(input: {
   const base = {
     title: input.title,
     assigneeId: input.assigneeId,
+    // Only send queueUserIds for queued tasks. Other types ignore it
+    // server-side, but it's cleaner to omit.
+    queueUserIds: input.kind === 'queued' ? input.queueUserIds : undefined,
     points: input.points,
     photoRequired: input.photoRequired,
     deadlineAt: input.deadlineAt,
@@ -740,6 +817,7 @@ function extractFromTask(t: TaskDto): {
   photoRequired: boolean;
   deadlineAt: string | null;
   assigneeId: string | null;
+  queueUserIds: string[] | null;
   noDate: boolean;
   singleShot: boolean;
   subtasks: string[];
@@ -769,6 +847,7 @@ function extractFromTask(t: TaskDto): {
     photoRequired: t.photoRequired,
     deadlineAt: t.deadlineAt,
     assigneeId: t.assigneeId,
+    queueUserIds: t.queueUserIds,
     noDate: false,
     singleShot: t.singleShot,
     subtasks: (t.subtasksTemplate ?? []).map((s) => s.title),

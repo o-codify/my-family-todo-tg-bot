@@ -207,15 +207,17 @@ export function Calendar({
   // turns on the calendar so the user can see who's up and when. The
   // forecast respects per-task cooldown (or daily if none) and rotates
   // through `queueUserIds` starting after the current real assignee.
+  const memberIds = useMemo(() => members.map((m) => m.id), [members]);
   const queueForecast = useMemo(
     () =>
       forecastQueueOccurrences({
         tasks,
         occurrences: rawOccurrences,
+        memberIds,
         todayIso,
         toIso: toIsoStr,
       }),
-    [tasks, rawOccurrences, todayIso, toIsoStr],
+    [tasks, rawOccurrences, memberIds, todayIso, toIsoStr],
   );
   const combinedOccurrences = useMemo(
     () => [...rawOccurrences, ...queueForecast],

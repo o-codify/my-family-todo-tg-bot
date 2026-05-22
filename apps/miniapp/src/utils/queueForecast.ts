@@ -25,11 +25,17 @@ import type { OccurrenceDto, TaskDto } from '../api';
 export function forecastQueueOccurrences(input: {
   tasks: TaskDto[];
   occurrences: OccurrenceDto[];
+  /**
+   * Fallback queue roster when `task.queueUserIds` is null. Mirrors the
+   * server's behaviour: a queued task with no explicit roster rotates
+   * through every family member. Pass all member ids.
+   */
+  memberIds: string[];
   todayIso: string;
   /** Inclusive upper bound — typically the end of the visible month. */
   toIso: string;
 }): OccurrenceDto[] {
-  const { tasks, occurrences, todayIso, toIso } = input;
+  const { tasks, occurrences, memberIds, todayIso, toIso } = input;
   const out: OccurrenceDto[] = [];
 
   const todayMs = isoToMs(todayIso);
@@ -39,7 +45,11 @@ export function forecastQueueOccurrences(input: {
   for (const task of tasks) {
     if (task.type !== 'queued') continue;
     if (task.archivedAt) continue;
-    const queue = task.queueUserIds ?? [];
+    // queueUserIds null (no explicit roster) → fall back to all members.
+    const queue =
+      task.queueUserIds && task.queueUserIds.length > 0
+        ? task.queueUserIds
+        : memberIds;
     if (queue.length === 0) continue;
 
     // The current real pending occurrence is anchored to today by the
@@ -48,14 +58,17 @@ export function forecastQueueOccurrences(input: {
       (o) => o.taskId === task.id && o.status === 'pending',
     );
     if (!current) continue;
+    // If the assignee isn't in the queue (rare — stale roster), still
+    // emit a forecast starting from the first member so the user sees
+    // the cadence rather than nothing.
     const currentIdx = current.assigneeId ? queue.indexOf(current.assigneeId) : -1;
-    if (currentIdx === -1) continue;
+    const startIdx = currentIdx === -1 ? -1 : currentIdx;
 
     const stepDays = task.cooldownDays && task.cooldownDays > 0 ? task.cooldownDays : 1;
     const stepMs = stepDays * 86_400_000;
 
     let cursor = todayMs + stepMs;
-    let rotIdx = currentIdx;
+    let rotIdx = startIdx;
     // Cap iterations defensively (very long ranges + step=1 is fine; this
     // is just to avoid an infinite loop if step ever becomes 0).
     for (let i = 0; i < 365 && cursor <= toMs; i++) {

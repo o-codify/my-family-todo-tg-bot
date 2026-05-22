@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   api,
@@ -8,6 +8,7 @@ import {
   type OccurrenceDto,
 } from '../api';
 import { Av, Bar, Icon, Tag, WfBody, type Member } from '../design';
+import { BottomSheet } from '../components/BottomSheet';
 import { pluralize, useT } from '../i18n';
 
 type Props = {
@@ -85,6 +86,16 @@ export function QueueDetail({ me, family, taskId, onBack }: Props) {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['occurrences', family.id] }),
   });
 
+  const deleteTaskMut = useMutation({
+    mutationFn: () => api.deleteTask(family.id, taskId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['tasks', family.id] });
+      queryClient.invalidateQueries({ queryKey: ['occurrences', family.id] });
+      onBack();
+    },
+  });
+  const [menuOpen, setMenuOpen] = useState(false);
+
   const members = useMemo(
     () => (membersQuery.data?.members ?? []).map(memberFromDto),
     [membersQuery.data],
@@ -144,8 +155,36 @@ export function QueueDetail({ me, family, taskId, onBack }: Props) {
         <span className="wf-h2" style={{ flex: 1 }}>
           {task?.title ?? '…'}
         </span>
-        <Icon name="more" />
+        <button
+          type="button"
+          onClick={() => setMenuOpen(true)}
+          aria-label={t.locale === 'en' ? 'More' : 'Ещё'}
+          style={{
+            background: 'transparent',
+            border: 'none',
+            cursor: 'pointer',
+            padding: 0,
+            color: 'var(--ink)',
+          }}
+        >
+          <Icon name="more" />
+        </button>
       </div>
+      {menuOpen && (
+        <QueueMenuSheet
+          isEn={t.locale === 'en'}
+          isDeleting={deleteTaskMut.isPending}
+          onClose={() => setMenuOpen(false)}
+          onDelete={() => {
+            const msg = t.locale === 'en'
+              ? 'Delete this queue? History will be kept but new turns will stop.'
+              : 'Удалить очередь? История останется, новые ходы прекратятся.';
+            if (window.confirm(msg)) {
+              deleteTaskMut.mutate();
+            }
+          }}
+        />
+      )}
       <div className="wf-row wf-gap-6">
         <Tag>
           <Icon name="repeat" />{' '}
@@ -302,6 +341,80 @@ function NextItem({ m, pos, away }: { m: Member | null; pos: string; away: boole
         </span>
       )}
     </div>
+  );
+}
+
+/**
+ * Action sheet behind the "..." button in the QueueDetail header. Today
+ * has a single Delete action (which archives the task — same as the
+ * Stop-repeating action in TaskSheet). More options (rename, change
+ * cooldown, edit roster) live in the regular task editor, so we point
+ * the user there indirectly.
+ */
+function QueueMenuSheet({
+  isEn,
+  isDeleting,
+  onClose,
+  onDelete,
+}: {
+  isEn: boolean;
+  isDeleting: boolean;
+  onClose: () => void;
+  onDelete: () => void;
+}) {
+  return (
+    <BottomSheet onClose={onClose} zIndex={12}>
+      {({ close }) => (
+        <>
+          <div className="handle" />
+          <div className="wf-row wf-gap-8" style={{ marginBottom: 8 }}>
+            <span className="wf-h2" style={{ flex: 1 }}>
+              {isEn ? 'Queue actions' : 'Действия с очередью'}
+            </span>
+            <button
+              onClick={() => close()}
+              aria-label={isEn ? 'Close' : 'Закрыть'}
+              style={{
+                background: 'transparent',
+                border: 'none',
+                cursor: 'pointer',
+                padding: 0,
+                color: 'var(--ink)',
+              }}
+            >
+              <Icon name="x" />
+            </button>
+          </div>
+          <div
+            className="wf-card compact"
+            onClick={() => close(onDelete)}
+            style={{
+              cursor: 'pointer',
+              borderColor: 'var(--danger)',
+            }}
+          >
+            <div className="wf-row wf-gap-8">
+              <Icon name="trash" />
+              <span className="wf-label" style={{ color: 'var(--danger)' }}>
+                {isDeleting
+                  ? '…'
+                  : isEn
+                    ? 'Delete queue'
+                    : 'Удалить очередь'}
+              </span>
+            </div>
+          </div>
+          <span
+            className="wf-hint"
+            style={{ display: 'block', marginTop: 8, padding: '0 4px' }}
+          >
+            {isEn
+              ? 'To rename or change cooldown / roster — open the task from any day and tap Edit.'
+              : 'Чтобы переименовать или поменять кулдаун / участников — открой задачу из любого дня и нажми «изменить».'}
+          </span>
+        </>
+      )}
+    </BottomSheet>
   );
 }
 

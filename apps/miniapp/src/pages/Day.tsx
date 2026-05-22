@@ -121,15 +121,17 @@ export function Day({ me, family, iso, onBack, onOpenTask, onCreateTask }: Props
   // cadence (cooldownDays || 1) so the user sees rotations ahead. The
   // forecast generator emits one row per task at iso === this day if
   // the rotation lands here. See utils/queueForecast.ts.
+  const memberIds = useMemo(() => members.map((m) => m.id), [members]);
   const forecastedQueue = useMemo(() => {
     if (iso <= todayIso) return [];
     return forecastQueueOccurrences({
       tasks,
       occurrences: rawOccurrences,
+      memberIds,
       todayIso,
       toIso: iso,
     }).filter((o) => o.scheduledDate === iso);
-  }, [tasks, rawOccurrences, todayIso, iso]);
+  }, [tasks, rawOccurrences, memberIds, todayIso, iso]);
 
   const occurrences = [
     ...rawOccurrences.filter((o) => {
