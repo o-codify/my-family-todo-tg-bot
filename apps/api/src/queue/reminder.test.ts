@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { zonedDateTimeToUtc } from './reminder';
+import { resolveIntervals, zonedDateTimeToUtc } from './reminder';
 
 describe('zonedDateTimeToUtc', () => {
   it('treats UTC tz as identity', () => {
@@ -31,5 +31,42 @@ describe('zonedDateTimeToUtc', () => {
   it('accepts HH:MM:SS too', () => {
     const d = zonedDateTimeToUtc('2026-05-21', '08:00:30', 'UTC');
     expect(d.toISOString()).toBe('2026-05-21T08:00:30.000Z');
+  });
+});
+
+describe('resolveIntervals', () => {
+  it('falls back to defaultReminderBeforeMinutes when array is absent', () => {
+    expect(resolveIntervals({ defaultReminderBeforeMinutes: 15 })).toEqual([15]);
+  });
+
+  it('treats default 0 as "off" (empty array, no reminders)', () => {
+    expect(resolveIntervals({ defaultReminderBeforeMinutes: 0 })).toEqual([]);
+  });
+
+  it('uses the array when present, even if old default would conflict', () => {
+    expect(
+      resolveIntervals({
+        defaultReminderBeforeMinutes: 15,
+        reminderIntervalsMinutes: [60, 15],
+      }),
+    ).toEqual([60, 15]);
+  });
+
+  it('strips zero entries from the array (zero means "off" per-slot)', () => {
+    expect(
+      resolveIntervals({
+        defaultReminderBeforeMinutes: 15,
+        reminderIntervalsMinutes: [60, 0, 15],
+      }),
+    ).toEqual([60, 15]);
+  });
+
+  it('empty array fully disables — overrides legacy default', () => {
+    expect(
+      resolveIntervals({
+        defaultReminderBeforeMinutes: 15,
+        reminderIntervalsMinutes: [],
+      }),
+    ).toEqual([]);
   });
 });

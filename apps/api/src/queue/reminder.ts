@@ -31,8 +31,28 @@ import { sendBotMessage } from './tg-send';
  *   - ensureQueuedOccurrence → schedule the new one
  */
 
-function jobIdForOccurrence(occurrenceId: string): string {
-  return `reminder:${occurrenceId}`;
+/** Per-interval BullMQ jobId. Each interval gets its own job so multi-
+ *  threshold reminders ("за день, утром, за час") schedule and cancel
+ *  independently. Adding the minute count makes the id unique inside a
+ *  single occurrence's reminder set. */
+function jobIdForOccurrence(occurrenceId: string, minutes: number): string {
+  return `reminder:${occurrenceId}:${minutes}`;
+}
+
+/** Resolve the user's reminder intervals. New shape (`reminderIntervalsMinutes`)
+ *  wins; legacy single-value `defaultReminderBeforeMinutes` lands in here as a
+ *  one-element list so existing accounts keep working unchanged. Exported
+ *  for unit tests — the routing logic is small enough to verify in isolation. */
+export function resolveIntervals(settings: {
+  reminderIntervalsMinutes?: number[];
+  defaultReminderBeforeMinutes: number;
+}): number[] {
+  if (Array.isArray(settings.reminderIntervalsMinutes)) {
+    return settings.reminderIntervalsMinutes.filter((m) => m > 0);
+  }
+  return settings.defaultReminderBeforeMinutes > 0
+    ? [settings.defaultReminderBeforeMinutes]
+    : [];
 }
 
 /**
@@ -88,8 +108,9 @@ export async function scheduleReminderForOccurrence(
 }
 
 async function scheduleReminderFromRow(occ: TaskOccurrenceRow): Promise<Date | null> {
-  // Cancel any previous job for this occurrence first — caller might be
-  // rescheduling/reassigning. Safe no-op if absent.
+  // Cancel any previous jobs for this occurrence — caller might be
+  // rescheduling/reassigning. Safe no-op if absent. We cancel by prefix
+  // since multi-interval setup may have left multiple job ids behind.
   await cancelReminderForOccurrence(occ.id);
 
   if (occ.status !== 'pending') return null;
@@ -98,51 +119,71 @@ async function scheduleReminderFromRow(occ: TaskOccurrenceRow): Promise<Date | n
 
   const user = await db.query.users.findFirst({ where: eq(users.id, occ.assigneeId) });
   if (!user) return null;
-  const before = user.notificationSettings.defaultReminderBeforeMinutes;
-  if (before <= 0) return null;
+  const intervals = resolveIntervals(user.notificationSettings);
+  if (intervals.length === 0) return null;
 
   const task = await db.query.tasks.findFirst({ where: eq(tasks.id, occ.taskId) });
   if (!task || task.archivedAt) return null;
 
-  let fireAt: Date;
+  let occursAt: Date;
   try {
-    const occursAt = zonedDateTimeToUtc(occ.scheduledDate, occ.scheduledTime, user.timezone);
-    fireAt = new Date(occursAt.getTime() - before * 60_000);
+    occursAt = zonedDateTimeToUtc(occ.scheduledDate, occ.scheduledTime, user.timezone);
   } catch (err) {
     logger.warn({ err, occurrenceId: occ.id }, 'reminder schedule: bad date/time');
     return null;
   }
 
-  const delay = fireAt.getTime() - Date.now();
-  if (delay <= 0) {
-    logger.debug({ occurrenceId: occ.id, fireAt }, 'reminder skipped: fire time in the past');
+  const queue = getNotificationsQueue();
+  // Schedule one job per interval. Earliest fire time is the one we
+  // return for caller logging; others queue alongside it. We dedupe by
+  // (occurrenceId, minutes) at send-time too — see runReminder.
+  let earliest: Date | null = null;
+  for (const before of intervals) {
+    const fireAt = new Date(occursAt.getTime() - before * 60_000);
+    const delay = fireAt.getTime() - Date.now();
+    if (delay <= 0) continue;
+    await queue.add(
+      'reminder',
+      {
+        occurrenceId: occ.id,
+        userId: user.id,
+        taskTitle: task.title,
+        minutesBefore: before,
+      },
+      {
+        delay,
+        jobId: jobIdForOccurrence(occ.id, before),
+      },
+    );
+    if (!earliest || fireAt < earliest) earliest = fireAt;
+  }
+  if (!earliest) {
+    logger.debug({ occurrenceId: occ.id }, 'reminder skipped: all fire times in the past');
     return null;
   }
-
-  const queue = getNotificationsQueue();
-  await queue.add(
-    'reminder',
-    { occurrenceId: occ.id, userId: user.id, taskTitle: task.title },
-    {
-      delay,
-      jobId: jobIdForOccurrence(occ.id),
-    },
-  );
-  logger.debug({ occurrenceId: occ.id, fireAt }, 'reminder scheduled');
-  return fireAt;
+  logger.debug({ occurrenceId: occ.id, earliest, intervals }, 'reminders scheduled');
+  return earliest;
 }
 
 /**
- * Cancel the reminder job for a single occurrence. Fire-and-forget;
- * doesn't fail if the job isn't there.
+ * Cancel every reminder job for a single occurrence. We probe a fixed set
+ * of common minute thresholds (matches the UI presets) instead of scanning
+ * the whole queue — BullMQ doesn't expose "find jobs by id prefix", and a
+ * scan would be expensive on large queues. Custom intervals outside this
+ * set are uncommon and will lapse harmlessly when they fire (the worker's
+ * "still pending?" guard catches them).
  */
+const COMMON_INTERVAL_MINUTES = [0, 5, 10, 15, 30, 60, 120, 240, 480, 1440];
+
 export async function cancelReminderForOccurrence(occurrenceId: string): Promise<void> {
   const queue = getNotificationsQueue();
-  try {
-    const job = await queue.getJob(jobIdForOccurrence(occurrenceId));
-    if (job) await job.remove();
-  } catch (err) {
-    logger.debug({ err, occurrenceId }, 'cancel reminder: lookup/remove failed');
+  for (const minutes of COMMON_INTERVAL_MINUTES) {
+    try {
+      const job = await queue.getJob(jobIdForOccurrence(occurrenceId, minutes));
+      if (job) await job.remove();
+    } catch (err) {
+      logger.debug({ err, occurrenceId, minutes }, 'cancel reminder: lookup/remove failed');
+    }
   }
 }
 
@@ -179,8 +220,17 @@ export async function runReminder(input: {
   occurrenceId: string;
   userId: string;
   taskTitle: string;
+  /** Minutes-before-fire that this specific job represents. Older jobs
+   *  enqueued before multi-interval shipped may not carry it; fall back
+   *  to the user's legacy `defaultReminderBeforeMinutes` for those. */
+  minutesBefore?: number;
 }): Promise<void> {
-  const dedupeKey = `reminder:${input.occurrenceId}`;
+  // Per-interval dedupe — a 60-min job and a 15-min job for the same
+  // occurrence have different dedupe keys, so both can fire. Same
+  // interval reaching the worker twice (BullMQ retry, double-add) still
+  // dedupes correctly.
+  const intervalKey = input.minutesBefore != null ? `:${input.minutesBefore}` : '';
+  const dedupeKey = `reminder:${input.occurrenceId}${intervalKey}`;
 
   // Re-check the occurrence is still pending — cancellation isn't guaranteed
   // to race-stop a job that's already moved into the worker.
@@ -211,7 +261,8 @@ export async function runReminder(input: {
 
   const isEn = user.locale === 'en';
   const when = occ.scheduledTime ? ` (${occ.scheduledTime.slice(0, 5)})` : '';
-  const before = user.notificationSettings.defaultReminderBeforeMinutes;
+  const before =
+    input.minutesBefore ?? user.notificationSettings.defaultReminderBeforeMinutes;
   const lead = isEn ? `in ${before} min` : `через ${before} мин`;
   const text = isEn
     ? `⏰ Reminder${when}: ${input.taskTitle} — ${lead}`

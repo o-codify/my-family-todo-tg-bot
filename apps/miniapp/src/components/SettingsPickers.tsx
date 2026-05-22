@@ -165,7 +165,10 @@ export function DigestPicker({
   );
 }
 
-/** "Напоминание перед задачей" — minutes grid. */
+/** "Напоминание перед задачей" — multi-select chip grid. Each chip is
+ *  an interval ("за 60 мин", "за 15 мин", "за 5 мин"); tapping toggles
+ *  membership. The saved value is `reminderIntervalsMinutes: number[]`.
+ *  Empty array means "no reminders". A "—" chip clears all in one tap. */
 export function ReminderPicker({
   t,
   settings,
@@ -177,8 +180,20 @@ export function ReminderPicker({
   onClose: () => void;
   onSave: (patch: Partial<NotificationSettings>) => void;
 }) {
-  const OPTIONS = [0, 5, 10, 15, 30, 60, 120, 240];
-  const [value, setValue] = useState(settings.defaultReminderBeforeMinutes);
+  const OPTIONS = [5, 10, 15, 30, 60, 120, 240, 1440];
+  // Back-compat: legacy accounts only have `defaultReminderBeforeMinutes`;
+  // surface that as a single-element initial selection so a save preserves
+  // it as the new array shape.
+  const initial =
+    settings.reminderIntervalsMinutes ??
+    (settings.defaultReminderBeforeMinutes > 0
+      ? [settings.defaultReminderBeforeMinutes]
+      : []);
+  const [picked, setPicked] = useState<number[]>(initial);
+  const toggle = (m: number) =>
+    setPicked((curr) =>
+      curr.includes(m) ? curr.filter((x) => x !== m) : [...curr, m].sort((a, b) => a - b),
+    );
   return (
     <SettingsSheet
       title={t('notif.reminder.title')}
@@ -192,7 +207,18 @@ export function ReminderPicker({
           <button
             className="wf-btn primary"
             style={{ flex: 1, cursor: 'pointer' }}
-            onClick={() => close(() => onSave({ defaultReminderBeforeMinutes: value }))}
+            onClick={() =>
+              close(() =>
+                onSave({
+                  reminderIntervalsMinutes: picked,
+                  // Mirror to the legacy field too — keeps any consumer that
+                  // still reads `defaultReminderBeforeMinutes` (e.g. older
+                  // bot copy) sensible. First selected interval is a fine
+                  // proxy; 0 when empty disables there as well.
+                  defaultReminderBeforeMinutes: picked[0] ?? 0,
+                }),
+              )
+            }
           >
             {t('common.save')}
           </button>
@@ -201,14 +227,23 @@ export function ReminderPicker({
     >
       {() => (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6 }}>
+          <span
+            onClick={() => setPicked([])}
+            className={'wf-tag' + (picked.length === 0 ? ' solid' : '')}
+            style={{ cursor: 'pointer', justifyContent: 'center' }}
+          >
+            —
+          </span>
           {OPTIONS.map((m) => (
             <span
               key={m}
-              onClick={() => setValue(m)}
-              className={'wf-tag' + (m === value ? ' solid' : '')}
+              onClick={() => toggle(m)}
+              className={'wf-tag' + (picked.includes(m) ? ' solid' : '')}
               style={{ cursor: 'pointer', justifyContent: 'center' }}
             >
-              {m === 0 ? '—' : `${m} ${t('profile.notifications.reminder.value')}`}
+              {m === 1440
+                ? t('notif.reminder.day')
+                : `${m} ${t('profile.notifications.reminder.value')}`}
             </span>
           ))}
         </div>

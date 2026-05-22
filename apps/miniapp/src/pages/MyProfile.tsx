@@ -76,7 +76,17 @@ export function MyProfile({ me, family, onBack, onOpenDrawer }: Props) {
   const digestValue = notif.digestEnabled
     ? notif.digestTime
     : t('profile.notifications.quietHours.off');
-  const reminderValue = `${notif.defaultReminderBeforeMinutes} ${t('profile.notifications.reminder.value')}`;
+  // Multi-interval reminders: new accounts persist `reminderIntervalsMinutes`,
+  // older ones still carry the legacy single-value field. Render whichever
+  // is set — "—" when fully disabled.
+  const reminderIntervals = notif.reminderIntervalsMinutes ??
+    (notif.defaultReminderBeforeMinutes > 0 ? [notif.defaultReminderBeforeMinutes] : []);
+  const reminderValue =
+    reminderIntervals.length === 0
+      ? t('profile.notifications.quietHours.off')
+      : reminderIntervals.map((m) => `${m}`).join(' · ') +
+        ' ' +
+        t('profile.notifications.reminder.value');
   const quietValue =
     notif.quietHoursStart && notif.quietHoursEnd
       ? `${notif.quietHoursStart} – ${notif.quietHoursEnd}`

@@ -5,7 +5,19 @@ export const notificationSettingsSchema = z.object({
   quietHoursEnd: z.string().regex(/^\d{2}:\d{2}$/).nullable().default(null),
   digestEnabled: z.boolean().default(true),
   digestTime: z.string().regex(/^\d{2}:\d{2}$/).default('08:00'),
+  // Back-compat with v1 of this schema: a single "minutes before" value.
+  // New code prefers `reminderIntervalsMinutes` below — the reminder
+  // scheduler reads the array when present, otherwise falls back to
+  // this single value as a one-element list.
   defaultReminderBeforeMinutes: z.number().int().min(0).max(1440).default(15),
+  // Multi-interval reminders. Each entry fires its own job at
+  // (occurrence_time − N) minutes; empty array disables reminders for
+  // the user. The backend dedupes by `(occurrenceId, minutes)` so the
+  // same threshold can't double-fire.
+  reminderIntervalsMinutes: z
+    .array(z.number().int().min(0).max(1440))
+    .max(6)
+    .optional(),
 });
 
 export type NotificationSettings = z.infer<typeof notificationSettingsSchema>;

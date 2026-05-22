@@ -355,9 +355,10 @@ const DICT: Record<string, Record<Locale, string>> = {
   'notif.digest.disabled': { ru: 'Выключен', en: 'Disabled' },
   'notif.reminder.title': { ru: 'Напоминание перед задачей', en: 'Reminder before task' },
   'notif.reminder.hint': {
-    ru: 'За сколько минут до дедлайна напомнить',
-    en: 'How many minutes before the deadline to remind',
+    ru: 'Можно выбрать несколько порогов — будет несколько напоминаний',
+    en: 'Pick multiple thresholds for multiple reminders',
   },
+  'notif.reminder.day': { ru: 'за сутки', en: '1 day' },
   'notif.quietHours.title': { ru: 'Тихие часы', en: 'Quiet hours' },
   'notif.quietHours.hint': {
     ru: 'В это время уведомления приглушены',

@@ -93,7 +93,15 @@ export type NotificationSettings = {
   quietHoursEnd: string | null;
   digestEnabled: boolean;
   digestTime: string;
+  /** Legacy single-threshold reminder value. New code reads
+   *  `reminderIntervalsMinutes` instead — kept for back-compat with
+   *  accounts that haven't re-saved their preferences since the
+   *  multi-interval rollout. */
   defaultReminderBeforeMinutes: number;
+  /** Minutes-before-task thresholds. Each entry schedules its own
+   *  reminder job; empty array fully disables reminders. Sorted ascending
+   *  client-side for display, but the backend treats order as irrelevant. */
+  reminderIntervalsMinutes?: number[];
 };
 
 /** Client-side preferences bag round-tripped through `users.preferences`.
