@@ -134,6 +134,13 @@
       "when": 1779512703397,
       "tag": "0018_real_venom",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1779513579085,
+      "tag": "0019_lucky_newton_destine",
+      "breakpoints": true
     }
   ]
 }

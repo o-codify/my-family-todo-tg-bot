@@ -740,6 +740,18 @@ const DICT: Record<string, Record<Locale, string>> = {
   'bulk.complete': { ru: 'Завершить', en: 'Complete' },
   'bulk.completed': { ru: 'завершено', en: 'completed' },
   'bulk.failed': { ru: 'с ошибкой', en: 'failed' },
+
+  // ─── ICS subscription ────────────────────────────────────────────
+  'ics.title': { ru: 'Подписка iCal', en: 'iCal subscription' },
+  'ics.hint': {
+    ru: 'Получай задачи семьи в Google / Apple Calendar — только чтение',
+    en: 'Read-only feed for Google / Apple Calendar',
+  },
+  'ics.connect': { ru: 'Подключить', en: 'Connect' },
+  'ics.urlLabel': { ru: 'Ссылка iCal', en: 'iCal URL' },
+  'ics.copy': { ru: 'Скопировать', en: 'Copy' },
+  'ics.rotate': { ru: 'Сменить', en: 'Rotate' },
+  'ics.revoke': { ru: 'Отключить', en: 'Revoke' },
   'quest.errOutOfOrder': {
     ru: 'Сначала пройди прошлый шаг',
     en: 'Finish the previous step first',

@@ -296,6 +296,11 @@ export function MyProfile({ me, family, onBack, onOpenDrawer }: Props) {
         onClick={() => setLangOpen(true)}
       />
 
+      {/* ICS subscription — read-only feed of family events the user
+          can subscribe to from Google / Apple / Outlook Calendar.
+          Per-(user, family) token; rotating revokes the old one. */}
+      <IcsSection family={family} />
+
       {tzPickerOpen && (
         <TimezonePicker
           current={me.timezone}
@@ -526,4 +531,119 @@ function fmtDate(iso: string, locale: Locale = 'ru'): string {
  *  page self-contained (it's a 1-liner). */
 function pluralDaysI18n(n: number, isEn: boolean): string {
   return pluralize(isEn ? 'en' : 'ru', n, ['день', 'дня', 'дней'], ['day', 'days']);
+}
+
+/**
+ * ICS subscription panel. Shows the user's current feed URL (or a
+ * "Подключить" CTA when none), with Copy + Rotate + Revoke actions.
+ * Calendar apps fetch the URL on their own schedule; rotating
+ * invalidates the previous link, so old subscriptions stop syncing.
+ */
+function IcsSection({ family }: { family: FamilySummary }) {
+  const t = useT();
+  const queryClient = useQueryClient();
+  const tokenQuery = useQuery({
+    queryKey: ['ics-token', family.id],
+    queryFn: () => api.getIcsToken(family.id),
+  });
+  const issueMut = useMutation({
+    mutationFn: () => api.issueIcsToken(family.id),
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: ['ics-token', family.id] }),
+  });
+  const revokeMut = useMutation({
+    mutationFn: () => api.revokeIcsToken(family.id),
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: ['ics-token', family.id] }),
+  });
+  const token = tokenQuery.data?.token ?? null;
+  const url = token
+    ? `${typeof window !== 'undefined' ? window.location.origin : ''}/api/v1/ics/${token}.ics`
+    : null;
+  return (
+    <>
+      <span className="wf-h3" style={{ marginTop: 8 }}>
+        {t('ics.title')}
+      </span>
+      {!token ? (
+        <div className="wf-card subtle" style={{ padding: 10 }}>
+          <span className="wf-tiny" style={{ color: 'var(--hint)' }}>
+            {t('ics.hint')}
+          </span>
+          <button
+            type="button"
+            className="wf-btn primary"
+            onClick={() => issueMut.mutate()}
+            disabled={issueMut.isPending}
+            style={{
+              marginTop: 8,
+              padding: '6px 12px',
+              fontSize: 13,
+              cursor: issueMut.isPending ? 'default' : 'pointer',
+              border: 'none',
+            }}
+          >
+            {t('ics.connect')}
+          </button>
+        </div>
+      ) : (
+        <div className="wf-card" style={{ padding: 10 }}>
+          <span className="wf-tiny" style={{ color: 'var(--hint)' }}>
+            {t('ics.urlLabel')}
+          </span>
+          <div
+            style={{
+              marginTop: 4,
+              padding: '6px 8px',
+              background: 'var(--faint)',
+              borderRadius: 6,
+              fontFamily: 'monospace',
+              fontSize: 11,
+              wordBreak: 'break-all',
+              userSelect: 'text',
+            }}
+          >
+            {url}
+          </div>
+          <div className="wf-row wf-gap-6" style={{ marginTop: 8 }}>
+            <button
+              type="button"
+              className="wf-btn"
+              onClick={() => url && navigator.clipboard?.writeText(url)}
+              style={{ flex: 1, fontSize: 12, padding: '4px 10px', cursor: 'pointer' }}
+            >
+              {t('ics.copy')}
+            </button>
+            <button
+              type="button"
+              className="wf-btn"
+              onClick={() => issueMut.mutate()}
+              disabled={issueMut.isPending}
+              style={{
+                fontSize: 12,
+                padding: '4px 10px',
+                cursor: issueMut.isPending ? 'default' : 'pointer',
+              }}
+            >
+              {t('ics.rotate')}
+            </button>
+            <button
+              type="button"
+              className="wf-btn"
+              onClick={() => revokeMut.mutate()}
+              disabled={revokeMut.isPending}
+              style={{
+                fontSize: 12,
+                padding: '4px 10px',
+                cursor: revokeMut.isPending ? 'default' : 'pointer',
+                color: '#d33',
+              }}
+            >
+              {t('ics.revoke')}
+            </button>
+          </div>
+        </div>
+      )}
+    </>
+  );
 }

@@ -748,6 +748,23 @@ export const api = {
       { method: 'POST' },
     ),
 
+  getIcsToken: (familyId: string) =>
+    request<{
+      token: string | null;
+      createdAt: string | null;
+      lastUsedAt: string | null;
+    }>(`/api/v1/families/${familyId}/ics`),
+  issueIcsToken: (familyId: string) =>
+    request<{ token: string; createdAt: string }>(
+      `/api/v1/families/${familyId}/ics/issue`,
+      { method: 'POST' },
+    ),
+  revokeIcsToken: (familyId: string) =>
+    request<{ revoked: boolean }>(
+      `/api/v1/families/${familyId}/ics/revoke`,
+      { method: 'POST' },
+    ),
+
   listTaskComments: (familyId: string, taskId: string) =>
     request<{ comments: TaskCommentDto[] }>(
       `/api/v1/families/${familyId}/tasks/${taskId}/comments`,

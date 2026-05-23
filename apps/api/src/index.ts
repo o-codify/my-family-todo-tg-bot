@@ -26,6 +26,7 @@ import { familyEventsRouter } from './routes/family-events';
 import { mealPlanRouter } from './routes/meal-plan';
 import { permissionRequestsRouter } from './routes/permission-requests';
 import { taskCommentsRouter } from './routes/task-comments';
+import { icsManageRouter, icsPublicRouter } from './routes/ics';
 import { closeRealtime } from './realtime/pubsub';
 import { closeQueue } from './queue';
 import { hydrateDigestSchedulers, startNotificationsWorker, stopNotificationsWorker } from './queue/worker';
@@ -116,6 +117,9 @@ app.route('/api/v1/families/:familyId/family-events', familyEventsRouter);
 app.route('/api/v1/families/:familyId/meal-plan', mealPlanRouter);
 app.route('/api/v1/families/:familyId/permission-requests', permissionRequestsRouter);
 app.route('/api/v1/families/:familyId/tasks/:taskId/comments', taskCommentsRouter);
+app.route('/api/v1/families/:familyId/ics', icsManageRouter);
+// Public ICS feed — token in the URL, no auth middleware.
+app.route('/api/v1/ics', icsPublicRouter);
 // SSE stream — auth via query string (EventSource can't set headers).
 app.route('/api/v1/families', eventsRouter);
 // Photo routes share the family-id scope but expose three distinct shapes
