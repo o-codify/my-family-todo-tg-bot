@@ -3,11 +3,13 @@ import { and, eq, gte, isNull, lte, or } from 'drizzle-orm';
 import { db } from '../db/client';
 import {
   families,
+  familyMembers,
   icsTokens,
   taskOccurrences,
   tasks,
   type IcsTokenRow,
 } from '../db/schema';
+import { forecastQueueOccurrences } from './queue-forecast';
 
 const tokenAlphabet = customAlphabet(
   'abcdefghijklmnopqrstuvwxyz0123456789',
@@ -234,6 +236,82 @@ export async function generateFamilyIcs(input: {
     })
     .filter((s): s is string => s !== null);
 
+  // Queue forecast — the miniapp's Calendar projects future rotations of
+  // queued tasks client-side because only one real pending occurrence
+  // exists at a time. Mirror that here so the ICS feed shows the same
+  // "my turn" days. We need (a) every queued task in the family and
+  // (b) the current pending occurrence of each (regardless of who it's
+  // assigned to — we need it as the rotation pivot) and (c) the member
+  // roster as a fallback when `queueUserIds` is null.
+  const queueTasks = await db
+    .select()
+    .from(tasks)
+    .where(
+      and(
+        eq(tasks.familyId, input.familyId),
+        isNull(tasks.archivedAt),
+        eq(tasks.type, 'queued'),
+      ),
+    );
+
+  const forecastEvents: string[] = [];
+  if (queueTasks.length > 0) {
+    const [queueCurrent, memberRows] = await Promise.all([
+      db
+        .select({
+          taskId: taskOccurrences.taskId,
+          status: taskOccurrences.status,
+          assigneeId: taskOccurrences.assigneeId,
+          scheduledTime: taskOccurrences.scheduledTime,
+          title: tasks.title,
+          description: tasks.description,
+        })
+        .from(taskOccurrences)
+        .innerJoin(tasks, eq(taskOccurrences.taskId, tasks.id))
+        .where(
+          and(
+            eq(tasks.familyId, input.familyId),
+            eq(tasks.type, 'queued'),
+            eq(taskOccurrences.status, 'pending'),
+          ),
+        ),
+      db
+        .select({ userId: familyMembers.userId })
+        .from(familyMembers)
+        .where(eq(familyMembers.familyId, input.familyId)),
+    ]);
+
+    const titleByTask = new Map(queueCurrent.map((q) => [q.taskId, q.title]));
+    const descByTask = new Map(
+      queueCurrent.map((q) => [q.taskId, q.description ?? '']),
+    );
+
+    const forecast = forecastQueueOccurrences({
+      tasks: queueTasks,
+      occurrences: queueCurrent,
+      memberIds: memberRows.map((m) => m.userId),
+      todayIso,
+      toIso: to,
+    });
+
+    for (const f of forecast) {
+      // Personal feed: only forecast days when it's THIS user's turn.
+      if (f.assigneeId !== input.userId) continue;
+      const title = titleByTask.get(f.taskId);
+      if (!title) continue; // task has no current pending row — skip
+      forecastEvents.push(
+        formatVEvent({
+          uid: `${f.id}@family-todo`,
+          title,
+          description: descByTask.get(f.taskId) ?? '',
+          date: f.scheduledDate,
+          time: f.scheduledTime,
+          status: null,
+        }),
+      );
+    }
+  }
+
   return [
     'BEGIN:VCALENDAR',
     'VERSION:2.0',
@@ -242,6 +320,7 @@ export async function generateFamilyIcs(input: {
     'CALSCALE:GREGORIAN',
     'METHOD:PUBLISH',
     ...events,
+    ...forecastEvents,
     'END:VCALENDAR',
     '',
   ].join('\r\n');

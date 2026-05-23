@@ -324,6 +324,50 @@ describe('ICS feed (integration)', () => {
     expect(ics).toContain('STATUS:CANCELLED');
   });
 
+  it('emits queue forecast VEVENTs on my-turn days', async () => {
+    const me = await makeUser();
+    const sibling = await makeUser();
+    const { family } = await makeFamily(me);
+    const { addMember } = await import('../db-helpers');
+    await addMember(family, sibling, 'Adult');
+
+    // Queue task: rotates [sibling, me], step = 1 day. Current pending
+    // is on sibling — i.e. today is sibling's turn, tomorrow is mine.
+    const [task] = await db
+      .insert(tasks)
+      .values({
+        familyId: family.id,
+        title: 'Trash',
+        type: 'queued',
+        schedule: { kind: 'queued' },
+        createdBy: me.id,
+        points: 0,
+        photoRequired: false,
+        requiresApproval: false,
+        singleShot: false,
+        queueUserIds: [sibling.id, me.id],
+        cooldownDays: 1,
+      })
+      .returning();
+    await db.insert(taskOccurrences).values({
+      taskId: task!.id,
+      scheduledDate: null,
+      status: 'pending',
+      assigneeId: sibling.id,
+    });
+
+    const ics = await generateFamilyIcs({ familyId: family.id, userId: me.id });
+    // Sibling's current turn isn't mine — should NOT be anchored to today
+    // for me. But +1 day rotates to me — that forecast row SHOULD appear.
+    const tomorrow = new Date();
+    tomorrow.setUTCDate(tomorrow.getUTCDate() + 1);
+    const y = tomorrow.getUTCFullYear();
+    const m = String(tomorrow.getUTCMonth() + 1).padStart(2, '0');
+    const d = String(tomorrow.getUTCDate()).padStart(2, '0');
+    expect(ics).toContain('SUMMARY:Trash');
+    expect(ics).toContain(`DTSTART;VALUE=DATE:${y}${m}${d}`);
+  });
+
   it('escaping: commas, semicolons, backslashes, newlines in title', async () => {
     const owner = await makeUser();
     const { family } = await makeFamily(owner);
