@@ -261,14 +261,22 @@ export type ShoppingListDto = {
   id: string;
   familyId: string;
   name: string;
-  isPrimary: boolean;
+  assigneeUserId: string | null;
+  dueDate: string | null;
+  taskId: string | null;
   archivedAt: string | null;
+  createdByUserId: string;
   createdAt: string;
+  updatedAt: string;
+  /** Present on list-of-lists responses; undefined on the single-list view. */
+  openCount?: number;
+  boughtCount?: number;
 };
 
 export type ShoppingItemDto = {
   id: string;
   listId: string;
+  catalogItemId: string | null;
   text: string;
   quantity: string | null;
   category: ShoppingCategory;
@@ -555,35 +563,63 @@ export const api = {
   listTags: (familyId: string) =>
     request<{ tags: TagDto[] }>(`/api/v1/families/${familyId}/tags`),
 
-  getShoppingList: (familyId: string) =>
+  // ── shopping lists (multi) ───────────────────────────────────────
+  listShoppingLists: (familyId: string) =>
+    request<{ lists: ShoppingListDto[] }>(`/api/v1/families/${familyId}/shopping`),
+  createShoppingList: (
+    familyId: string,
+    payload: { name: string; assigneeUserId?: string | null; dueDate?: string | null },
+  ) =>
+    request<{ list: ShoppingListDto }>(`/api/v1/families/${familyId}/shopping`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+  getShoppingList: (familyId: string, listId: string) =>
     request<{ list: ShoppingListDto; items: ShoppingItemDto[] }>(
-      `/api/v1/families/${familyId}/shopping`,
+      `/api/v1/families/${familyId}/shopping/${listId}`,
     ),
+  updateShoppingList: (
+    familyId: string,
+    listId: string,
+    patch: { name?: string; assigneeUserId?: string | null; dueDate?: string | null },
+  ) =>
+    request<{ list: ShoppingListDto }>(
+      `/api/v1/families/${familyId}/shopping/${listId}`,
+      { method: 'PATCH', body: JSON.stringify(patch) },
+    ),
+  archiveShoppingList: (familyId: string, listId: string) =>
+    request<null>(`/api/v1/families/${familyId}/shopping/${listId}`, {
+      method: 'DELETE',
+    }),
+  restoreShoppingList: (familyId: string, listId: string) =>
+    request<{ list: ShoppingListDto }>(
+      `/api/v1/families/${familyId}/shopping/${listId}/restore`,
+      { method: 'POST' },
+    ),
+
+  // ── shopping items ──────────────────────────────────────────────
   addShoppingItem: (
     familyId: string,
+    listId: string,
     payload: {
       text: string;
       quantity?: string | null;
       category?: ShoppingCategory;
-      assignedUserId?: string | null;
+      catalogItemId?: string | null;
     },
   ) =>
-    request<{ item: ShoppingItemDto }>(`/api/v1/families/${familyId}/shopping/items`, {
-      method: 'POST',
-      body: JSON.stringify(payload),
-    }),
-  bulkAddShoppingItems: (
+    request<{ item: ShoppingItemDto }>(
+      `/api/v1/families/${familyId}/shopping/${listId}/items`,
+      { method: 'POST', body: JSON.stringify(payload) },
+    ),
+  addCatalogItemsToShoppingList: (
     familyId: string,
-    items: Array<{
-      text: string;
-      quantity?: string | null;
-      category?: ShoppingCategory;
-      assignedUserId?: string | null;
-    }>,
+    listId: string,
+    catalogItemIds: string[],
   ) =>
     request<{ added: ShoppingItemDto[]; skipped: number }>(
-      `/api/v1/families/${familyId}/shopping/items/bulk`,
-      { method: 'POST', body: JSON.stringify({ items }) },
+      `/api/v1/families/${familyId}/shopping/${listId}/items/from-catalog`,
+      { method: 'POST', body: JSON.stringify({ catalogItemIds }) },
     ),
   updateShoppingItem: (
     familyId: string,
@@ -592,7 +628,6 @@ export const api = {
       text?: string;
       quantity?: string | null;
       category?: ShoppingCategory;
-      assignedUserId?: string | null;
       status?: 'open' | 'bought';
     },
   ) =>
@@ -609,9 +644,14 @@ export const api = {
       `/api/v1/families/${familyId}/shopping/items/${itemId}/restore`,
       { method: 'POST' },
     ),
-  archiveBoughtShopping: (familyId: string, olderThanDays = 0) =>
+  moveShoppingItem: (familyId: string, itemId: string, targetListId: string) =>
+    request<{ item: ShoppingItemDto }>(
+      `/api/v1/families/${familyId}/shopping/items/${itemId}/move`,
+      { method: 'POST', body: JSON.stringify({ targetListId }) },
+    ),
+  archiveBoughtShopping: (familyId: string, listId: string, olderThanDays = 0) =>
     request<{ archived: number }>(
-      `/api/v1/families/${familyId}/shopping/archive-bought?olderThanDays=${olderThanDays}`,
+      `/api/v1/families/${familyId}/shopping/${listId}/archive-bought?olderThanDays=${olderThanDays}`,
       { method: 'POST' },
     ),
 

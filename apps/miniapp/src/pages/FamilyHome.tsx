@@ -40,7 +40,7 @@ type Route =
   | { kind: 'queues' }
   | { kind: 'queue'; taskId: string }
   | { kind: 'shop' }
-  | { kind: 'shopping' }
+  | { kind: 'shopping'; listId: string | null }
   | { kind: 'meal-plan' }
   | { kind: 'events' }
   | { kind: 'permReq' }
@@ -64,7 +64,7 @@ const NAV_ROUTE: Record<NavKey, Route> = {
   calendar: { kind: 'calendar' },
   queues: { kind: 'queues' },
   shop: { kind: 'shop' },
-  shopping: { kind: 'shopping' },
+  shopping: { kind: 'shopping', listId: null },
   'meal-plan': { kind: 'meal-plan' },
   events: { kind: 'events' },
   permReq: { kind: 'permReq' },
@@ -106,7 +106,7 @@ function serializeRoute(r: Route): string {
     case 'shop':
       return '#/shop';
     case 'shopping':
-      return '#/shopping';
+      return r.listId ? `#/shopping/${r.listId}` : '#/shopping';
     case 'meal-plan':
       return '#/meal-plan';
     case 'events':
@@ -160,8 +160,10 @@ function parseRoute(hash: string): Route {
     }
     case 'shop':
       return { kind: 'shop' };
-    case 'shopping':
-      return { kind: 'shopping' };
+    case 'shopping': {
+      const sub = rest[0];
+      return { kind: 'shopping', listId: sub ?? null };
+    }
     case 'meal-plan':
       return { kind: 'meal-plan' };
     case 'events':
@@ -439,8 +441,17 @@ export function FamilyHome({ me, families }: Props) {
         <Shopping
           me={me}
           family={activeFamily}
-          onBack={onBackFor}
-          onOpenDrawer={onOpenDrawerFor}
+          listId={route.listId}
+          onOpenList={(id) => pushRoute({ kind: 'shopping', listId: id })}
+          // Index has burger; list view has back-to-index. The back
+          // helper pops one level if a list is open, otherwise falls
+          // through to the parent (which closes the page).
+          onBack={
+            route.listId
+              ? () => setRoute({ kind: 'shopping', listId: null })
+              : onBackFor
+          }
+          onOpenDrawer={route.listId ? undefined : onOpenDrawerFor}
         />
       )}
       {route.kind === 'events' && (
