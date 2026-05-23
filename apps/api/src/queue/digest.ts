@@ -1,12 +1,16 @@
-import { and, eq, gte, isNull, lte, or } from 'drizzle-orm';
+import { and, desc, eq, gte, isNull, lt, lte, or } from 'drizzle-orm';
 import { db } from '../db/client';
 import {
+  familyEvents,
   familyMembers,
+  families,
   notificationsLog,
+  roles,
   taskOccurrences,
   tasks,
   users,
 } from '../db/schema';
+import { daysUntil } from '../services/events';
 import { logger } from '../logger';
 import { getNotificationsQueue } from './index';
 import { localDate, localHHMM, isInQuietHours } from './quiet-hours';
@@ -165,22 +169,191 @@ export async function runDigest(input: { userId: string }): Promise<void> {
     );
 
   const isEn = user.locale === 'en';
-  const greeting = isEn ? '☀️ Morning! Today on your list:' : '☀️ Доброе утро! На сегодня:';
-  const empty = isEn ? '🎉 Nothing scheduled — enjoy.' : '🎉 На сегодня пусто — отдыхай.';
+  const lines: string[] = [];
+  lines.push(isEn ? '☀️ Morning! Today on your list:' : '☀️ Доброе утро! На сегодня:');
 
+  // ── Today ──────────────────────────────────────────────────────
   if (rows.length === 0) {
-    await sendBotMessage({ chatId: Number(user.telegramId), text: `${greeting}\n\n${empty}` });
-    void todayStart; // intentionally unused but kept for symmetry
-    return;
+    lines.push('');
+    lines.push(isEn ? '🎉 Nothing scheduled — enjoy.' : '🎉 На сегодня пусто — отдыхай.');
+  } else {
+    for (let i = 0; i < rows.length; i++) {
+      const r = rows[i]!;
+      const time = r.time ? ` · ${r.time.slice(0, 5)}` : '';
+      const pts = r.points > 0 ? ` · +${r.points}` : '';
+      lines.push(`${i + 1}. ${r.taskTitle}${time}${pts}`);
+    }
+  }
+  void todayStart;
+
+  // Collect family-scoped extras across every family the user belongs to.
+  const memberships = await db
+    .select({
+      familyId: familyMembers.familyId,
+      permissions: roles.permissions,
+    })
+    .from(familyMembers)
+    .innerJoin(roles, eq(familyMembers.roleId, roles.id))
+    .where(eq(familyMembers.userId, user.id));
+
+  // ── Overdue ────────────────────────────────────────────────────
+  // Pending occurrences with scheduled_date < today that are still
+  // assigned to the user (or unassigned). Cap at 5 entries so the
+  // digest stays readable; collapse the rest behind a "+N more" line.
+  const overdue = await db
+    .select({
+      title: tasks.title,
+      date: taskOccurrences.scheduledDate,
+    })
+    .from(taskOccurrences)
+    .innerJoin(tasks, eq(taskOccurrences.taskId, tasks.id))
+    .innerJoin(familyMembers, eq(familyMembers.familyId, tasks.familyId))
+    .where(
+      and(
+        eq(familyMembers.userId, user.id),
+        isNull(tasks.archivedAt),
+        eq(taskOccurrences.status, 'pending'),
+        lt(taskOccurrences.scheduledDate, today),
+        or(
+          eq(taskOccurrences.assigneeId, user.id),
+          isNull(taskOccurrences.assigneeId),
+        ),
+      ),
+    )
+    .orderBy(desc(taskOccurrences.scheduledDate))
+    .limit(6);
+  if (overdue.length > 0) {
+    lines.push('');
+    lines.push(isEn ? '⏰ Overdue:' : '⏰ Просрочено:');
+    const shown = overdue.slice(0, 5);
+    for (const r of shown) {
+      lines.push(`• ${r.title} — ${r.date}`);
+    }
+    if (overdue.length > 5) {
+      lines.push(isEn ? `  +${overdue.length - 5} more` : `  +${overdue.length - 5} ещё`);
+    }
   }
 
-  const lines = rows.map((r, i) => {
-    const time = r.time ? ` · ${r.time.slice(0, 5)}` : '';
-    const pts = r.points > 0 ? ` · +${r.points}` : '';
-    return `${i + 1}. ${r.taskTitle}${time}${pts}`;
+  // ── Birthdays / events in the next 7 days ──────────────────────
+  if (memberships.length > 0) {
+    const familyIds = memberships.map((m) => m.familyId);
+    const allEvents = await db
+      .select()
+      .from(familyEvents)
+      .where(
+        and(
+          // drizzle-orm `inArray` would be cleaner, but we already pull
+          // memberships; an OR-chain with .where is equally cheap on
+          // a small N (most users belong to 1–2 families).
+          familyIds.length === 1
+            ? eq(familyEvents.familyId, familyIds[0]!)
+            : or(...familyIds.map((id) => eq(familyEvents.familyId, id))),
+          isNull(familyEvents.deletedAt),
+        ),
+      );
+    const todayDate = new Date();
+    const upcoming = allEvents
+      .map((e) => ({ ev: e, days: daysUntil(e.month, e.day, todayDate) }))
+      .filter((x) => x.days >= 0 && x.days <= 7)
+      .sort((a, b) => a.days - b.days);
+    if (upcoming.length > 0) {
+      lines.push('');
+      lines.push(isEn ? '🎂 Soon:' : '🎂 Скоро:');
+      for (const { ev, days } of upcoming) {
+        const emoji = ev.emoji ?? eventEmojiFor(ev.type);
+        const when =
+          days === 0
+            ? isEn
+              ? 'today'
+              : 'сегодня'
+            : days === 1
+              ? isEn
+                ? 'tomorrow'
+                : 'завтра'
+              : isEn
+                ? `in ${days}d`
+                : `через ${days} дн.`;
+        lines.push(`${emoji} ${ev.title} — ${when}`);
+      }
+    }
+  }
+
+  // ── Pending approvals (only if user has task.approve somewhere) ─
+  const approverFamilyIds = memberships
+    .filter((m) => (m.permissions as string[]).includes('task.approve'))
+    .map((m) => m.familyId);
+  if (approverFamilyIds.length > 0) {
+    const pendingApprovals = await db
+      .select({
+        title: tasks.title,
+      })
+      .from(taskOccurrences)
+      .innerJoin(tasks, eq(taskOccurrences.taskId, tasks.id))
+      .where(
+        and(
+          approverFamilyIds.length === 1
+            ? eq(tasks.familyId, approverFamilyIds[0]!)
+            : or(...approverFamilyIds.map((id) => eq(tasks.familyId, id))),
+          isNull(tasks.archivedAt),
+          eq(taskOccurrences.status, 'pending_approval'),
+        ),
+      )
+      .limit(5);
+    if (pendingApprovals.length > 0) {
+      lines.push('');
+      lines.push(
+        isEn
+          ? `🔔 ${pendingApprovals.length} awaiting your approval`
+          : `🔔 ${pendingApprovals.length} ждёт одобрения`,
+      );
+      for (const r of pendingApprovals) {
+        lines.push(`• ${r.title}`);
+      }
+    }
+  }
+
+  // ── Pinned notes from any family the user is in ────────────────
+  if (memberships.length > 0) {
+    const familyIds = memberships.map((m) => m.familyId);
+    const pinnedRows = await db
+      .select()
+      .from(families)
+      .where(
+        familyIds.length === 1
+          ? eq(families.id, familyIds[0]!)
+          : or(...familyIds.map((id) => eq(families.id, id))),
+      );
+    const notes = pinnedRows.filter((f) => f.pinnedNote);
+    if (notes.length > 0) {
+      lines.push('');
+      lines.push(isEn ? '📌 Family note:' : '📌 Семейная заметка:');
+      for (const f of notes) {
+        // Truncate hard at 200 chars so a long note doesn't dominate the digest.
+        const note = f.pinnedNote!.length > 200 ? f.pinnedNote!.slice(0, 197) + '…' : f.pinnedNote;
+        lines.push(`  ${note}`);
+      }
+    }
+  }
+
+  await sendBotMessage({
+    chatId: Number(user.telegramId),
+    text: lines.join('\n'),
   });
-  const body = `${greeting}\n${lines.join('\n')}`;
-  await sendBotMessage({ chatId: Number(user.telegramId), text: body });
+}
+
+function eventEmojiFor(type: string): string {
+  switch (type) {
+    case 'birthday':
+      return '🎂';
+    case 'anniversary':
+      return '💍';
+    case 'nameday':
+      return '✨';
+    case 'memorial':
+      return '🕯️';
+    default:
+      return '📅';
+  }
 }
 
 async function tryInsertLog(userId: string, kind: string, dedupeKey: string): Promise<boolean> {
