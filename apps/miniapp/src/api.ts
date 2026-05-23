@@ -794,9 +794,13 @@ export const api = {
       /** Full https URL — apple calendar refuses http. Computed
        *  server-side from env.API_PUBLIC_URL. */
       url: string | null;
-      /** Same URL with webcal:// scheme — tapping on iOS auto-opens
-       *  the Subscribe dialog in Calendar.app. */
+      /** Same URL with webcal:// scheme — direct subscribe trigger
+       *  for clients that can speak the scheme (Safari address bar,
+       *  share sheet). Telegram WebView CANNOT — see subscribeUrl. */
       webcal: string | null;
+      /** https URL that 302-redirects to webcal://. Used from inside
+       *  Telegram (tg.openLink only allows http(s)). */
+      subscribeUrl: string | null;
       createdAt: string | null;
       lastUsedAt: string | null;
     }>(`/api/v1/families/${familyId}/ics`),
@@ -805,6 +809,7 @@ export const api = {
       token: string;
       url: string;
       webcal: string;
+      subscribeUrl: string;
       createdAt: string;
     }>(`/api/v1/families/${familyId}/ics/issue`, { method: 'POST' }),
   revokeIcsToken: (familyId: string) =>

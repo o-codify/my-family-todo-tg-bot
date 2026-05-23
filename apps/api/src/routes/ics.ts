@@ -17,14 +17,22 @@ import {
  * where the miniapp itself is reached via http through a tunnel. The
  * client used to construct this URL from window.location.origin and
  * inherited the http scheme; building server-side avoids that. */
-function buildFeedUrl(token: string): { url: string; webcal: string } {
+function buildFeedUrl(token: string): {
+  url: string;
+  webcal: string;
+  subscribeUrl: string;
+} {
   const base = env.API_PUBLIC_URL.replace(/\/+$/, '').replace(/\/api(\/v1)?$/, '');
   const url = `${base}/api/v1/ics/${token}.ics`;
   // webcal:// is the calendar-subscription protocol scheme Apple +
   // most other clients auto-recognise — tapping it on iOS opens the
   // Subscribe dialog directly. Strip the http(s):// from `url`.
   const webcal = `webcal://${url.replace(/^https?:\/\//, '')}`;
-  return { url, webcal };
+  // https alias that 302-redirects to webcal://. Lets the frontend
+  // open it via Telegram.WebApp.openLink (which only allows http(s)),
+  // and Safari follows the redirect to trigger iOS Calendar.
+  const subscribeUrl = `${base}/api/v1/ics/${token}/subscribe`;
+  return { url, webcal, subscribeUrl };
 }
 
 /**
@@ -46,10 +54,12 @@ icsManageRouter.get('/', async (c) => {
     userId: c.get('user').id,
     familyId: c.get('familyId'),
   });
+  const feed = row ? buildFeedUrl(row.token) : null;
   return c.json({
     token: row?.token ?? null,
-    url: row ? buildFeedUrl(row.token).url : null,
-    webcal: row ? buildFeedUrl(row.token).webcal : null,
+    url: feed?.url ?? null,
+    webcal: feed?.webcal ?? null,
+    subscribeUrl: feed?.subscribeUrl ?? null,
     createdAt: row?.createdAt.toISOString() ?? null,
     lastUsedAt: row?.lastUsedAt?.toISOString() ?? null,
   });
@@ -60,11 +70,12 @@ icsManageRouter.post('/issue', async (c) => {
     userId: c.get('user').id,
     familyId: c.get('familyId'),
   });
-  const { url, webcal } = buildFeedUrl(row.token);
+  const { url, webcal, subscribeUrl } = buildFeedUrl(row.token);
   return c.json({
     token: row.token,
     url,
     webcal,
+    subscribeUrl,
     createdAt: row.createdAt.toISOString(),
   });
 });
@@ -80,6 +91,23 @@ icsManageRouter.post('/revoke', async (c) => {
 /** Public feed router — no auth middleware. The token in the path is
  *  the credential. Returns 404 for unknown / revoked tokens. */
 export const icsPublicRouter = new Hono();
+
+/** "Open in Calendar app" redirect — bridges Telegram WebView, which
+ *  blocks non-http schemes, to iOS Calendar's webcal:// subscribe
+ *  dialog. Frontend opens this https URL via tg.openLink (allowed);
+ *  Safari follows the 302 to webcal://, iOS catches the scheme handler.
+ *  Matches BEFORE the catch-all token route so the static `/subscribe`
+ *  segment wins. */
+icsPublicRouter.get('/:tokenAndExt/subscribe', async (c) => {
+  const raw = c.req.param('tokenAndExt');
+  const token = raw?.replace(/\.ics$/i, '') ?? '';
+  if (!token) return c.json({ error: 'no_token' }, 400);
+  const resolved = await resolveToken(token);
+  if (!resolved) return c.json({ error: 'token_not_found_or_revoked' }, 404);
+  const base = env.API_PUBLIC_URL.replace(/\/+$/, '').replace(/\/api(\/v1)?$/, '');
+  const webcal = `webcal://${base.replace(/^https?:\/\//, '')}/api/v1/ics/${token}.ics`;
+  return c.redirect(webcal, 302);
+});
 
 // Catch any path segment and strip `.ics` inside the handler. We had
 // `/:token.ics` and `/:token{...}.ics` before; both fought with Hono's

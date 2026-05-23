@@ -573,7 +573,7 @@ function IcsSection({ family }: { family: FamilySummary }) {
     (token
       ? `${typeof window !== 'undefined' ? window.location.origin : ''}/api/v1/ics/${token}.ics`
       : null);
-  const webcal = tokenQuery.data?.webcal ?? null;
+  const subscribeUrl = tokenQuery.data?.subscribeUrl ?? null;
   return (
     <>
       <span className="wf-h3" style={{ marginTop: 8 }}>
@@ -619,33 +619,39 @@ function IcsSection({ family }: { family: FamilySummary }) {
           >
             {url}
           </div>
-          {/* iOS subscribe: a real <a> element with webcal:// href —
-              Telegram.WebApp.openLink only handles http(s), so the
-              previous JS-driven button silently no-op'd on iOS. An
-              anchor tag lets the OS take over via its native scheme
-              handler, which on iOS pops the "Subscribe to Calendar"
-              dialog. We style the link as a button. */}
-          {webcal && (
-            <a
-              href={webcal}
-              // `noopener` is good hygiene; not strictly needed since
-              // webcal:// doesn't open a JS-capable context.
-              rel="noopener"
+          {/* iOS subscribe: open the server's https alias via
+              Telegram.WebApp.openLink — Telegram blocks navigation
+              to non-http schemes (including webcal://) directly, so
+              we go through a 302 redirect on the API which Safari
+              follows into the webcal:// scheme handler → iOS
+              Calendar's Subscribe dialog. */}
+          {subscribeUrl && (
+            <button
+              type="button"
               className="wf-btn primary"
+              onClick={() => {
+                const tg = (
+                  window as unknown as {
+                    Telegram?: { WebApp?: { openLink: (u: string) => void } };
+                  }
+                ).Telegram?.WebApp;
+                if (tg?.openLink) {
+                  tg.openLink(subscribeUrl);
+                } else {
+                  window.open(subscribeUrl, '_blank');
+                }
+              }}
               style={{
-                display: 'block',
-                textAlign: 'center',
-                textDecoration: 'none',
                 marginTop: 8,
                 padding: '8px 12px',
                 fontSize: 13,
                 cursor: 'pointer',
                 border: 'none',
-                color: 'var(--paper)',
+                width: '100%',
               }}
             >
               {t('ics.subscribe')}
-            </a>
+            </button>
           )}
           <div className="wf-row wf-gap-6" style={{ marginTop: 8 }}>
             <CopyButton
