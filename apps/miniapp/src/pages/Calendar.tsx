@@ -764,6 +764,7 @@ export function Calendar({
         return (
           <DayTaskCard
             key={o.id}
+            meId={me.id}
             o={o}
             memberById={memberById}
             selectedIso={selectedIso}
@@ -814,6 +815,7 @@ export function Calendar({
         selectedDone.map((o) => (
           <DayTaskCard
             key={o.id}
+            meId={me.id}
             o={o}
             memberById={memberById}
             selectedIso={selectedIso}
@@ -830,6 +832,7 @@ export function Calendar({
           byDate={byDate}
           memberById={memberById}
           todayIso={todayIso}
+          meId={me.id}
           onOpenTask={onOpenTask}
           onOpenDay={onOpenDay}
           onToggle={(occ) => {
@@ -846,6 +849,7 @@ export function Calendar({
           occurrences={occurrences}
           memberById={memberById}
           todayIso={todayIso}
+          meId={me.id}
           onOpenTask={onOpenTask}
           onOpenDay={onOpenDay}
           onToggle={(occ) => {
@@ -972,6 +976,7 @@ function DayTaskCard({
   memberById,
   selectedIso,
   todayIso,
+  meId,
   onOpenTask,
   onToggle,
   dragBinding,
@@ -981,6 +986,11 @@ function DayTaskCard({
   memberById: Map<string, Member>;
   selectedIso: string;
   todayIso: string;
+  /** Current user's id. Drives the "ownership-only" gate on the
+   *  checkbox — the user explicitly asked that you cannot complete
+   *  someone else's task from the day list. Unassigned (shared)
+   *  rows stay tappable. */
+  meId: string;
   onOpenTask?: (occurrence: OccurrenceDto) => void;
   onToggle: (occurrence: OccurrenceDto) => void;
   /** Optional drag-to-reschedule binding from useDragReschedule. The
@@ -1013,6 +1023,14 @@ function DayTaskCard({
   // Render them dimmed and non-interactive; the user sees the schedule
   // but can only act on the real "today" row.
   const isForecast = o.id.startsWith('queue-forecast:');
+  // Ownership-only checkbox: only the assignee (or anyone, for shared
+  // unassigned rows) gets the interactive checkbox. For done rows, only
+  // the completer can undo inline. Non-owners can still open the
+  // TaskSheet via row tap — they just can't toggle the row directly.
+  // Mirrors the server's 403 'not_your_task' on /complete + /uncomplete.
+  const ownsRow = done
+    ? o.completedBy === meId
+    : o.assigneeId === null || o.assigneeId === meId;
   return (
     <div
       className="wf-card"
@@ -1062,14 +1080,23 @@ function DayTaskCard({
         </div>
       )}
       <div className="wf-row wf-gap-10">
-        {isForecast ? (
-          // Placeholder dot instead of a checkbox so the row isn't tap-bait
-          // for someone trying to mark a future day done.
+        {isForecast || !ownsRow ? (
+          // Placeholder dot instead of a checkbox:
+          //   - forecasts: future queue projections, no real row yet
+          //   - foreign rows: per ownership-only rule, only the assignee
+          //     (or completer for done) can tap the checkbox here
+          // The row's onOpenTask still works so the user can inspect.
           <span
-            className="wf-check"
-            style={{ pointerEvents: 'none', opacity: 0.4 }}
+            className={'wf-check' + (done ? ' done' : '')}
+            style={{
+              pointerEvents: 'none',
+              opacity: isForecast ? 0.4 : 0.6,
+              ...(doneBg ? { background: doneBg, color: doneFg, borderColor: doneBg } : null),
+            }}
             aria-hidden
-          />
+          >
+            {done && <Icon name="check" />}
+          </span>
         ) : (
           <span
             className={'wf-check' + (done ? ' done' : '')}
@@ -1209,6 +1236,7 @@ function WeekView({
   byDate,
   memberById,
   todayIso,
+  meId,
   onOpenTask,
   onOpenDay,
   onToggle,
@@ -1219,6 +1247,9 @@ function WeekView({
   byDate: Map<string, OccurrenceDto[]>;
   memberById: Map<string, Member>;
   todayIso: string;
+  /** Current user id — forwarded into DayTaskCard for the ownership
+   *  gate on the inline checkbox. */
+  meId: string;
   onOpenTask?: (occurrence: OccurrenceDto) => void;
   onOpenDay?: (iso: string) => void;
   onToggle: (o: OccurrenceDto) => void;
@@ -1265,6 +1296,7 @@ function WeekView({
             {pending.map((o) => (
               <DayTaskCard
                 key={o.id}
+                meId={meId}
                 o={o}
                 memberById={memberById}
                 selectedIso={iso}
@@ -1276,6 +1308,7 @@ function WeekView({
             {done.map((o) => (
               <DayTaskCard
                 key={o.id}
+                meId={meId}
                 o={o}
                 memberById={memberById}
                 selectedIso={iso}
@@ -1305,6 +1338,7 @@ function AgendaView({
   occurrences,
   memberById,
   todayIso,
+  meId,
   onOpenTask,
   onOpenDay,
   onToggle,
@@ -1314,6 +1348,9 @@ function AgendaView({
   occurrences: OccurrenceDto[];
   memberById: Map<string, Member>;
   todayIso: string;
+  /** Current user id — forwarded into DayTaskCard for the ownership
+   *  gate on the inline checkbox. */
+  meId: string;
   onOpenTask?: (occurrence: OccurrenceDto) => void;
   onOpenDay?: (iso: string) => void;
   onToggle: (o: OccurrenceDto) => void;
@@ -1359,6 +1396,7 @@ function AgendaView({
           {items.map((o) => (
             <DayTaskCard
               key={o.id}
+              meId={meId}
               o={o}
               memberById={memberById}
               selectedIso={iso}

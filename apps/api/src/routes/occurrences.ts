@@ -56,9 +56,15 @@ occurrencesRouter.post(
     const occ = await getOccurrenceInFamily(c.req.param('occurrenceId'), familyId);
     if (!occ) return c.json({ error: 'occurrence_not_found' }, 404);
 
-    const isAssignee = occ.assigneeId === user.id;
-    if (!isAssignee && !c.get('permissions').includes('task.complete.any')) {
-      return c.json({ error: 'forbidden', permission: 'task.complete.any' }, 403);
+    // Ownership-only: even Owners can't close someone else's task. The
+    // `task.complete.any` permission stays in the catalog for possible
+    // future "manager mode" but is intentionally NOT honoured here —
+    // the user reported "clicked the checkbox of someone else's task,
+    // it marked done by me" which is jarring UX. Unassigned shared
+    // tasks (assigneeId === null) stay completable by anyone in family.
+    const canAct = occ.assigneeId === null || occ.assigneeId === user.id;
+    if (!canAct) {
+      return c.json({ error: 'not_your_task' }, 403);
     }
 
     try {
@@ -90,9 +96,10 @@ occurrencesRouter.patch(
     const occ = await getOccurrenceInFamily(c.req.param('occurrenceId'), familyId);
     if (!occ) return c.json({ error: 'occurrence_not_found' }, 404);
 
-    const isAssignee = occ.assigneeId === user.id;
-    if (!isAssignee && !c.get('permissions').includes('task.complete.any')) {
-      return c.json({ error: 'forbidden', permission: 'task.complete.any' }, 403);
+    // Same ownership rule as /complete — see the comment there.
+    const canAct = occ.assigneeId === null || occ.assigneeId === user.id;
+    if (!canAct) {
+      return c.json({ error: 'not_your_task' }, 403);
     }
 
     try {
@@ -236,9 +243,15 @@ occurrencesRouter.post('/:occurrenceId/uncomplete', async (c) => {
   const occ = await getOccurrenceInFamily(c.req.param('occurrenceId'), familyId);
   if (!occ) return c.json({ error: 'occurrence_not_found' }, 404);
 
-  const isCompleter = occ.completedBy === user.id;
-  if (!isCompleter && !c.get('permissions').includes('task.complete.any')) {
-    return c.json({ error: 'forbidden', permission: 'task.complete.any' }, 403);
+  // Same ownership rule: only the assignee (or the completer, for
+  // unassigned tasks) can revert. Owner/Adult bypass removed — matches
+  // /complete behaviour.
+  const canAct =
+    occ.completedBy === user.id ||
+    occ.assigneeId === user.id ||
+    occ.assigneeId === null;
+  if (!canAct) {
+    return c.json({ error: 'not_your_task' }, 403);
   }
 
   const updated = await uncompleteOccurrence(occ.id);

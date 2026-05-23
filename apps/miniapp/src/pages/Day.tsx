@@ -257,6 +257,7 @@ export function Day({ me, family, iso, onBack, onOpenTask, onCreateTask }: Props
               key={o.id}
               o={o}
               assignee={o.assigneeId ? memberById.get(o.assigneeId) ?? null : null}
+              meId={me.id}
               danger
               onToggle={() => completeMut.mutate(o.id)}
               onOpen={() => onOpenTask(o)}
@@ -277,6 +278,7 @@ export function Day({ me, family, iso, onBack, onOpenTask, onCreateTask }: Props
               key={o.id}
               o={o}
               assignee={o.assigneeId ? memberById.get(o.assigneeId) ?? null : null}
+              meId={me.id}
               onToggle={() => {
                 if (o.task.photoRequired) {
                   onOpenTask(o);
@@ -367,6 +369,7 @@ export function Day({ me, family, iso, onBack, onOpenTask, onCreateTask }: Props
             o={o}
             assignee={o.assigneeId ? memberById.get(o.assigneeId) ?? null : null}
             completedBy={o.completedBy ? memberById.get(o.completedBy) ?? null : null}
+            meId={me.id}
             doneCard
             onToggle={() => uncompleteMut.mutate(o.id)}
             onOpen={() => onOpenTask(o)}
@@ -408,6 +411,11 @@ type CardProps = {
   completedBy?: Member | null;
   danger?: boolean;
   doneCard?: boolean;
+  /** Current user id. Used to gate the inline checkbox: ownership-only,
+   *  per user's "manage only your own tasks" rule. Pending rows are
+   *  toggleable when assigneeId === meId or unassigned; done rows are
+   *  toggleable only by the original completer. */
+  meId: string;
   onToggle: () => void;
   onOpen: () => void;
 };
@@ -418,6 +426,7 @@ function TaskCard({
   completedBy,
   danger,
   doneCard,
+  meId,
   onToggle,
   onOpen,
 }: CardProps) {
@@ -435,6 +444,11 @@ function TaskCard({
   // rotations and aren't backed by a real occurrence yet. Render as
   // read-only with dimmed styling.
   const isForecast = o.id.startsWith('queue-forecast:');
+  // Ownership-only: only the assignee (or anyone, for shared rows) can
+  // toggle pending; only the completer can undo done. See CardProps.meId.
+  const ownsRow = doneCard
+    ? o.completedBy === meId
+    : o.assigneeId === null || o.assigneeId === meId;
   return (
     <div
       className="wf-card"
@@ -445,12 +459,18 @@ function TaskCard({
       onClick={isForecast ? undefined : onOpen}
     >
       <div className="wf-row wf-gap-10">
-        {isForecast ? (
+        {isForecast || !ownsRow ? (
           <span
-            className="wf-check"
-            style={{ pointerEvents: 'none', opacity: 0.4 }}
+            className={'wf-check' + (doneCard ? ' done' : '')}
+            style={{
+              pointerEvents: 'none',
+              opacity: isForecast ? 0.4 : 0.6,
+              ...(doneBg ? { background: doneBg, color: doneFg, borderColor: doneBg } : null),
+            }}
             aria-hidden
-          />
+          >
+            {doneCard && <Icon name="check" />}
+          </span>
         ) : (
           <span
             className={'wf-check' + (doneCard ? ' done' : '')}
