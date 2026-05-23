@@ -492,6 +492,11 @@ export function FamilyHome({ me, families, onAddFamily }: Props) {
           }}
           onOpenMyProfile={() => pushRoute({ kind: 'my-profile' })}
           onOpenMember={(userId) => pushRoute({ kind: 'member', userId })}
+          onOpenStats={() => pushRoute({ kind: 'stats' })}
+          onOpenHistory={() => pushRoute({ kind: 'history' })}
+          onOpenRoles={() => pushRoute({ kind: 'roles' })}
+          onOpenCatalog={() => pushRoute({ kind: 'catalog' })}
+          onOpenTemplates={() => pushRoute({ kind: 'templates' })}
           onBack={onBackFor}
           onOpenDrawer={onOpenDrawerFor}
         />

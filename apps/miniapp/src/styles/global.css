@@ -385,9 +385,12 @@ input,
 .wf-drawer__item {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 10px 12px;
-  border-radius: 12px;
+  gap: 10px;
+  /* Tightened from 10/12 to 6/12 so 10+ entries fit on a 700px-tall
+     phone viewport without scrolling. The user explicitly asked
+     "нельзя чтобы в меню был скролл". */
+  padding: 6px 12px;
+  border-radius: 10px;
   cursor: pointer;
   color: var(--ink);
   font-size: 15px;
@@ -403,11 +406,11 @@ input,
 }
 
 .wf-drawer__section {
-  font-size: 11px;
+  font-size: 10px;
   text-transform: uppercase;
   letter-spacing: 0.04em;
   color: var(--hint);
-  padding: 12px 12px 4px;
+  padding: 8px 12px 2px;
 }
 
 /*

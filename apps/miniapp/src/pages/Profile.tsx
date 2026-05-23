@@ -24,6 +24,15 @@ type Props = {
   onLeft: () => void;
   onOpenMyProfile?: () => void;
   onOpenMember?: (userId: string) => void;
+  /** Family-management navigation. The drawer no longer hosts these
+   *  rows (the user demanded zero scroll there); they live here on
+   *  the family-settings page instead. Each is optional so the page
+   *  still renders if the parent doesn't wire one. */
+  onOpenRoles?: () => void;
+  onOpenCatalog?: () => void;
+  onOpenTemplates?: () => void;
+  onOpenStats?: () => void;
+  onOpenHistory?: () => void;
   /** Burger button → opens the nav drawer. Top-level page only. */
   onOpenDrawer?: () => void;
   /** Back button (shown instead of the burger when the user reached this
@@ -56,6 +65,11 @@ export function Profile({
   onLeft,
   onOpenMyProfile,
   onOpenMember,
+  onOpenRoles,
+  onOpenCatalog,
+  onOpenTemplates,
+  onOpenStats,
+  onOpenHistory,
   onOpenDrawer,
   onBack,
 }: Props) {
@@ -344,12 +358,55 @@ export function Profile({
         />
       )}
 
-      {/* The "Family management" rows that used to live here (Search /
-          Inbox / Stats / History / Catalog / Templates / Roles) all moved
-          into the burger drawer — duplicating them here just confused
-          users and left two ways to reach the same screen. Settings now
-          focuses on family identity, members, notifications, language,
-          and the owner-only Danger zone below. */}
+      {/* Family-management navigation. The user wanted the drawer to fit
+          without scrolling, so these admin-y destinations moved here —
+          this is the natural place for them anyway (they're family-level
+          settings). Each row is rendered only when the parent wired up
+          the handler. */}
+      {(onOpenStats || onOpenHistory || onOpenRoles || onOpenCatalog || onOpenTemplates) && (
+        <>
+          <span className="wf-h3" style={{ marginTop: 8 }}>
+            {t.locale === 'en' ? 'Family management' : 'Управление семьёй'}
+          </span>
+          <div className="wf-col wf-gap-6">
+            {onOpenStats && (
+              <ProfileNavRow
+                icon="chart"
+                label={t.locale === 'en' ? 'Stats' : 'Статистика'}
+                onClick={onOpenStats}
+              />
+            )}
+            {onOpenHistory && (
+              <ProfileNavRow
+                icon="list"
+                label={t.locale === 'en' ? 'History' : 'История'}
+                onClick={onOpenHistory}
+              />
+            )}
+            {onOpenRoles && (
+              <ProfileNavRow
+                icon="users"
+                label={t.locale === 'en' ? 'Roles' : 'Роли'}
+                onClick={onOpenRoles}
+              />
+            )}
+            {onOpenCatalog && (
+              <ProfileNavRow
+                icon="pkg"
+                label={t.locale === 'en' ? 'Catalog' : 'Каталог'}
+                onClick={onOpenCatalog}
+              />
+            )}
+            {onOpenTemplates && (
+              <ProfileNavRow
+                icon="flag"
+                label={t.locale === 'en' ? 'Templates' : 'Шаблоны'}
+                onClick={onOpenTemplates}
+              />
+            )}
+          </div>
+        </>
+      )}
 
       {/* Owner-only Danger zone — rename + rotate + delete family. */}
       {isFamilyOwner && (
@@ -789,6 +846,42 @@ function MemberActionsSheet({
  * Tiny sheet with a single text input + Save/Cancel buttons. Used by the
  * owner-only "Rename family" action in the Danger zone.
  */
+/** Compact "open sub-page" row used by the Family-management section.
+ *  Mirrors the visual rhythm of other settings cards on this page. */
+function ProfileNavRow({
+  icon,
+  label,
+  onClick,
+}: {
+  icon: 'chart' | 'list' | 'users' | 'pkg' | 'flag';
+  label: string;
+  onClick: () => void;
+}) {
+  return (
+    <div
+      className="wf-card compact"
+      onClick={onClick}
+      style={{ cursor: 'pointer' }}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          onClick();
+        }
+      }}
+    >
+      <div className="wf-spread">
+        <div className="wf-row wf-gap-8">
+          <Icon name={icon} />
+          <span className="wf-label">{label}</span>
+        </div>
+        <Icon name="chevR" />
+      </div>
+    </div>
+  );
+}
+
 function RenameFamilySheet({
   t,
   currentName,

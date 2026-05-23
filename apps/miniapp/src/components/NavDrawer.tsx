@@ -44,10 +44,13 @@ type Props = {
 
 type Entry = { key: NavKey; icon: IconName; labelKey: string };
 
-// User asked to remove drawer scrolling. Shrunk MAIN to the high-traffic
-// destinations and pushed search/inbox/permission-requests down into the
-// "extras" group. Sections combined keep the entry count under what fits
-// on a 700-px-tall viewport without scrolling.
+// User: "Все еще много пунктов. Я сказал что скролла не должно быть."
+// Trimmed drawer to daily-use destinations only. Family-management
+// stuff (Roles, Catalog, Templates, History, Stats) moved to the
+// Profile / family-settings page (reached via tap on the family name
+// in the header). Per-user notification stuff (Inbox, Search,
+// Permission requests) stays in the drawer since users hit those
+// often.
 const MAIN: Entry[] = [
   { key: 'calendar', icon: 'cal', labelKey: 'nav.calendar' },
   { key: 'queues', icon: 'repeat', labelKey: 'nav.queues' },
@@ -61,11 +64,6 @@ const EXTRAS: Entry[] = [
   { key: 'permReq', icon: 'bell', labelKey: 'nav.permReq' },
   { key: 'inbox', icon: 'bell', labelKey: 'nav.inbox' },
   { key: 'search', icon: 'search', labelKey: 'nav.search' },
-  { key: 'history', icon: 'list', labelKey: 'nav.history' },
-  { key: 'stats', icon: 'chart', labelKey: 'nav.stats' },
-  { key: 'catalog', icon: 'pkg', labelKey: 'nav.catalog' },
-  { key: 'templates', icon: 'flag', labelKey: 'nav.templates' },
-  { key: 'roles', icon: 'users', labelKey: 'nav.roles' },
 ];
 
 /**
