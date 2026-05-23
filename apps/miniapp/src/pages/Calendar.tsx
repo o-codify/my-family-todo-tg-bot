@@ -188,6 +188,14 @@ export function Calendar({
     queryKey: ['tasks', family.id],
     queryFn: () => api.listTasks(family.id),
   });
+  // Family events (birthdays, anniversaries, etc.) are stored as
+  // month+day (+ optional year) so they recur annually. We surface
+  // them in the calendar's selected-day list — user complained that
+  // adding a birthday wasn't reflected anywhere on the calendar.
+  const familyEventsQuery = useQuery({
+    queryKey: ['family-events', family.id],
+    queryFn: () => api.listFamilyEvents(family.id),
+  });
 
   const completeMut = useMutation({
     // Synthesized `floating:<taskId>` ids come from the "Когда-нибудь" rollup
@@ -445,6 +453,22 @@ export function Calendar({
   const selectedDate = new Date(`${selectedIso}T00:00:00`);
   const todayCount = byDate.get(todayIso)?.length ?? 0;
   const selectedOccurrences = byDate.get(selectedIso) ?? [];
+  // Family events: a {month,day} pair matches any year, so we group by
+  // "MM-DD" and look up the selected day. Also produce a per-iso set for
+  // the month grid so we can put an indicator on cells that have events.
+  const allFamilyEvents = familyEventsQuery.data?.events ?? [];
+  const eventsByMonthDay = useMemo(() => {
+    const map = new Map<string, typeof allFamilyEvents>();
+    for (const e of allFamilyEvents) {
+      const key = `${String(e.month).padStart(2, '0')}-${String(e.day).padStart(2, '0')}`;
+      const cur = map.get(key);
+      if (cur) cur.push(e);
+      else map.set(key, [e]);
+    }
+    return map;
+  }, [allFamilyEvents]);
+  const monthDayOf = (iso: string) => iso.slice(5); // "YYYY-MM-DD" → "MM-DD"
+  const selectedDayEvents = eventsByMonthDay.get(monthDayOf(selectedIso)) ?? [];
   // Pending tasks sort by scheduledTime (timed first, ascending; time-less
   // after). Same rule as Day.tsx — keeps the two surfaces consistent so a
   // user planning their morning sees the same order in both lists.
@@ -754,6 +778,36 @@ export function Calendar({
           </div>
         </div>
       )}
+      {/* Family events (birthdays etc.) for the selected day. Read-only
+          cards above the task list — they recur annually, can't be
+          completed/rescheduled like tasks. Computed year-agnostic so
+          a Feb 24 birthday appears every year on Feb 24. */}
+      {selectedDayEvents.map((ev) => {
+        const yearsText =
+          ev.year && ev.type === 'birthday'
+            ? ` · ${selectedDate.getFullYear() - ev.year}${isEn ? ' yrs' : ' лет'}`
+            : '';
+        return (
+          <div
+            key={ev.id}
+            className="wf-card"
+            style={{ borderColor: 'var(--warn)' }}
+          >
+            <div className="wf-row wf-gap-10">
+              <span style={{ fontSize: 22, flex: 'none' }} aria-hidden>
+                {ev.emoji ?? '🎂'}
+              </span>
+              <div className="wf-col" style={{ flex: 1 }}>
+                <span className="wf-label">{ev.title}</span>
+                <span className="wf-hint">
+                  {t(`events.type.${ev.type}`)}
+                  {yearsText}
+                </span>
+              </div>
+            </div>
+          </div>
+        );
+      })}
       {/* Pending tasks for the selected day. Draggable to any other
           calendar cell to reschedule. Floating + forecast rows are
           skipped — they have no real date to move. */}
