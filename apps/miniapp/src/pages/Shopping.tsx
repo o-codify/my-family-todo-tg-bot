@@ -473,71 +473,102 @@ function ShoppingListView({
           background: 'var(--paper)',
         }}
       >
-        {/* Two-row layout: row 1 = name input (full width), row 2 =
-            category picker + add button. The previous single-row layout
-            squashed the dropdown's emoji+label and gave the name input
-            barely any space on narrow screens. */}
-        <div className="wf-col wf-gap-6" style={{ minWidth: 0 }}>
-          <input
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') {
-                e.preventDefault();
-                commit();
-              }
-            }}
-            placeholder={t('shopping.add.placeholder')}
-            className="wf-label"
-            style={{
-              width: '100%',
-              minWidth: 0,
-              border: '1.5px solid var(--line)',
-              borderRadius: 8,
-              padding: '6px 10px',
-              background: 'var(--paper)',
-              outline: 'none',
-              color: 'var(--ink)',
-              font: 'inherit',
-            }}
-          />
-          <div className="wf-row wf-gap-6" style={{ minWidth: 0 }}>
-            <select
-              value={category}
-              onChange={(e) => setCategory(e.target.value as ShoppingCategory)}
+        {/* Add bar mirrors the catalog "new item" form: an avatar circle
+            shows the picked category emoji, the name input is on the
+            same row, and a tile grid below lets the user re-pick the
+            category visually (replacing the cramped <select>). The
+            big primary button finishes the row. */}
+        <div className="wf-col wf-gap-8" style={{ minWidth: 0 }}>
+          <div className="wf-row wf-gap-8" style={{ minWidth: 0 }}>
+            <div
+              aria-hidden
               style={{
+                width: 36,
+                height: 36,
+                borderRadius: 999,
+                background: 'var(--faint)',
                 border: '1.5px solid var(--line)',
-                borderRadius: 8,
-                padding: '6px 8px',
-                background: 'var(--paper)',
-                font: 'inherit',
-                fontSize: 13,
-                flex: 1,
-                minWidth: 0,
-              }}
-            >
-              {CATEGORY_ORDER.map((c) => (
-                <option key={c} value={c}>
-                  {CATEGORY_EMOJI[c]} {t(`shopping.category.${c}`)}
-                </option>
-              ))}
-            </select>
-            <button
-              type="button"
-              className="wf-btn primary"
-              onClick={commit}
-              disabled={!text.trim() || addMut.isPending}
-              style={{
-                padding: '6px 16px',
-                fontSize: 13,
-                cursor: !text.trim() || addMut.isPending ? 'default' : 'pointer',
-                border: 'none',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: 20,
                 flex: 'none',
               }}
             >
-              +
-            </button>
+              {CATEGORY_EMOJI[category]}
+            </div>
+            <input
+              value={text}
+              onChange={(e) => setText(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  commit();
+                }
+              }}
+              placeholder={t('shopping.add.placeholder')}
+              className="wf-label"
+              style={{
+                flex: 1,
+                minWidth: 0,
+                border: '1.5px solid var(--line)',
+                borderRadius: 8,
+                padding: '8px 10px',
+                background: 'var(--paper)',
+                outline: 'none',
+                color: 'var(--ink)',
+                font: 'inherit',
+              }}
+            />
           </div>
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(8, 1fr)',
+              gap: 4,
+            }}
+          >
+            {CATEGORY_ORDER.map((c) => {
+              const selected = c === category;
+              return (
+                <button
+                  key={c}
+                  type="button"
+                  onClick={() => setCategory(c)}
+                  aria-label={t(`shopping.category.${c}`)}
+                  title={t(`shopping.category.${c}`)}
+                  style={{
+                    background: selected ? 'var(--ink)' : 'var(--paper)',
+                    color: selected ? 'var(--paper)' : 'var(--ink)',
+                    border: '1.5px solid var(--line)',
+                    borderRadius: 8,
+                    fontSize: 18,
+                    padding: 4,
+                    aspectRatio: '1',
+                    cursor: 'pointer',
+                  }}
+                >
+                  {CATEGORY_EMOJI[c]}
+                </button>
+              );
+            })}
+          </div>
+          <button
+            type="button"
+            className="wf-btn primary"
+            onClick={commit}
+            disabled={!text.trim() || addMut.isPending}
+            style={{
+              padding: '8px 12px',
+              fontSize: 14,
+              cursor: !text.trim() || addMut.isPending ? 'default' : 'pointer',
+              border: 'none',
+              width: '100%',
+              opacity: !text.trim() || addMut.isPending ? 0.5 : 1,
+            }}
+          >
+            + {t('common.add')}
+          </button>
         </div>
       </div>
 

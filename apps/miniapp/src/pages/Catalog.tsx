@@ -37,23 +37,27 @@ type Props = {
   onOpenDrawer?: () => void;
 };
 
+// Expanded preset palette — covers most everyday groceries and
+// household goods so the user rarely has to fall back to "📦". Grouped
+// loosely (dairy → produce → meat/seafood → carbs → drinks → sweets →
+// household) so the picker reads top-to-bottom. Keep it ≤48 to fit
+// in 6 rows of 8 on a phone screen without scrolling.
 const PRESET_EMOJI = [
-  '🥖',
-  '🥛',
-  '🥚',
-  '🧀',
-  '🍞',
-  '🍎',
-  '🥕',
-  '🍌',
-  '🍅',
-  '🍫',
-  '🧴',
-  '🧻',
-  '🧽',
-  '🥫',
-  '🍝',
-  '🐟',
+  // dairy + eggs
+  '🥛', '🧀', '🥚', '🧈',
+  // produce
+  '🍎', '🍌', '🍅', '🥕', '🥔', '🥬', '🥒', '🧅',
+  '🍋', '🍓', '🍇', '🍊', '🍉', '🍑', '🥑', '🌽',
+  // meat + seafood
+  '🥩', '🍗', '🌭', '🥓', '🐟', '🍤',
+  // carbs / breakfast
+  '🍞', '🥖', '🥐', '🥨', '🍝', '🍚', '🥣', '🥯',
+  // drinks
+  '☕', '🍵', '🧃', '🥤', '🍷', '🍺',
+  // sweets / snacks
+  '🍫', '🍪', '🍰', '🍬',
+  // household / misc
+  '🧴', '🧻', '🧽', '🧂', '🥫', '🍯', '📦',
 ];
 
 const ALL = '__all__';
