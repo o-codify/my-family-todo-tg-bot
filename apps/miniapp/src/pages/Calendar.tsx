@@ -12,6 +12,7 @@ import { AvStack, Dot, Icon, Seg, Tag, WfBody, type Member } from '../design';
 import { FloatingSection } from '../components/FloatingSection';
 import { PinnedNote } from '../components/PinnedNote';
 import { usePreferences } from '../hooks/usePreferences';
+import { useDragReschedule } from '../hooks/useDragReschedule';
 import { pluralize, useT } from '../i18n';
 import { pickInkOrPaper } from '../utils/contrast';
 import { forecastQueueOccurrences } from '../utils/queueForecast';
@@ -203,6 +204,26 @@ export function Calendar({
   const uncompleteMut = useMutation({
     mutationFn: (occurrenceId: string) => api.uncompleteOccurrence(family.id, occurrenceId),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['occurrences', family.id] }),
+  });
+  // Drag-to-reschedule: dropping a card onto a different cell fires
+  // a /reschedule call. Errors (e.g. date conflict — same task already
+  // exists on that day) are swallowed quietly here; the cleanest place
+  // to surface them is the TaskSheet which already handles the same
+  // mutation with proper messaging.
+  const dragRescheduleMut = useMutation({
+    mutationFn: (input: { occurrenceId: string; scheduledDate: string }) =>
+      api.rescheduleOccurrence(family.id, input.occurrenceId, input.scheduledDate),
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: ['occurrences', family.id] }),
+  });
+  const dragReschedule = useDragReschedule({
+    onDrop: (occurrenceId, targetIso) => {
+      // Floating completions use synth `floating:<taskId>` ids; they
+      // have no real occurrence row to reschedule. Bail silently — the
+      // hook treats this as a no-op drop.
+      if (occurrenceId.startsWith('floating:')) return;
+      dragRescheduleMut.mutate({ occurrenceId, scheduledDate: targetIso });
+    },
   });
 
   const rawOccurrences = occurrencesQuery.data?.occurrences ?? [];
@@ -533,12 +554,28 @@ export function Calendar({
             if (overdue) cls.push('has-overdue');
             const shown = occ.slice(0, 3);
             const more = occ.length - shown.length;
+            const cellBind = !c.dim ? dragReschedule.bindCell(c.iso) : undefined;
+            const isDropTarget =
+              dragReschedule.state.draggingId !== null &&
+              dragReschedule.state.hoverIso === c.iso;
             return (
               <div
                 key={i}
                 className={cls.join(' ')}
                 onClick={() => !c.dim && handleCellTap(c.iso)}
-                style={{ cursor: c.dim ? 'default' : 'pointer', userSelect: 'none' }}
+                onPointerEnter={cellBind?.onPointerEnter}
+                onPointerLeave={cellBind?.onPointerLeave}
+                style={{
+                  cursor: c.dim ? 'default' : 'pointer',
+                  userSelect: 'none',
+                  ...(isDropTarget
+                    ? {
+                        outline: '2px solid var(--ink)',
+                        outlineOffset: -2,
+                        background: 'var(--faint)',
+                      }
+                    : null),
+                }}
               >
                 <span className="n">{c.n}</span>
                 <span className="dots">
@@ -681,21 +718,35 @@ export function Calendar({
           </div>
         </div>
       )}
-      {/* Pending tasks for the selected day. */}
-      {selectedPending.map((o) => (
-        <DayTaskCard
-          key={o.id}
-          o={o}
-          memberById={memberById}
-          selectedIso={selectedIso}
-          todayIso={todayIso}
-          onOpenTask={onOpenTask}
-          onToggle={(occ) => {
-            if (occ.status === 'done') uncompleteMut.mutate(occ.id);
-            else completeMut.mutate(occ.id);
-          }}
-        />
-      ))}
+      {/* Pending tasks for the selected day. Draggable to any other
+          calendar cell to reschedule. Floating + forecast rows are
+          skipped — they have no real date to move. */}
+      {selectedPending.map((o) => {
+        const isFloating = o.task.type === 'floating' || o.scheduledDate === null;
+        const isForecast = o.id.startsWith('queue-forecast:');
+        const draggable = !isFloating && !isForecast;
+        return (
+          <DayTaskCard
+            key={o.id}
+            o={o}
+            memberById={memberById}
+            selectedIso={selectedIso}
+            todayIso={todayIso}
+            onOpenTask={onOpenTask}
+            onToggle={(occ) => {
+              if (occ.status === 'done') uncompleteMut.mutate(occ.id);
+              else completeMut.mutate(occ.id);
+            }}
+            dragBinding={
+              draggable
+                ? dragReschedule.bindCard(o.id, o.scheduledDate, () =>
+                    onOpenTask?.(o),
+                  )
+                : undefined
+            }
+          />
+        );
+      })}
 
       {/* Done tasks — collapsed by default (matches Day screen UX). */}
       {selectedDone.length > 0 && (
@@ -804,6 +855,7 @@ function DayTaskCard({
   todayIso,
   onOpenTask,
   onToggle,
+  dragBinding,
 }: {
   o: OccurrenceDto;
   memberById: Map<string, Member>;
@@ -811,6 +863,13 @@ function DayTaskCard({
   todayIso: string;
   onOpenTask?: (occurrence: OccurrenceDto) => void;
   onToggle: (occurrence: OccurrenceDto) => void;
+  /** Optional drag-to-reschedule binding from useDragReschedule. The
+   *  hook returns null/undefined for cards that aren't eligible (e.g.
+   *  done rows, forecast rows) — we skip wiring in those cases. */
+  dragBinding?: {
+    onPointerDown: (e: React.PointerEvent) => void;
+    style: React.CSSProperties;
+  };
 }) {
   const t = useT();
   const isEn = t.locale === 'en';
@@ -832,10 +891,17 @@ function DayTaskCard({
   return (
     <div
       className="wf-card"
-      onClick={() => !isForecast && onOpenTask?.(o)}
+      // When `dragBinding` is provided, the hook owns tap-vs-drag and
+      // calls our `onTap` callback on a pure tap; we suppress the
+      // native onClick so we don't double-fire onOpenTask.
+      onClick={
+        dragBinding ? undefined : () => !isForecast && onOpenTask?.(o)
+      }
+      onPointerDown={dragBinding?.onPointerDown}
       style={{
         cursor: !isForecast && onOpenTask ? 'pointer' : 'default',
         opacity: isForecast ? 0.55 : 1,
+        ...(dragBinding?.style ?? null),
       }}
     >
       <div className="wf-row wf-gap-10">
