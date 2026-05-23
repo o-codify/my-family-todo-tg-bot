@@ -1,4 +1,7 @@
+import { eq } from 'drizzle-orm';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
+import { db } from '../../src/db/client';
+import { taskOccurrences, tasks } from '../../src/db/schema';
 import {
   findActiveToken,
   generateFamilyIcs,
@@ -106,6 +109,72 @@ describe('ICS feed (integration)', () => {
     const nm = String(next.getUTCMonth() + 1).padStart(2, '0');
     const nd = String(next.getUTCDate()).padStart(2, '0');
     expect(ics).toContain(`DTEND;VALUE=DATE:${ny}${nm}${nd}`);
+  });
+
+  it('includes done occurrences with ✓ prefix and STATUS:COMPLETED', async () => {
+    const owner = await makeUser();
+    const { family } = await makeFamily(owner);
+    const created = await createTask({
+      familyId: family.id,
+      createdBy: owner.id,
+      data: {
+        title: 'Wash dishes',
+        type: 'oneoff',
+        schedule: { kind: 'oneoff', date: isoTomorrow(), time: '20:00' },
+        points: 0,
+        photoRequired: false,
+        requiresApproval: false,
+        singleShot: false,
+      },
+    });
+    // Flip the freshly-created occurrence to 'done'. We bypass
+    // completeOccurrence so this test stays focused on the ICS layer.
+    await db
+      .update(taskOccurrences)
+      .set({ status: 'done', completedAt: new Date(), completedBy: owner.id })
+      .where(eq(taskOccurrences.taskId, created.id));
+
+    const ics = await generateFamilyIcs({ familyId: family.id });
+    expect(ics).toContain('SUMMARY:✓ Wash dishes');
+    expect(ics).toContain('STATUS:COMPLETED');
+  });
+
+  it('includes floating completions anchored on completedAt date', async () => {
+    const owner = await makeUser();
+    const { family } = await makeFamily(owner);
+    // Insert a task + a dateless occurrence (singleShot-style floating
+    // completion). The createTask path for floating tasks usually leaves
+    // the occurrence dateless; we replicate that shape directly.
+    const [task] = await db
+      .insert(tasks)
+      .values({
+        familyId: family.id,
+        title: 'Spontaneous chore',
+        type: 'floating',
+        schedule: { kind: 'floating' },
+        createdBy: owner.id,
+        points: 0,
+        photoRequired: false,
+        requiresApproval: false,
+        singleShot: true,
+      })
+      .returning();
+    const today = new Date();
+    await db.insert(taskOccurrences).values({
+      taskId: task!.id,
+      scheduledDate: null,
+      status: 'done',
+      completedAt: today,
+      completedBy: owner.id,
+    });
+
+    const ics = await generateFamilyIcs({ familyId: family.id });
+    const y = today.getUTCFullYear();
+    const m = String(today.getUTCMonth() + 1).padStart(2, '0');
+    const d = String(today.getUTCDate()).padStart(2, '0');
+    expect(ics).toContain('SUMMARY:✓ Spontaneous chore');
+    expect(ics).toContain(`DTSTART;VALUE=DATE:${y}${m}${d}`);
+    expect(ics).toContain('STATUS:COMPLETED');
   });
 
   it('escaping: commas, semicolons, backslashes, newlines in title', async () => {

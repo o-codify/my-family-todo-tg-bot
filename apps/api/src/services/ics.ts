@@ -1,5 +1,5 @@
 import { customAlphabet } from 'nanoid';
-import { and, eq, gte, isNull, lte } from 'drizzle-orm';
+import { and, eq, gte, inArray, isNull, lte, or } from 'drizzle-orm';
 import { db } from '../db/client';
 import {
   families,
@@ -109,13 +109,18 @@ export async function resolveToken(token: string): Promise<{
 }
 
 /**
- * Generate an ICS document for the family's upcoming occurrences.
+ * Generate an ICS document for the family's occurrences.
  * Scope:
- *   - Pending (not done/skipped/etc) occurrences only — completed
- *     events would litter a subscribed calendar with stale entries.
- *   - 90 days back, 365 days forward — calendar apps cache; we err
- *     wide so a once-a-day fetch sees the next year of events.
- *   - Dateless floating tasks excluded — they have no anchor.
+ *   - Both pending and done occurrences — the user explicitly wants
+ *     completed tasks visible too. Done events get a ✓ prefix + a
+ *     STATUS:COMPLETED line so a calendar that knows STATUS can show
+ *     them struck through. Skipped/expired are dropped — they're noise.
+ *   - 90 days back, 365 days forward for dated occurrences — calendar
+ *     apps cache; we err wide so a once-a-day fetch sees the next year.
+ *   - Floating completions (no scheduledDate, status=done, completedAt
+ *     set — typical for singleShot tasks finished without a planned
+ *     date) are anchored on completedAt's calendar date. Without this
+ *     anchor they'd be invisible despite existing in the app.
  *
  * The output uses CRLF line endings per RFC 5545. We don't fold lines
  * (the RFC asks for ≤75 octets per line) — modern parsers accept
@@ -136,6 +141,9 @@ export async function generateFamilyIcs(input: {
   const to = new Date(today.getTime() + 365 * 86_400_000)
     .toISOString()
     .slice(0, 10);
+  // For floating completions we anchor on completedAt. Use the same
+  // 90-day lookback so an old completion doesn't pollute the calendar.
+  const completedFrom = new Date(today.getTime() - 90 * 86_400_000);
 
   const rows = await db
     .select({
@@ -143,6 +151,7 @@ export async function generateFamilyIcs(input: {
       scheduledDate: taskOccurrences.scheduledDate,
       scheduledTime: taskOccurrences.scheduledTime,
       status: taskOccurrences.status,
+      completedAt: taskOccurrences.completedAt,
       title: tasks.title,
       description: tasks.description,
     })
@@ -152,21 +161,41 @@ export async function generateFamilyIcs(input: {
       and(
         eq(tasks.familyId, input.familyId),
         isNull(tasks.archivedAt),
-        eq(taskOccurrences.status, 'pending'),
-        gte(taskOccurrences.scheduledDate, from),
-        lte(taskOccurrences.scheduledDate, to),
+        inArray(taskOccurrences.status, ['pending', 'done']),
+        or(
+          // Dated rows inside the visible window.
+          and(
+            gte(taskOccurrences.scheduledDate, from),
+            lte(taskOccurrences.scheduledDate, to),
+          ),
+          // Floating completions: no scheduledDate, but a recent
+          // completedAt — anchor those on the completion date below.
+          and(
+            isNull(taskOccurrences.scheduledDate),
+            gte(taskOccurrences.completedAt, completedFrom),
+          ),
+        ),
       ),
     );
 
   const events = rows
-    .filter((r) => r.scheduledDate)
-    .map((r) => formatVEvent({
-      uid: `occ:${r.id}@family-todo`,
-      title: r.title,
-      description: r.description ?? '',
-      date: r.scheduledDate!,
-      time: r.scheduledTime ?? null,
-    }));
+    .map((r) => {
+      // Prefer the scheduled date when set, otherwise anchor on
+      // completion date for floating completions. Anything else has
+      // no anchor and we skip it.
+      const anchor = r.scheduledDate ?? isoDate(r.completedAt);
+      if (!anchor) return null;
+      const done = r.status === 'done';
+      return formatVEvent({
+        uid: `occ:${r.id}@family-todo`,
+        title: done ? `✓ ${r.title}` : r.title,
+        description: r.description ?? '',
+        date: anchor,
+        time: r.scheduledTime ?? null,
+        completed: done,
+      });
+    })
+    .filter((s): s is string => s !== null);
 
   return [
     'BEGIN:VCALENDAR',
@@ -200,6 +229,11 @@ function formatVEvent(input: {
   date: string;
   /** HH:MM or HH:MM:SS, optional */
   time: string | null;
+  /** Whether the occurrence is done — emits STATUS:COMPLETED so clients
+   *  that support it can render the event differently (strikethrough,
+   *  greyed out, etc.). The ✓ prefix in the SUMMARY is the universal
+   *  fallback for clients that ignore STATUS. */
+  completed?: boolean;
 }): string {
   const dtStamp = formatDateTimeUtc(new Date());
   const [y, m, d] = input.date.split('-');
@@ -241,8 +275,19 @@ function formatVEvent(input: {
     ...(input.description
       ? [`DESCRIPTION:${escapeIcs(input.description)}`]
       : []),
+    ...(input.completed ? ['STATUS:COMPLETED'] : []),
     'END:VEVENT',
   ].join('\r\n');
+}
+
+/** Convert a Date (or null) to YYYY-MM-DD in UTC. Returns null when the
+ *  input is null — callers use this to anchor floating completions on
+ *  their completedAt timestamp. UTC keeps the anchor stable regardless
+ *  of the server's local clock, mirroring how `scheduledDate` (stored
+ *  as a bare `date`) is treated. */
+function isoDate(d: Date | null | undefined): string | null {
+  if (!d) return null;
+  return d.toISOString().slice(0, 10);
 }
 
 function formatDateTimeUtc(d: Date): string {
