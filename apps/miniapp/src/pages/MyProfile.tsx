@@ -301,6 +301,12 @@ export function MyProfile({ me, family, onBack, onOpenDrawer }: Props) {
           Per-(user, family) token; rotating revokes the old one. */}
       <IcsSection family={family} />
 
+      {/* Google Calendar two-way sync (when configured server-side).
+          Each user authorizes individually; we create a dedicated
+          "Family Todo" calendar in their account and sync their
+          assigned occurrences + family events into it every 5 min. */}
+      <GoogleCalendarSection />
+
       {tzPickerOpen && (
         <TimezonePicker
           current={me.timezone}
@@ -642,6 +648,110 @@ function IcsSection({ family }: { family: FamilySummary }) {
               {t('ics.revoke')}
             </button>
           </div>
+        </div>
+      )}
+    </>
+  );
+}
+
+/**
+ * Google Calendar two-way sync — only renders when the server reports
+ * Google OAuth is configured (`configured: false` for self-hosted
+ * deployments without the env vars set). The connect button opens the
+ * Google consent URL in the system browser via Telegram.WebApp.openLink;
+ * after auth the user returns to the Mini App and we re-poll status.
+ */
+function GoogleCalendarSection() {
+  const t = useT();
+  const queryClient = useQueryClient();
+  const statusQuery = useQuery({
+    queryKey: ['google-calendar', 'status'],
+    queryFn: () => api.getGoogleCalendarStatus(),
+    // Re-check often when the user is on this page — they'll come back
+    // from the browser and we want the UI to flip from "Connect" to
+    // "Connected" without a manual refresh.
+    refetchInterval: 5000,
+  });
+  const connectMut = useMutation({
+    mutationFn: () => api.startGoogleCalendarConnect(),
+    onSuccess: (res) => {
+      // Telegram WebApp can open external URLs via openLink. Browsers
+      // and the WebApp environment differ — fall back to window.open
+      // when the WebApp shim isn't available.
+      const tg = (window as unknown as { Telegram?: { WebApp?: { openLink: (u: string) => void } } })
+        .Telegram?.WebApp;
+      if (tg?.openLink) {
+        tg.openLink(res.url);
+      } else {
+        window.open(res.url, '_blank');
+      }
+    },
+  });
+  const disconnectMut = useMutation({
+    mutationFn: () => api.disconnectGoogleCalendar(),
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: ['google-calendar', 'status'] }),
+  });
+
+  const data = statusQuery.data;
+  if (!data || !data.configured) {
+    // Hide entirely when the server hasn't been configured — no point
+    // teasing a button that 503s.
+    return null;
+  }
+
+  return (
+    <>
+      <span className="wf-h3" style={{ marginTop: 8 }}>
+        {t('gcal.title')}
+      </span>
+      {!data.connected ? (
+        <div className="wf-card subtle" style={{ padding: 10 }}>
+          <span className="wf-tiny" style={{ color: 'var(--hint)' }}>
+            {t('gcal.hint')}
+          </span>
+          <button
+            type="button"
+            className="wf-btn primary"
+            onClick={() => connectMut.mutate()}
+            disabled={connectMut.isPending}
+            style={{
+              marginTop: 8,
+              padding: '6px 12px',
+              fontSize: 13,
+              cursor: connectMut.isPending ? 'default' : 'pointer',
+              border: 'none',
+            }}
+          >
+            {t('gcal.connect')}
+          </button>
+        </div>
+      ) : (
+        <div className="wf-card" style={{ padding: 10 }}>
+          <span className="wf-label">✓ {t('gcal.connected')}</span>
+          {data.connectedAt && (
+            <span
+              className="wf-tiny"
+              style={{ display: 'block', color: 'var(--hint)', marginTop: 4 }}
+            >
+              {new Date(data.connectedAt).toLocaleString()}
+            </span>
+          )}
+          <button
+            type="button"
+            className="wf-btn"
+            onClick={() => disconnectMut.mutate()}
+            disabled={disconnectMut.isPending}
+            style={{
+              marginTop: 8,
+              padding: '4px 10px',
+              fontSize: 12,
+              cursor: disconnectMut.isPending ? 'default' : 'pointer',
+              color: '#d33',
+            }}
+          >
+            {t('gcal.disconnect')}
+          </button>
         </div>
       )}
     </>

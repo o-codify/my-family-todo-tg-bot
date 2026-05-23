@@ -18,6 +18,17 @@ const envSchema = z.object({
   PHOTO_MAX_SIZE_BYTES: z.coerce.number().int().positive().default(10_485_760), // 10MB Telegram limit
   PHOTO_MAX_COUNT_PER_OCCURRENCE: z.coerce.number().int().positive().default(3),
   PHOTO_ALLOWED_MIME: z.string().default('image/jpeg,image/png,image/webp'),
+  // Google Calendar OAuth — optional. When unset the connect endpoints
+  // return 503 instead of crashing the API. The encryption key is
+  // 64 hex chars (32 bytes for AES-256-GCM); generate with
+  // `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`.
+  GOOGLE_OAUTH_CLIENT_ID: z.string().optional(),
+  GOOGLE_OAUTH_CLIENT_SECRET: z.string().optional(),
+  GOOGLE_OAUTH_REDIRECT_URI: z.string().url().optional(),
+  GOOGLE_TOKEN_ENC_KEY: z
+    .string()
+    .regex(/^[0-9a-fA-F]{64}$/, 'must be 64-char hex (32 bytes)')
+    .optional(),
 });
 
 const parsed = envSchema.safeParse(process.env);

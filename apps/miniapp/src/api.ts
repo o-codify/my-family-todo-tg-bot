@@ -805,6 +805,23 @@ export const api = {
       { method: 'POST' },
     ),
 
+  // ── Google Calendar OAuth ──────────────────────────────────────
+  getGoogleCalendarStatus: () =>
+    request<{
+      configured: boolean;
+      connected: boolean;
+      calendarId: string | null;
+      connectedAt: string | null;
+    }>('/api/v1/me/google-calendar'),
+  startGoogleCalendarConnect: () =>
+    request<{ url: string }>('/api/v1/me/google-calendar/connect', {
+      method: 'POST',
+    }),
+  disconnectGoogleCalendar: () =>
+    request<{ disconnected: boolean }>('/api/v1/me/google-calendar/disconnect', {
+      method: 'POST',
+    }),
+
   listTaskComments: (familyId: string, taskId: string) =>
     request<{ comments: TaskCommentDto[] }>(
       `/api/v1/families/${familyId}/tasks/${taskId}/comments`,

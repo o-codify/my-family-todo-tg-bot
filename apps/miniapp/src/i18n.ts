@@ -780,6 +780,16 @@ const DICT: Record<string, Record<Locale, string>> = {
   'ics.copy': { ru: 'Скопировать', en: 'Copy' },
   'ics.rotate': { ru: 'Сменить', en: 'Rotate' },
   'ics.revoke': { ru: 'Отключить', en: 'Revoke' },
+
+  // ─── Google Calendar two-way sync ────────────────────────────────
+  'gcal.title': { ru: 'Google Календарь', en: 'Google Calendar' },
+  'gcal.hint': {
+    ru: 'Подключи свой Google, и задачи будут падать в твой календарь автоматически — в отдельный календарь «Family Todo». Синхронизация раз в 5 минут.',
+    en: 'Connect your Google account — tasks land in a dedicated "Family Todo" calendar, synced every 5 min.',
+  },
+  'gcal.connect': { ru: 'Подключить', en: 'Connect' },
+  'gcal.connected': { ru: 'Подключено', en: 'Connected' },
+  'gcal.disconnect': { ru: 'Отключить', en: 'Disconnect' },
   'quest.errOutOfOrder': {
     ru: 'Сначала пройди прошлый шаг',
     en: 'Finish the previous step first',

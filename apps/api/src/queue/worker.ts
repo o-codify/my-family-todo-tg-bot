@@ -5,6 +5,12 @@ import { users } from '../db/schema';
 import { logger } from '../logger';
 import { rescheduleDigestForUser, runDigest } from './digest';
 import { runReminder } from './reminder';
+import {
+  runGoogleSyncForUser,
+  runGoogleSyncTick,
+  scheduleGoogleSyncTick,
+} from './google-cron';
+import { isGoogleOauthConfigured } from '../services/google-crypto';
 import { NOTIFICATIONS_QUEUE, getConnectionOptions } from './index';
 
 let worker: Worker | null = null;
@@ -27,6 +33,12 @@ export function startNotificationsWorker(): Worker {
           await runReminder(
             job.data as { occurrenceId: string; userId: string; taskTitle: string },
           );
+          return;
+        case 'google-sync-tick':
+          await runGoogleSyncTick();
+          return;
+        case 'google-sync-user':
+          await runGoogleSyncForUser((job.data as { userId: string }).userId);
           return;
         default:
           logger.warn({ jobName: job.name }, 'Unknown notification job');
@@ -90,4 +102,16 @@ export async function hydrateDigestSchedulers(): Promise<void> {
   }
   logger.info({ scheduled, total: rows.length }, 'digest schedulers hydrated');
   void eq; // keep import in case future filters need it
+}
+
+/** Boot-time: install the Google Calendar sync cron when configured.
+ *  Skipped silently when env vars are missing — operators can deploy
+ *  without Google integration and turn it on later by setting the
+ *  GOOGLE_OAUTH_* + GOOGLE_TOKEN_ENC_KEY vars + restarting. */
+export async function hydrateGoogleSyncCron(): Promise<void> {
+  if (!isGoogleOauthConfigured()) {
+    logger.debug('google-sync: env vars missing — cron not installed');
+    return;
+  }
+  await scheduleGoogleSyncTick();
 }

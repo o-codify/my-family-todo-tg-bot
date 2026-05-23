@@ -27,9 +27,15 @@ import { mealPlanRouter } from './routes/meal-plan';
 import { permissionRequestsRouter } from './routes/permission-requests';
 import { taskCommentsRouter } from './routes/task-comments';
 import { icsManageRouter, icsPublicRouter } from './routes/ics';
+import { googleAuthedRouter, googlePublicRouter } from './routes/google';
 import { closeRealtime } from './realtime/pubsub';
 import { closeQueue } from './queue';
-import { hydrateDigestSchedulers, startNotificationsWorker, stopNotificationsWorker } from './queue/worker';
+import {
+  hydrateDigestSchedulers,
+  hydrateGoogleSyncCron,
+  startNotificationsWorker,
+  stopNotificationsWorker,
+} from './queue/worker';
 
 const app = new Hono();
 
@@ -120,6 +126,10 @@ app.route('/api/v1/families/:familyId/tasks/:taskId/comments', taskCommentsRoute
 app.route('/api/v1/families/:familyId/ics', icsManageRouter);
 // Public ICS feed — token in the URL, no auth middleware.
 app.route('/api/v1/ics', icsPublicRouter);
+// Google Calendar OAuth — authed status/connect/disconnect under
+// /me/google-calendar; public callback under /google/oauth/callback.
+app.route('/api/v1/me/google-calendar', googleAuthedRouter);
+app.route('/api/v1/google', googlePublicRouter);
 // SSE stream — auth via query string (EventSource can't set headers).
 app.route('/api/v1/families', eventsRouter);
 // Photo routes share the family-id scope but expose three distinct shapes
@@ -169,6 +179,9 @@ async function main() {
   startNotificationsWorker();
   void hydrateDigestSchedulers().catch((err) =>
     logger.warn({ err }, 'failed to hydrate digest schedulers'),
+  );
+  void hydrateGoogleSyncCron().catch((err) =>
+    logger.warn({ err }, 'failed to hydrate google-sync cron'),
   );
 
   const shutdown = async (signal: string) => {
