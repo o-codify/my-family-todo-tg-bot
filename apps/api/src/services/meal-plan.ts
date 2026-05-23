@@ -1,4 +1,4 @@
-import { and, asc, eq, gte, isNull, lte } from 'drizzle-orm';
+import { and, asc, desc, eq, gte, isNull, lte, sql } from 'drizzle-orm';
 import type {
   CreateMealPlanEntryInput,
   MealPlanSlot,
@@ -7,7 +7,8 @@ import type {
 import { db } from '../db/client';
 import { mealPlanEntries, type MealPlanEntryRow } from '../db/schema';
 import { publishFamilyEvent } from '../realtime/pubsub';
-import { addItemsBulk, ensurePrimaryList } from './shopping';
+import { addCatalogItemsToList } from './shopping';
+import { catalogItems, shoppingLists } from '../db/schema';
 
 /**
  * Meal plan service.
@@ -135,10 +136,13 @@ export async function restoreEntry(input: {
 }
 
 /**
- * Push the entry's ingredients into the family's shopping list as new
- * 'open' items (category 'other'). De-duplication against existing open
- * items is handled by `addItemsBulk` — re-pushing the same meal won't
- * double-up "Молоко" if it's already on the list.
+ * Push the entry's ingredients into a shopping list (target list
+ * optional — defaults to the most-recently-created live list, creating
+ * a "Покупки" list if none exist). Each ingredient is auto-promoted to
+ * a catalog entry (case-insensitive lookup against the per-family
+ * unique index) and then added to the target list via the catalog
+ * picker path — that gives us dedupe against existing OPEN items for
+ * free.
  *
  * Returns the count of added vs skipped so the UI can show
  * "added 5, 2 already on list".
@@ -147,22 +151,71 @@ export async function pushToShoppingList(input: {
   familyId: string;
   userId: string;
   entryId: string;
+  listId?: string;
 }): Promise<{ added: number; skipped: number } | null> {
   const entry = await db.query.mealPlanEntries.findFirst({
     where: and(eq(mealPlanEntries.id, input.entryId), isNull(mealPlanEntries.deletedAt)),
   });
   if (!entry) return null;
   if (entry.ingredients.length === 0) return { added: 0, skipped: 0 };
-  const list = await ensurePrimaryList(entry.familyId);
-  const { added, skipped } = await addItemsBulk({
+
+  // Pick the target list. Explicit > most-recent-alive > auto-create.
+  let listId = input.listId;
+  if (!listId) {
+    const existing = await db
+      .select()
+      .from(shoppingLists)
+      .where(
+        and(eq(shoppingLists.familyId, entry.familyId), isNull(shoppingLists.archivedAt)),
+      )
+      .orderBy(desc(shoppingLists.createdAt))
+      .limit(1);
+    if (existing[0]) {
+      listId = existing[0].id;
+    } else {
+      const [fresh] = await db
+        .insert(shoppingLists)
+        .values({
+          familyId: entry.familyId,
+          name: 'Покупки',
+          createdByUserId: input.userId,
+        })
+        .returning();
+      listId = fresh!.id;
+    }
+  }
+
+  // Auto-promote each ingredient to a catalog row. Case-insensitive
+  // match against the per-family unique index avoids dupes.
+  const catalogIds: string[] = [];
+  for (const ing of entry.ingredients) {
+    const name = ing.text.trim();
+    if (!name) continue;
+    const existingCat = await db.query.catalogItems.findFirst({
+      where: and(
+        eq(catalogItems.familyId, entry.familyId),
+        sql`lower(${catalogItems.name}) = lower(${name})`,
+      ),
+    });
+    if (existingCat) {
+      catalogIds.push(existingCat.id);
+    } else {
+      const [row] = await db
+        .insert(catalogItems)
+        .values({
+          familyId: entry.familyId,
+          name,
+          createdBy: input.userId,
+        })
+        .returning();
+      if (row) catalogIds.push(row.id);
+    }
+  }
+  const { added, skipped } = await addCatalogItemsToList({
     familyId: entry.familyId,
-    listId: list.id,
+    listId: listId!,
     userId: input.userId,
-    items: entry.ingredients.map((ing) => ({
-      text: ing.text,
-      quantity: ing.quantity ?? null,
-      category: 'other' as const,
-    })),
+    catalogItemIds: catalogIds,
   });
   return { added: added.length, skipped };
 }

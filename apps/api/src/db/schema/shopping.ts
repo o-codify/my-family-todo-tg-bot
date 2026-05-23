@@ -1,5 +1,6 @@
 import { sql } from 'drizzle-orm';
 import {
+  date as pgDate,
   index,
   integer,
   pgTable,
@@ -7,17 +8,21 @@ import {
   timestamp,
   uuid,
 } from 'drizzle-orm/pg-core';
+import { catalogItems } from './catalog';
 import { families } from './families';
 import { users } from './users';
 
 /**
- * Shared shopping list per family.
+ * Shopping lists — multiple per family, each with an optional assignee
+ * (the person responsible for buying) and an optional dueDate (when
+ * set, a one-off task wrapper is created so the list shows up on the
+ * calendar). Catalog acts as the family's master goods directory;
+ * individual list items may link to a catalog row via
+ * `shoppingItems.catalogItemId`, or be free-text (which auto-adds to
+ * the catalog on insert).
  *
- * Most families keep one running list — "primary" — so we always have a
- * default; the row gets seeded lazily the first time someone opens the
- * list page. The `archivedAt` column lets the family snapshot/archive a
- * full list (e.g. "January 2026 list") and start fresh, without
- * deleting historical items.
+ * Soft-archival via `archivedAt`. There's no longer a "primary"
+ * concept — the page surfaces a list-of-lists with create/move actions.
  */
 export const shoppingLists = pgTable(
   'shopping_lists',
@@ -27,15 +32,27 @@ export const shoppingLists = pgTable(
       .notNull()
       .references(() => families.id, { onDelete: 'cascade' }),
     name: text('name').notNull(),
-    /** When true, this is the family's default running list. Exactly one
-     *  list per family should have this set. New families get one
-     *  auto-created lazily on first view. */
-    isPrimary: text('is_primary').notNull().default('false'),
+    /** Person responsible for buying. Null = unassigned. */
+    assigneeUserId: uuid('assignee_user_id').references(() => users.id, {
+      onDelete: 'set null',
+    }),
+    /** Optional deadline. When set, a one-off backing task is created
+     *  with this date so the list lands on the family calendar. */
+    dueDate: pgDate('due_date', { mode: 'string' }),
+    /** Backing task id created when `dueDate` is set. Null when the
+     *  list is dateless. The task is deleted/archived together with
+     *  the list. */
+    taskId: uuid('task_id'),
+    createdByUserId: uuid('created_by_user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'restrict' }),
     archivedAt: timestamp('archived_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => ({
     familyIdx: index('shopping_lists_family_idx').on(table.familyId),
+    taskIdx: index('shopping_lists_task_idx').on(table.taskId),
   }),
 );
 
@@ -61,6 +78,14 @@ export const shoppingItems = pgTable(
     listId: uuid('list_id')
       .notNull()
       .references(() => shoppingLists.id, { onDelete: 'cascade' }),
+    /** Optional canonical entry in the family catalog. When set, the
+     *  row "is" that catalog item — same name/emoji. Free-text items
+     *  leave this null; the service still auto-creates a catalog row
+     *  for them and links it, so over time everything becomes catalog
+     *  -backed and the picker has fewer duplicates. */
+    catalogItemId: uuid('catalog_item_id').references(() => catalogItems.id, {
+      onDelete: 'set null',
+    }),
     text: text('text').notNull(),
     quantity: text('quantity'), // freeform: "2 шт", "500 г", null
     category: text('category').notNull().default('other'),

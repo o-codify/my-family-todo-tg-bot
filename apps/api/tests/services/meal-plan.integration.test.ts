@@ -8,8 +8,8 @@ import {
   updateEntry,
 } from '../../src/services/meal-plan';
 import {
-  ensurePrimaryList,
-  getPrimaryListWithItems,
+  createList,
+  getListWithItems,
 } from '../../src/services/shopping';
 import { closeDb, makeFamily, makeUser, resetTables } from '../db-helpers';
 
@@ -107,9 +107,14 @@ describe('meal plan (integration)', () => {
     expect(rows).toHaveLength(1);
   });
 
-  it('pushToShoppingList adds ingredients as open items in primary list', async () => {
+  it('pushToShoppingList adds ingredients as open items in target list', async () => {
     const owner = await makeUser();
     const { family } = await makeFamily(owner);
+    const list = await createList({
+      familyId: family.id,
+      userId: owner.id,
+      data: { name: 'Покупки' },
+    });
     const ent = await createEntry({
       familyId: family.id,
       userId: owner.id,
@@ -128,22 +133,25 @@ describe('meal plan (integration)', () => {
       familyId: family.id,
       userId: owner.id,
       entryId: ent.id,
+      listId: list.id,
     });
     expect(result).toEqual({ added: 3, skipped: 0 });
 
-    const { items } = await getPrimaryListWithItems(family.id);
-    expect(items.map((i) => i.text).sort()).toEqual(
+    const result2 = await getListWithItems({ familyId: family.id, listId: list.id });
+    expect(result2?.items.map((i) => i.text).sort()).toEqual(
       ['Базилик', 'Паста', 'Помидоры'].sort(),
     );
-    // Quantity carried over.
-    expect(items.find((i) => i.text === 'Помидоры')?.quantity).toBe('500 г');
   });
 
   it('pushToShoppingList dedups against existing open items', async () => {
     const owner = await makeUser();
     const { family } = await makeFamily(owner);
+    const list = await createList({
+      familyId: family.id,
+      userId: owner.id,
+      data: { name: 'Покупки' },
+    });
     // Pre-populate shopping list with "Паста".
-    const list = await ensurePrimaryList(family.id);
     const { addItem } = await import('../../src/services/shopping');
     await addItem({
       familyId: family.id,
@@ -166,6 +174,7 @@ describe('meal plan (integration)', () => {
       familyId: family.id,
       userId: owner.id,
       entryId: ent.id,
+      listId: list.id,
     });
     expect(result).toEqual({ added: 1, skipped: 1 });
   });

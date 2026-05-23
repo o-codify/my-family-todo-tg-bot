@@ -141,6 +141,13 @@
       "when": 1779513579085,
       "tag": "0019_lucky_newton_destine",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1779515000000,
+      "tag": "0020_shopping_rework",
+      "breakpoints": true
     }
   ]
 }
