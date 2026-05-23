@@ -618,6 +618,13 @@ export function Calendar({
             const isDropTarget =
               dragReschedule.state.draggingId !== null &&
               dragReschedule.state.hoverIso === c.iso;
+            // Family events for this cell — show the first event's emoji
+            // (or 🎂 fallback) in the top-right so the user can spot
+            // birthdays/anniversaries at a glance on the month grid.
+            // The full list lands in the day list on tap.
+            const eventsHere = c.dim ? [] : eventsByMonthDay.get(monthDayOf(c.iso)) ?? [];
+            const eventGlyph =
+              eventsHere.length > 0 ? eventsHere[0]?.emoji ?? '🎂' : null;
             return (
               <div
                 key={i}
@@ -628,6 +635,7 @@ export function Calendar({
                 style={{
                   cursor: c.dim ? 'default' : 'pointer',
                   userSelect: 'none',
+                  position: 'relative',
                   ...(isDropTarget
                     ? {
                         outline: '2px solid var(--ink)',
@@ -638,6 +646,21 @@ export function Calendar({
                 }}
               >
                 <span className="n">{c.n}</span>
+                {eventGlyph && (
+                  <span
+                    aria-hidden
+                    style={{
+                      position: 'absolute',
+                      top: 2,
+                      right: 4,
+                      fontSize: 10,
+                      lineHeight: 1,
+                      pointerEvents: 'none',
+                    }}
+                  >
+                    {eventGlyph}
+                  </span>
+                )}
                 <span className="dots">
                   {shown.map((o) => (
                     <Dot
