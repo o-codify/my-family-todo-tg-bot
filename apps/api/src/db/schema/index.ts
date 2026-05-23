@@ -13,3 +13,4 @@ export * from './tags';
 export * from './badges';
 export * from './shopping';
 export * from './events';
+export * from './meal-plan';

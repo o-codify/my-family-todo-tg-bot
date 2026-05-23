@@ -6,3 +6,4 @@ export * from './stats';
 export * from './tag';
 export * from './shopping';
 export * from './events';
+export * from './meal-plan';

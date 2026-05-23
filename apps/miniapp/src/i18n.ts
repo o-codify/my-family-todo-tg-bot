@@ -153,6 +153,45 @@ const DICT: Record<string, Record<Locale, string>> = {
   'nav.myProfile': { ru: 'Мой профиль', en: 'My profile' },
   'nav.shopping': { ru: 'Список покупок', en: 'Shopping' },
   'nav.events': { ru: 'Даты и дни рождения', en: 'Dates & birthdays' },
+  'nav.mealPlan': { ru: 'План еды', en: 'Meal plan' },
+
+  // ─── meal plan ────────────────────────────────────────────────────
+  'mealPlan.title': { ru: 'План еды', en: 'Meal plan' },
+  'mealPlan.empty.title': { ru: 'Неделя пустая', en: 'Empty week' },
+  'mealPlan.empty.hint': {
+    ru: 'Запланируй ужины — мы соберём список покупок',
+    en: 'Plan dinners — we’ll build the shopping list',
+  },
+  'mealPlan.add': { ru: 'Добавить', en: 'Add' },
+  'mealPlan.weekPrev': { ru: 'Назад', en: 'Prev' },
+  'mealPlan.weekNext': { ru: 'Вперёд', en: 'Next' },
+  'mealPlan.field.title': { ru: 'Что готовим', en: 'What' },
+  'mealPlan.field.notes': { ru: 'Заметки', en: 'Notes' },
+  'mealPlan.field.ingredients': { ru: 'Ингредиенты', en: 'Ingredients' },
+  'mealPlan.ingredients.placeholder': {
+    ru: 'По одному в строке: «молоко 1 л»',
+    en: 'One per line: "milk 1 L"',
+  },
+  'mealPlan.pushToShopping': {
+    ru: 'В список покупок',
+    en: 'Push to shopping',
+  },
+  'mealPlan.pushed': {
+    ru: 'Добавлено: {added}, пропущено: {skipped}',
+    en: 'Added {added}, skipped {skipped}',
+  },
+  'mealPlan.slot.breakfast': { ru: 'Завтрак', en: 'Breakfast' },
+  'mealPlan.slot.lunch': { ru: 'Обед', en: 'Lunch' },
+  'mealPlan.slot.dinner': { ru: 'Ужин', en: 'Dinner' },
+  'mealPlan.slot.snack': { ru: 'Перекус', en: 'Snack' },
+  'mealPlan.slot.other': { ru: 'Другое', en: 'Other' },
+  'mealPlan.wkd.0': { ru: 'Вс', en: 'Sun' },
+  'mealPlan.wkd.1': { ru: 'Пн', en: 'Mon' },
+  'mealPlan.wkd.2': { ru: 'Вт', en: 'Tue' },
+  'mealPlan.wkd.3': { ru: 'Ср', en: 'Wed' },
+  'mealPlan.wkd.4': { ru: 'Чт', en: 'Thu' },
+  'mealPlan.wkd.5': { ru: 'Пт', en: 'Fri' },
+  'mealPlan.wkd.6': { ru: 'Сб', en: 'Sat' },
 
   // ─── pinned family note ──────────────────────────────────────────
   'note.empty.cta': { ru: '+ Заметка для семьи', en: '+ Pinned note' },

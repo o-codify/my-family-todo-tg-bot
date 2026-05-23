@@ -16,6 +16,7 @@ import { Search } from './Search';
 import { Shop } from './Shop';
 import { Shopping } from './Shopping';
 import { Events } from './Events';
+import { MealPlan } from './MealPlan';
 import { Stats } from './Stats';
 import { Templates } from './Templates';
 import { TaskSheet } from '../components/TaskSheet';
@@ -39,6 +40,7 @@ type Route =
   | { kind: 'queue'; taskId: string }
   | { kind: 'shop' }
   | { kind: 'shopping' }
+  | { kind: 'meal-plan' }
   | { kind: 'events' }
   | { kind: 'profile' }
   | { kind: 'my-profile' }
@@ -61,6 +63,7 @@ const NAV_ROUTE: Record<NavKey, Route> = {
   queues: { kind: 'queues' },
   shop: { kind: 'shop' },
   shopping: { kind: 'shopping' },
+  'meal-plan': { kind: 'meal-plan' },
   events: { kind: 'events' },
   profile: { kind: 'profile' },
   'my-profile': { kind: 'my-profile' },
@@ -101,6 +104,8 @@ function serializeRoute(r: Route): string {
       return '#/shop';
     case 'shopping':
       return '#/shopping';
+    case 'meal-plan':
+      return '#/meal-plan';
     case 'events':
       return '#/events';
     case 'profile':
@@ -152,6 +157,8 @@ function parseRoute(hash: string): Route {
       return { kind: 'shop' };
     case 'shopping':
       return { kind: 'shopping' };
+    case 'meal-plan':
+      return { kind: 'meal-plan' };
     case 'events':
       return { kind: 'events' };
     case 'transfer': {
@@ -205,6 +212,8 @@ function navKeyForRoute(r: Route): NavKey {
       return 'shop';
     case 'shopping':
       return 'shopping';
+    case 'meal-plan':
+      return 'meal-plan';
     case 'events':
       return 'events';
     case 'inbox':
@@ -427,6 +436,14 @@ export function FamilyHome({ me, families }: Props) {
       )}
       {route.kind === 'events' && (
         <Events
+          me={me}
+          family={activeFamily}
+          onBack={onBackFor}
+          onOpenDrawer={onOpenDrawerFor}
+        />
+      )}
+      {route.kind === 'meal-plan' && (
+        <MealPlan
           me={me}
           family={activeFamily}
           onBack={onBackFor}

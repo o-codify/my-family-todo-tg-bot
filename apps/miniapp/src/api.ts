@@ -272,6 +272,23 @@ export type ShoppingItemDto = {
   createdAt: string;
 };
 
+export type MealPlanSlot = 'breakfast' | 'lunch' | 'dinner' | 'snack' | 'other';
+
+export type MealIngredient = { text: string; quantity?: string | null };
+
+export type MealPlanEntryDto = {
+  id: string;
+  familyId: string;
+  date: string;
+  slot: MealPlanSlot;
+  title: string;
+  notes: string | null;
+  ingredients: MealIngredient[];
+  createdByUserId: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type FamilyEventType =
   | 'birthday'
   | 'anniversary'
@@ -569,6 +586,54 @@ export const api = {
   restoreFamilyEvent: (familyId: string, eventId: string) =>
     request<{ event: FamilyEventDto }>(
       `/api/v1/families/${familyId}/family-events/${eventId}/restore`,
+      { method: 'POST' },
+    ),
+
+  listMealPlan: (familyId: string, from: string, to: string) =>
+    request<{ entries: MealPlanEntryDto[] }>(
+      `/api/v1/families/${familyId}/meal-plan?from=${from}&to=${to}`,
+    ),
+  createMealPlanEntry: (
+    familyId: string,
+    payload: {
+      date: string;
+      slot: MealPlanSlot;
+      title: string;
+      notes?: string | null;
+      ingredients?: MealIngredient[];
+    },
+  ) =>
+    request<{ entry: MealPlanEntryDto }>(
+      `/api/v1/families/${familyId}/meal-plan`,
+      { method: 'POST', body: JSON.stringify(payload) },
+    ),
+  updateMealPlanEntry: (
+    familyId: string,
+    entryId: string,
+    patch: {
+      date?: string;
+      slot?: MealPlanSlot;
+      title?: string;
+      notes?: string | null;
+      ingredients?: MealIngredient[];
+    },
+  ) =>
+    request<{ entry: MealPlanEntryDto }>(
+      `/api/v1/families/${familyId}/meal-plan/${entryId}`,
+      { method: 'PATCH', body: JSON.stringify(patch) },
+    ),
+  deleteMealPlanEntry: (familyId: string, entryId: string) =>
+    request<null>(`/api/v1/families/${familyId}/meal-plan/${entryId}`, {
+      method: 'DELETE',
+    }),
+  restoreMealPlanEntry: (familyId: string, entryId: string) =>
+    request<{ entry: MealPlanEntryDto }>(
+      `/api/v1/families/${familyId}/meal-plan/${entryId}/restore`,
+      { method: 'POST' },
+    ),
+  pushMealPlanToShopping: (familyId: string, entryId: string) =>
+    request<{ added: number; skipped: number }>(
+      `/api/v1/families/${familyId}/meal-plan/${entryId}/push-to-shopping`,
       { method: 'POST' },
     ),
 
