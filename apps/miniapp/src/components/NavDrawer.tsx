@@ -44,19 +44,23 @@ type Props = {
 
 type Entry = { key: NavKey; icon: IconName; labelKey: string };
 
+// User asked to remove drawer scrolling. Shrunk MAIN to the high-traffic
+// destinations and pushed search/inbox/permission-requests down into the
+// "extras" group. Sections combined keep the entry count under what fits
+// on a 700-px-tall viewport without scrolling.
 const MAIN: Entry[] = [
   { key: 'calendar', icon: 'cal', labelKey: 'nav.calendar' },
   { key: 'queues', icon: 'repeat', labelKey: 'nav.queues' },
   { key: 'shopping', icon: 'pkg', labelKey: 'nav.shopping' },
   { key: 'meal-plan', icon: 'list', labelKey: 'nav.mealPlan' },
   { key: 'events', icon: 'gift', labelKey: 'nav.events' },
-  { key: 'permReq', icon: 'bell', labelKey: 'nav.permReq' },
   { key: 'shop', icon: 'star', labelKey: 'nav.shop' },
-  { key: 'inbox', icon: 'bell', labelKey: 'nav.inbox' },
-  { key: 'search', icon: 'search', labelKey: 'nav.search' },
 ];
 
 const EXTRAS: Entry[] = [
+  { key: 'permReq', icon: 'bell', labelKey: 'nav.permReq' },
+  { key: 'inbox', icon: 'bell', labelKey: 'nav.inbox' },
+  { key: 'search', icon: 'search', labelKey: 'nav.search' },
   { key: 'history', icon: 'list', labelKey: 'nav.history' },
   { key: 'stats', icon: 'chart', labelKey: 'nav.stats' },
   { key: 'catalog', icon: 'pkg', labelKey: 'nav.catalog' },
@@ -89,10 +93,29 @@ export function NavDrawer({
         const go = (k: NavKey) => close(() => onNavigate(k));
         return (
           <>
-            {/* Header: app/family identity. Tap on family name → Settings.
-                If the user is in multiple families, we render a <select>
-                so they can switch without leaving the drawer. */}
-            <div className="wf-row wf-gap-8" style={{ padding: '4px 8px 8px' }}>
+            {/* Header: family identity + family-settings entrypoint.
+                The whole pill is tappable → opens family settings ('profile'
+                route). The trailing gear icon is the visual cue. In a
+                multi-family account, the row gets a small <select> chip
+                to switch — clicks on the select don't bubble up to the
+                settings handler. */}
+            <div
+              className="wf-row wf-gap-8"
+              style={{
+                padding: '6px 8px 10px',
+                cursor: 'pointer',
+                borderRadius: 10,
+              }}
+              role="button"
+              tabIndex={0}
+              onClick={() => go('profile')}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  go('profile');
+                }
+              }}
+            >
               <div
                 style={{
                   width: 40,
@@ -114,6 +137,9 @@ export function NavDrawer({
                   <select
                     value={family.id}
                     onChange={(e) => onSwitchFamily(e.target.value)}
+                    // Switching family shouldn't fall through to "open
+                    // family settings" — both happen on click otherwise.
+                    onClick={(e) => e.stopPropagation()}
                     className="wf-h3"
                     style={{
                       border: 'none',
@@ -154,8 +180,19 @@ export function NavDrawer({
                   {me.username ? ` · @${me.username}` : ''}
                 </span>
               </div>
+              {/* Visual hint: tapping the row opens family settings. */}
+              <span
+                aria-hidden
+                style={{ color: 'var(--hint)', flex: 'none', padding: 2 }}
+                title={isEn ? 'Family settings' : 'Настройки семьи'}
+              >
+                <Icon name="sett" />
+              </span>
               <button
-                onClick={() => close()}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  close();
+                }}
                 aria-label={t('common.close')}
                 style={{
                   background: 'transparent',
@@ -198,23 +235,17 @@ export function NavDrawer({
 
             <div style={{ flex: 1 }} />
 
-            {/* Bottom: My profile + Settings. Stick to the footer so the
-                user always knows where to find them regardless of how many
-                extras we add later. */}
+            {/* Bottom: personal "Settings" (the former "Мой профиль" —
+                renamed per user feedback: this is where the *user's* own
+                preferences live: language, notifications, ICS token, etc.).
+                Family-level settings moved up to the header (tap on family
+                name + gear icon hint), so we no longer render two
+                near-identical buttons here. */}
             <button
               type="button"
               className="wf-drawer__item"
               data-active={active === 'my-profile' ? '1' : '0'}
               onClick={() => go('my-profile')}
-            >
-              <Icon name="user" />
-              <span style={{ flex: 1 }}>{t('nav.myProfile')}</span>
-            </button>
-            <button
-              type="button"
-              className="wf-drawer__item"
-              data-active={active === 'profile' ? '1' : '0'}
-              onClick={() => go('profile')}
             >
               <Icon name="sett" />
               <span style={{ flex: 1 }}>
