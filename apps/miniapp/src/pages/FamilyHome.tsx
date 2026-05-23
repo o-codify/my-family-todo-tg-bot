@@ -443,14 +443,12 @@ export function FamilyHome({ me, families }: Props) {
           family={activeFamily}
           listId={route.listId}
           onOpenList={(id) => pushRoute({ kind: 'shopping', listId: id })}
-          // Index has burger; list view has back-to-index. The back
-          // helper pops one level if a list is open, otherwise falls
-          // through to the parent (which closes the page).
-          onBack={
-            route.listId
-              ? () => setRoute({ kind: 'shopping', listId: null })
-              : onBackFor
-          }
+          // Index has burger; list view has back-to-index. Use popRoute
+          // (not a bare setRoute) so the back-stack actually shrinks —
+          // otherwise the index re-renders with a stale `onBackFor`
+          // because backStack still has the pre-list entry. Symptom was
+          // "back button stays after returning, disappears on click".
+          onBack={route.listId ? popRoute : onBackFor}
           onOpenDrawer={route.listId ? undefined : onOpenDrawerFor}
         />
       )}

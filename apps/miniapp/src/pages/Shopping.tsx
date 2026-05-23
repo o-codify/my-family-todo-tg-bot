@@ -473,27 +473,11 @@ function ShoppingListView({
           background: 'var(--paper)',
         }}
       >
-        <div className="wf-row wf-gap-6" style={{ minWidth: 0 }}>
-          <select
-            value={category}
-            onChange={(e) => setCategory(e.target.value as ShoppingCategory)}
-            style={{
-              border: '1.5px solid var(--line)',
-              borderRadius: 8,
-              padding: '6px 6px',
-              background: 'var(--paper)',
-              font: 'inherit',
-              fontSize: 12,
-              flex: 'none',
-              maxWidth: 120,
-            }}
-          >
-            {CATEGORY_ORDER.map((c) => (
-              <option key={c} value={c}>
-                {CATEGORY_EMOJI[c]} {t(`shopping.category.${c}`)}
-              </option>
-            ))}
-          </select>
+        {/* Two-row layout: row 1 = name input (full width), row 2 =
+            category picker + add button. The previous single-row layout
+            squashed the dropdown's emoji+label and gave the name input
+            barely any space on narrow screens. */}
+        <div className="wf-col wf-gap-6" style={{ minWidth: 0 }}>
           <input
             value={text}
             onChange={(e) => setText(e.target.value)}
@@ -506,7 +490,7 @@ function ShoppingListView({
             placeholder={t('shopping.add.placeholder')}
             className="wf-label"
             style={{
-              flex: 1,
+              width: '100%',
               minWidth: 0,
               border: '1.5px solid var(--line)',
               borderRadius: 8,
@@ -517,21 +501,43 @@ function ShoppingListView({
               font: 'inherit',
             }}
           />
-          <button
-            type="button"
-            className="wf-btn primary"
-            onClick={commit}
-            disabled={!text.trim() || addMut.isPending}
-            style={{
-              padding: '6px 12px',
-              fontSize: 13,
-              cursor: !text.trim() || addMut.isPending ? 'default' : 'pointer',
-              border: 'none',
-              flex: 'none',
-            }}
-          >
-            +
-          </button>
+          <div className="wf-row wf-gap-6" style={{ minWidth: 0 }}>
+            <select
+              value={category}
+              onChange={(e) => setCategory(e.target.value as ShoppingCategory)}
+              style={{
+                border: '1.5px solid var(--line)',
+                borderRadius: 8,
+                padding: '6px 8px',
+                background: 'var(--paper)',
+                font: 'inherit',
+                fontSize: 13,
+                flex: 1,
+                minWidth: 0,
+              }}
+            >
+              {CATEGORY_ORDER.map((c) => (
+                <option key={c} value={c}>
+                  {CATEGORY_EMOJI[c]} {t(`shopping.category.${c}`)}
+                </option>
+              ))}
+            </select>
+            <button
+              type="button"
+              className="wf-btn primary"
+              onClick={commit}
+              disabled={!text.trim() || addMut.isPending}
+              style={{
+                padding: '6px 16px',
+                fontSize: 13,
+                cursor: !text.trim() || addMut.isPending ? 'default' : 'pointer',
+                border: 'none',
+                flex: 'none',
+              }}
+            >
+              +
+            </button>
+          </div>
         </div>
       </div>
 
@@ -596,6 +602,11 @@ function ItemRow({
   onMove: () => void;
 }) {
   const isDone = item.status === 'bought';
+  // Each item carries a category — pick the matching emoji so the list
+  // is visually scannable. User report: "В списке покупок не показывает
+  // иконку". The same CATEGORY_EMOJI map is already used in the
+  // dropdown above; reusing it here keeps icons consistent.
+  const categoryIcon = CATEGORY_EMOJI[item.category as ShoppingCategory] ?? '🛒';
   return (
     <div className="wf-card" style={{ padding: 8, opacity: isDone ? 0.55 : 1 }}>
       <div className="wf-row wf-gap-8">
@@ -605,6 +616,17 @@ function ItemRow({
           style={{ cursor: 'pointer', flex: 'none' }}
         >
           {isDone && <Icon name="check" />}
+        </span>
+        <span
+          aria-hidden
+          style={{
+            fontSize: 18,
+            lineHeight: 1,
+            flex: 'none',
+            opacity: isDone ? 0.5 : 1,
+          }}
+        >
+          {categoryIcon}
         </span>
         <div className="wf-col" style={{ flex: 1, minWidth: 0 }}>
           <span
