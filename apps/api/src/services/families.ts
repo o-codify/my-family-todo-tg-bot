@@ -105,6 +105,9 @@ export function serializeFamily(row: FamilyRow) {
     ownerId: row.ownerId,
     inviteCode: row.inviteCode,
     inviteCodeExpiresAt: row.inviteCodeExpiresAt?.toISOString() ?? null,
+    pinnedNote: row.pinnedNote,
+    pinnedNoteUpdatedBy: row.pinnedNoteUpdatedBy,
+    pinnedNoteUpdatedAt: row.pinnedNoteUpdatedAt?.toISOString() ?? null,
     createdAt: row.createdAt.toISOString(),
   };
 }
@@ -174,15 +177,32 @@ export async function rotateInviteCode(familyId: string): Promise<FamilyRow | nu
 }
 
 /**
- * Rename / re-avatar the family. Owner-only — caller enforces.
+ * Rename / re-avatar the family, or edit the pinned note. Owner-only for
+ * name/avatar (caller enforces); any member can edit the pinned note —
+ * the route handler distinguishes (only `pinnedNote` is in the patch →
+ * skip owner check, otherwise enforce).
+ *
+ * Empty-string `pinnedNote` clears the note (treated as null). The user
+ * id of the editor is recorded so the UI can show "Maria · 2h ago".
  */
 export async function updateFamily(input: {
   familyId: string;
-  patch: { name?: string; avatarUrl?: string | null };
+  userId?: string; // editor (required when pinnedNote is in the patch)
+  patch: {
+    name?: string;
+    avatarUrl?: string | null;
+    pinnedNote?: string | null;
+  };
 }): Promise<FamilyRow | null> {
   const next: Partial<typeof families.$inferInsert> = {};
   if (input.patch.name !== undefined) next.name = input.patch.name.trim();
   if (input.patch.avatarUrl !== undefined) next.avatarUrl = input.patch.avatarUrl;
+  if (input.patch.pinnedNote !== undefined) {
+    const trimmed = input.patch.pinnedNote?.trim() ?? null;
+    next.pinnedNote = trimmed && trimmed.length > 0 ? trimmed : null;
+    next.pinnedNoteUpdatedBy = input.userId ?? null;
+    next.pinnedNoteUpdatedAt = new Date();
+  }
   if (Object.keys(next).length === 0) {
     const row = await db.query.families.findFirst({ where: eq(families.id, input.familyId) });
     return row ?? null;

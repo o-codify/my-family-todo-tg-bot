@@ -28,10 +28,12 @@ export const joinFamilySchema = z.object({
 
 export type JoinFamilyInput = z.infer<typeof joinFamilySchema>;
 
-/** Body for `PATCH /api/v1/families/:familyId` (rename / change avatar). */
+/** Body for `PATCH /api/v1/families/:familyId` (rename / change avatar /
+ *  edit pinned note). Empty-string pinnedNote clears the note. */
 export const updateFamilySchema = z.object({
   name: z.string().min(1).max(60).optional(),
   avatarUrl: z.string().max(256).nullable().optional(),
+  pinnedNote: z.string().max(280).nullable().optional(),
 });
 
 export type UpdateFamilyInput = z.infer<typeof updateFamilySchema>;

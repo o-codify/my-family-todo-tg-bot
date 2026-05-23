@@ -8,6 +8,7 @@ import {
 } from '@family-todo/shared';
 import { db } from '../db/client';
 import { families } from '../db/schema';
+import { publishFamilyEvent } from '../realtime/pubsub';
 import { tgAuth, type AuthVariables } from '../middleware/auth';
 import { requireFamily, type FamilyVariables } from '../middleware/family';
 import {
@@ -61,11 +62,16 @@ familiesRouter.get('/:familyId/members', requireFamily as never, async (c) => {
 });
 
 /**
- * PATCH /api/v1/families/:familyId — rename or change avatar (owner only).
+ * PATCH /api/v1/families/:familyId — rename / change avatar (owner only),
+ * or edit the pinned note (any member).
  *
  * Permission model: ownership in this app is hard-coded to `family.ownerId`
  * — even Owner-role members aren't the same as the *family owner*. We check
  * the owner-id directly here rather than relying on a permission key.
+ *
+ * The pinned note is the one exception: it's a shared scratchpad, so any
+ * member can edit it. We branch on "patch contains ONLY pinnedNote" to
+ * skip the owner check in that case.
  */
 familiesRouter.patch(
   '/:familyId',
@@ -76,14 +82,19 @@ familiesRouter.patch(
     const familyId = c.req.param('familyId');
     const family = await db.query.families.findFirst({ where: eq(families.id, familyId) });
     if (!family) return c.json({ error: 'family_not_found' }, 404);
-    if (family.ownerId !== user.id) {
+    const patch = c.req.valid('json');
+    const keys = Object.keys(patch);
+    const onlyPinnedNote = keys.length > 0 && keys.every((k) => k === 'pinnedNote');
+    if (!onlyPinnedNote && family.ownerId !== user.id) {
       return c.json({ error: 'forbidden', reason: 'owner_only' }, 403);
     }
     const updated = await updateFamily({
       familyId,
-      patch: c.req.valid('json'),
+      userId: user.id,
+      patch,
     });
     if (!updated) return c.json({ error: 'family_not_found' }, 404);
+    void publishFamilyEvent(familyId, { kind: 'invalidate', scope: 'families' });
     return c.json({ family: serializeFamily(updated) });
   },
 );

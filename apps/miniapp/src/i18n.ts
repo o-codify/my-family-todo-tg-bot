@@ -103,6 +103,7 @@ const DICT: Record<string, Record<Locale, string>> = {
   'create.time.clear': { ru: 'Убрать', en: 'Clear' },
   'common.deleted': { ru: 'Удалено', en: 'Deleted' },
   'common.restoreFailed': { ru: 'Не удалось восстановить', en: 'Could not restore' },
+  'common.saveFailed': { ru: 'Не удалось сохранить', en: 'Save failed' },
   'badges.title': { ru: 'Бейджи', en: 'Badges' },
   'shopping.title': { ru: 'Список покупок', en: 'Shopping list' },
   'shopping.empty.title': { ru: 'Список пуст', en: 'Empty list' },
@@ -152,6 +153,14 @@ const DICT: Record<string, Record<Locale, string>> = {
   'nav.myProfile': { ru: 'Мой профиль', en: 'My profile' },
   'nav.shopping': { ru: 'Список покупок', en: 'Shopping' },
   'nav.events': { ru: 'Даты и дни рождения', en: 'Dates & birthdays' },
+
+  // ─── pinned family note ──────────────────────────────────────────
+  'note.empty.cta': { ru: '+ Заметка для семьи', en: '+ Pinned note' },
+  'note.placeholder': {
+    ru: 'Заметка для всех — что не забыть',
+    en: 'Family-wide note — what to remember',
+  },
+  'note.editor.unknown': { ru: 'кто-то', en: 'someone' },
 
   // ─── family events / birthdays ────────────────────────────────────
   'events.title': { ru: 'Даты семьи', en: 'Family dates' },

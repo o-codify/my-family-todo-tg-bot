@@ -142,6 +142,10 @@ export type FamilySummary = {
   ownerId: string;
   inviteCode: string;
   createdAt: string;
+  /** Free-form scratchpad shared across the family. Edited by any member. */
+  pinnedNote: string | null;
+  pinnedNoteUpdatedBy: string | null;
+  pinnedNoteUpdatedAt: string | null;
   myRole: { id: string; name: string; permissions: string[] };
 };
 
@@ -358,7 +362,12 @@ export const api = {
     request<null>(`/api/v1/families/${familyId}/leave`, { method: 'POST' }),
   updateFamily: (
     familyId: string,
-    patch: { name?: string; avatarUrl?: string | null },
+    patch: {
+      name?: string;
+      avatarUrl?: string | null;
+      /** Empty string or null clears the pinned note. */
+      pinnedNote?: string | null;
+    },
   ) =>
     request<{ family: FamilySummary }>(`/api/v1/families/${familyId}`, {
       method: 'PATCH',

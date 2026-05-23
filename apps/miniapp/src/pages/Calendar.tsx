@@ -10,6 +10,7 @@ import {
 } from '../api';
 import { AvStack, Dot, Icon, Seg, Tag, WfBody, type Member } from '../design';
 import { FloatingSection } from '../components/FloatingSection';
+import { PinnedNote } from '../components/PinnedNote';
 import { usePreferences } from '../hooks/usePreferences';
 import { pluralize, useT } from '../i18n';
 import { pickInkOrPaper } from '../utils/contrast';
@@ -484,6 +485,12 @@ export function Calendar({
           </span>
         </div>
       </div>
+
+      {/* Family pinned note — short shared scratchpad ("В четверг гости",
+          etc). Any member can edit. Hidden entirely if there's no note
+          and we're at the empty-state CTA — the small "+ Pinned note"
+          chip renders inside the component itself. */}
+      <PinnedNote family={family} members={membersQuery.data?.members ?? []} />
 
       {/* View-mode toggle — Месяц / Неделя / Лента. Persisted in
           preferences.calendarViewMode. */}
