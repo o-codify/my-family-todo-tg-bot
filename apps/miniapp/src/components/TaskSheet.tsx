@@ -451,43 +451,24 @@ export function TaskSheet({ me, family, occurrence, onClose, onEdit, onTransfer 
         {/* Actions — only the assignee can transfer / reschedule / complete
             their own turn (or uncomplete a finished one). Other family
             members see the task read-only; their own management actions
-            ("Stop repeating" below) live in a separate block. */}
+            ("Stop repeating" below) live in a separate block.
+            Layout: primary "Выполнить" gets a full-width row by itself
+            so it's never clipped on narrow screens; secondary actions
+            (Передать / Отложить / Перенести) sit on a flex-wrapping
+            row below where they can break into a second line if needed.
+            Previously all four were on one row which clipped "Выполнить"
+            on standard phone viewports. */}
         {(!done && isAssignee) || (done && (isCompleter || isAssignee)) ? (
-          <div className="wf-row wf-gap-8" style={{ marginTop: 12 }}>
+          <div
+            className="wf-col"
+            style={{ marginTop: 12, gap: 8 }}
+          >
             {!done && isAssignee && (
               <>
                 <button
-                  className="wf-btn"
-                  onClick={() => onTransfer && close(onTransfer)}
-                  disabled={!onTransfer}
-                  style={{ cursor: onTransfer ? 'pointer' : 'not-allowed' }}
-                >
-                  {t('task.action.transfer')}
-                </button>
-                {/* Reschedule + Snooze are only meaningful for dated
-                    occurrences. Floating tasks have no scheduledDate. */}
-                {!o.id.startsWith('floating:') && o.task.type !== 'floating' && (
-                  <>
-                    <button
-                      className="wf-btn"
-                      onClick={() => setSnoozeOpen((v) => !v)}
-                      style={{ cursor: 'pointer' }}
-                    >
-                      {t('task.action.snooze')}
-                    </button>
-                    <button
-                      className="wf-btn"
-                      onClick={() => setRescheduleOpen(true)}
-                      style={{ cursor: 'pointer' }}
-                    >
-                      {t('task.action.reschedule')}
-                    </button>
-                  </>
-                )}
-                <button
                   className="wf-btn primary"
                   style={{
-                    flex: 1,
+                    width: '100%',
                     cursor: photoMissing ? 'not-allowed' : 'pointer',
                     opacity: photoMissing ? 0.5 : 1,
                   }}
@@ -501,6 +482,42 @@ export function TaskSheet({ me, family, occurrence, onClose, onEdit, onTransfer 
                     ? t('task.action.completing')
                     : t('task.action.complete')}
                 </button>
+                <div
+                  className="wf-row wf-gap-8"
+                  style={{ flexWrap: 'wrap' }}
+                >
+                  <button
+                    className="wf-btn"
+                    onClick={() => onTransfer && close(onTransfer)}
+                    disabled={!onTransfer}
+                    style={{
+                      cursor: onTransfer ? 'pointer' : 'not-allowed',
+                      flex: '1 1 auto',
+                    }}
+                  >
+                    {t('task.action.transfer')}
+                  </button>
+                  {/* Reschedule + Snooze are only meaningful for dated
+                      occurrences. Floating tasks have no scheduledDate. */}
+                  {!o.id.startsWith('floating:') && o.task.type !== 'floating' && (
+                    <>
+                      <button
+                        className="wf-btn"
+                        onClick={() => setSnoozeOpen((v) => !v)}
+                        style={{ cursor: 'pointer', flex: '1 1 auto' }}
+                      >
+                        {t('task.action.snooze')}
+                      </button>
+                      <button
+                        className="wf-btn"
+                        onClick={() => setRescheduleOpen(true)}
+                        style={{ cursor: 'pointer', flex: '1 1 auto' }}
+                      >
+                        {t('task.action.reschedule')}
+                      </button>
+                    </>
+                  )}
+                </div>
               </>
             )}
             {done && (
@@ -511,7 +528,7 @@ export function TaskSheet({ me, family, occurrence, onClose, onEdit, onTransfer 
                 style={{
                   cursor: uncompleteMut.isPending ? 'default' : 'pointer',
                   opacity: uncompleteMut.isPending ? 0.5 : 1,
-                  flex: 1,
+                  width: '100%',
                 }}
               >
                 {uncompleteMut.isPending ? '…' : t('task.action.uncomplete')}
