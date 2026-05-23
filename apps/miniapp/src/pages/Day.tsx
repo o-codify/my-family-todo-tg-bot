@@ -384,7 +384,9 @@ export function Day({ me, family, iso, onBack, onOpenTask, onCreateTask }: Props
         tasks={tasks}
         occurrences={rawOccurrences}
         memberById={memberById}
+        meId={me.id}
         onOpen={(o) => onOpenTask(o)}
+        onComplete={(o) => completeMut.mutate(o.id)}
         filterUserId={
           filter === ALL_LBL
             ? undefined

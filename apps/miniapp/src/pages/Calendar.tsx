@@ -870,7 +870,9 @@ export function Calendar({
         tasks={tasksQuery.data?.tasks ?? []}
         occurrences={occurrences}
         memberById={memberById}
+        meId={me.id}
         onOpen={(o) => onOpenTask?.(o)}
+        onComplete={(o) => completeMut.mutate(o.id)}
         filterUserId={
           filter === ALL_LBL
             ? undefined

@@ -14,13 +14,23 @@ export function FloatingSection({
   tasks,
   occurrences,
   memberById,
+  meId,
   onOpen,
+  onComplete,
   filterUserId,
 }: {
   tasks: TaskDto[];
   occurrences: OccurrenceDto[];
   memberById: Map<string, Member>;
+  /** Current user id — drives the ownership-only checkbox. Only tasks
+   *  assigned to me (or unassigned/shared) get the interactive
+   *  checkbox; foreign tasks render as read-only. */
+  meId: string;
   onOpen: (occurrence: OccurrenceDto) => void;
+  /** Fires when the user taps the inline checkbox. Parent routes the
+   *  synthetic floating:<taskId> id through the right mutation (the
+   *  Calendar/Day completeMut already understands this prefix). */
+  onComplete?: (occurrence: OccurrenceDto) => void;
   /** When set, only floating tasks assigned to this user are shown.
    *  `undefined` = no member filter active (the page is in "Все" mode),
    *  show everything. Tasks with `assigneeId === null` (unassigned —
@@ -98,6 +108,14 @@ export function FloatingSection({
               deadlineAt: ft.deadlineAt,
             },
           };
+          // Ownership-only checkbox — same rule as Day/Calendar's
+          // inline checkbox: assignee or unassigned can tap; foreign
+          // rows render dimmed/non-interactive.
+          const ownsRow = ft.assigneeId === null || ft.assigneeId === meId;
+          // Tasks requiring a photo can't be one-tap completed — open
+          // TaskSheet so the user attaches one. Same fallback the
+          // calendar uses.
+          const photoBlocked = ft.photoRequired;
           return (
             <div
               key={ft.id}
@@ -106,6 +124,27 @@ export function FloatingSection({
               style={{ cursor: 'pointer' }}
             >
               <div className="wf-row wf-gap-10">
+                {ownsRow && onComplete ? (
+                  <span
+                    className="wf-check"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (photoBlocked) {
+                        onOpen(synthOcc);
+                        return;
+                      }
+                      onComplete(synthOcc);
+                    }}
+                    style={{ cursor: 'pointer' }}
+                    aria-label="Complete"
+                  />
+                ) : (
+                  <span
+                    className="wf-check"
+                    style={{ pointerEvents: 'none', opacity: 0.6 }}
+                    aria-hidden
+                  />
+                )}
                 <span
                   className="wf-mc"
                   style={{
