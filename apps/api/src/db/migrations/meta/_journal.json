@@ -120,6 +120,13 @@
       "when": 1779512085460,
       "tag": "0016_serious_thor",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1779512413503,
+      "tag": "0017_regular_kate_bishop",
+      "breakpoints": true
     }
   ]
 }

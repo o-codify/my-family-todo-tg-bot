@@ -279,6 +279,14 @@ export type ShoppingItemDto = {
   createdAt: string;
 };
 
+export type TaskCommentDto = {
+  id: string;
+  taskId: string;
+  userId: string;
+  text: string;
+  createdAt: string;
+};
+
 export type PermissionRequestType =
   | 'screen_time'
   | 'friend_visit'
@@ -721,6 +729,21 @@ export const api = {
     request<{ request: PermissionRequestDto }>(
       `/api/v1/families/${familyId}/permission-requests/${requestId}/cancel`,
       { method: 'POST' },
+    ),
+
+  listTaskComments: (familyId: string, taskId: string) =>
+    request<{ comments: TaskCommentDto[] }>(
+      `/api/v1/families/${familyId}/tasks/${taskId}/comments`,
+    ),
+  createTaskComment: (familyId: string, taskId: string, text: string) =>
+    request<{ comment: TaskCommentDto }>(
+      `/api/v1/families/${familyId}/tasks/${taskId}/comments`,
+      { method: 'POST', body: JSON.stringify({ text }) },
+    ),
+  deleteTaskComment: (familyId: string, taskId: string, commentId: string) =>
+    request<null>(
+      `/api/v1/families/${familyId}/tasks/${taskId}/comments/${commentId}`,
+      { method: 'DELETE' },
     ),
 
   listMyBadges: (familyId: string) =>

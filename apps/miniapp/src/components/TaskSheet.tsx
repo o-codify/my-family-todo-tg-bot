@@ -609,6 +609,11 @@ export function TaskSheet({ me, family, occurrence, onClose, onEdit, onTransfer 
           />
         )}
 
+        {/* Comments thread — separate component to keep this file focused.
+            Lazy-fetched on sheet open so closed sheets don't waste a
+            request; in-place compose + delete-own. */}
+        <CommentsSection me={me} family={family} taskId={o.taskId} members={members} />
+
         {/* History — port of lines 202-208 */}
         {o.completedAt && done && (
           <>
@@ -994,5 +999,143 @@ function ReschedulePicker({
         </>
       )}
     </BottomSheet>
+  );
+}
+
+/**
+ * Lightweight comments thread under a task. Lazy-fetches on mount;
+ * compose + delete-own are wired straight into the api client without
+ * optimistic updates (the SSE invalidation arrives faster than a
+ * round-trip retry would, so the user sees their message land within
+ * a beat without us paying optimistic-rollback complexity).
+ */
+function CommentsSection({
+  me,
+  family,
+  taskId,
+  members,
+}: {
+  me: MeResponse;
+  family: FamilySummary;
+  taskId: string;
+  members: Member[];
+}) {
+  const t = useT();
+  const queryClient = useQueryClient();
+  const [draft, setDraft] = useState('');
+
+  const commentsQuery = useQuery({
+    queryKey: ['task-comments', family.id, taskId],
+    queryFn: () => api.listTaskComments(family.id, taskId),
+  });
+  const addMut = useMutation({
+    mutationFn: (text: string) => api.createTaskComment(family.id, taskId, text),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['task-comments', family.id, taskId] });
+      setDraft('');
+    },
+  });
+  const delMut = useMutation({
+    mutationFn: (commentId: string) =>
+      api.deleteTaskComment(family.id, taskId, commentId),
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: ['task-comments', family.id, taskId] }),
+  });
+
+  const comments = commentsQuery.data?.comments ?? [];
+  const memberById = new Map(members.map((m) => [m.id, m]));
+
+  return (
+    <div className="wf-col" style={{ gap: 6, marginTop: 14 }}>
+      <span className="wf-tiny">
+        {t('comments.title')}
+        {comments.length > 0 && ` · ${comments.length}`}
+      </span>
+      {comments.map((c) => {
+        const author = memberById.get(c.userId);
+        const isMine = c.userId === me.id;
+        return (
+          <div
+            key={c.id}
+            className="wf-row wf-gap-8"
+            style={{ alignItems: 'flex-start' }}
+          >
+            <Av m={author ?? null} size="xs" />
+            <div className="wf-col" style={{ flex: 1, minWidth: 0, gap: 2 }}>
+              <span className="wf-tiny" style={{ color: 'var(--hint)' }}>
+                {author?.name ?? '—'} ·{' '}
+                {new Date(c.createdAt).toLocaleTimeString(
+                  t.locale === 'en' ? 'en-US' : 'ru-RU',
+                  { hour: '2-digit', minute: '2-digit' },
+                )}
+              </span>
+              <span
+                className="wf-label"
+                style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}
+              >
+                {c.text}
+              </span>
+            </div>
+            {isMine && (
+              <button
+                type="button"
+                onClick={() => delMut.mutate(c.id)}
+                aria-label="delete"
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  color: 'var(--hint)',
+                  cursor: 'pointer',
+                  padding: 2,
+                  flex: 'none',
+                }}
+              >
+                <Icon name="x" />
+              </button>
+            )}
+          </div>
+        );
+      })}
+      <div className="wf-row wf-gap-6" style={{ marginTop: 4 }}>
+        <input
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && !e.shiftKey && draft.trim()) {
+              e.preventDefault();
+              addMut.mutate(draft.trim());
+            }
+          }}
+          placeholder={t('comments.placeholder')}
+          maxLength={1000}
+          className="wf-label"
+          style={{
+            flex: 1,
+            border: '1.5px solid var(--line)',
+            borderRadius: 8,
+            padding: '6px 10px',
+            background: 'var(--paper)',
+            outline: 'none',
+            color: 'var(--ink)',
+            font: 'inherit',
+          }}
+        />
+        <button
+          type="button"
+          className="wf-btn primary"
+          onClick={() => draft.trim() && addMut.mutate(draft.trim())}
+          disabled={!draft.trim() || addMut.isPending}
+          style={{
+            padding: '6px 12px',
+            fontSize: 13,
+            cursor:
+              !draft.trim() || addMut.isPending ? 'default' : 'pointer',
+            border: 'none',
+          }}
+        >
+          {t('comments.send')}
+        </button>
+      </div>
+    </div>
   );
 }

@@ -27,7 +27,8 @@ type Event =
         | 'shopping'
         | 'events'
         | 'meal-plan'
-        | 'permission-requests';
+        | 'permission-requests'
+        | 'task-comments';
     }
   | { kind: 'invalidate-all' }
   | { kind: 'hello' };
@@ -88,6 +89,9 @@ export function useFamilyEvents(familyId: string | null): void {
             break;
           case 'permission-requests':
             queryClient.invalidateQueries({ queryKey: ['permission-requests', familyId] });
+            break;
+          case 'task-comments':
+            queryClient.invalidateQueries({ queryKey: ['task-comments'] });
             break;
         }
       }

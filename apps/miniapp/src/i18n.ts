@@ -156,6 +156,11 @@ const DICT: Record<string, Record<Locale, string>> = {
   'nav.mealPlan': { ru: 'План еды', en: 'Meal plan' },
   'nav.permReq': { ru: 'Разрешения', en: 'Permissions' },
 
+  // ─── task comments ────────────────────────────────────────────────
+  'comments.title': { ru: 'Комментарии', en: 'Comments' },
+  'comments.placeholder': { ru: 'Написать…', en: 'Write…' },
+  'comments.send': { ru: 'Отправить', en: 'Send' },
+
   // ─── permission requests ─────────────────────────────────────────
   'permReq.title': { ru: 'Разрешения', en: 'Permissions' },
   'permReq.create': { ru: 'Спросить', en: 'Ask' },

@@ -27,7 +27,8 @@ export type RealtimeEvent =
         | 'shopping'
         | 'events'
         | 'meal-plan'
-        | 'permission-requests';
+        | 'permission-requests'
+        | 'task-comments';
     }
   | { kind: 'invalidate-all' };
 
