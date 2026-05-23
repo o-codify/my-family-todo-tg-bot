@@ -279,6 +279,27 @@ export type ShoppingItemDto = {
   createdAt: string;
 };
 
+export type PermissionRequestType =
+  | 'screen_time'
+  | 'friend_visit'
+  | 'spending'
+  | 'food'
+  | 'other';
+export type PermissionRequestStatus = 'pending' | 'approved' | 'denied' | 'cancelled';
+
+export type PermissionRequestDto = {
+  id: string;
+  familyId: string;
+  requesterUserId: string;
+  type: PermissionRequestType;
+  text: string;
+  status: PermissionRequestStatus;
+  decidedByUserId: string | null;
+  decidedAt: string | null;
+  decisionReason: string | null;
+  createdAt: string;
+};
+
 export type MealPlanSlot = 'breakfast' | 'lunch' | 'dinner' | 'snack' | 'other';
 
 export type MealIngredient = { text: string; quantity?: string | null };
@@ -663,6 +684,42 @@ export const api = {
   pushMealPlanToShopping: (familyId: string, entryId: string) =>
     request<{ added: number; skipped: number }>(
       `/api/v1/families/${familyId}/meal-plan/${entryId}/push-to-shopping`,
+      { method: 'POST' },
+    ),
+
+  listPermissionRequests: (
+    familyId: string,
+    opts: { status?: PermissionRequestStatus; mine?: boolean } = {},
+  ) => {
+    const params = new URLSearchParams();
+    if (opts.status) params.set('status', opts.status);
+    if (opts.mine) params.set('mine', '1');
+    const qs = params.toString() ? `?${params.toString()}` : '';
+    return request<{ requests: PermissionRequestDto[] }>(
+      `/api/v1/families/${familyId}/permission-requests${qs}`,
+    );
+  },
+  createPermissionRequest: (
+    familyId: string,
+    payload: { type: PermissionRequestType; text: string },
+  ) =>
+    request<{ request: PermissionRequestDto }>(
+      `/api/v1/families/${familyId}/permission-requests`,
+      { method: 'POST', body: JSON.stringify(payload) },
+    ),
+  decidePermissionRequest: (
+    familyId: string,
+    requestId: string,
+    decision: 'approved' | 'denied',
+    reason?: string,
+  ) =>
+    request<{ request: PermissionRequestDto }>(
+      `/api/v1/families/${familyId}/permission-requests/${requestId}/decide`,
+      { method: 'POST', body: JSON.stringify({ decision, reason: reason ?? '' }) },
+    ),
+  cancelPermissionRequest: (familyId: string, requestId: string) =>
+    request<{ request: PermissionRequestDto }>(
+      `/api/v1/families/${familyId}/permission-requests/${requestId}/cancel`,
       { method: 'POST' },
     ),
 

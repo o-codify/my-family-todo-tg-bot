@@ -26,7 +26,8 @@ export type RealtimeEvent =
         | 'stats'
         | 'shopping'
         | 'events'
-        | 'meal-plan';
+        | 'meal-plan'
+        | 'permission-requests';
     }
   | { kind: 'invalidate-all' };
 

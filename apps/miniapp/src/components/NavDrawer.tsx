@@ -13,6 +13,7 @@ export type NavKey =
   | 'shopping'
   | 'meal-plan'
   | 'events'
+  | 'permReq'
   | 'profile'
   | 'my-profile'
   | 'inbox'
@@ -43,6 +44,7 @@ const MAIN: Entry[] = [
   { key: 'shopping', icon: 'pkg', labelKey: 'nav.shopping' },
   { key: 'meal-plan', icon: 'list', labelKey: 'nav.mealPlan' },
   { key: 'events', icon: 'gift', labelKey: 'nav.events' },
+  { key: 'permReq', icon: 'bell', labelKey: 'nav.permReq' },
   { key: 'shop', icon: 'star', labelKey: 'nav.shop' },
   { key: 'inbox', icon: 'bell', labelKey: 'nav.inbox' },
   { key: 'search', icon: 'search', labelKey: 'nav.search' },

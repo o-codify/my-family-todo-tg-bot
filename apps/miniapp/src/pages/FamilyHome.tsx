@@ -17,6 +17,7 @@ import { Shop } from './Shop';
 import { Shopping } from './Shopping';
 import { Events } from './Events';
 import { MealPlan } from './MealPlan';
+import { PermissionRequests } from './PermissionRequests';
 import { Stats } from './Stats';
 import { Templates } from './Templates';
 import { TaskSheet } from '../components/TaskSheet';
@@ -42,6 +43,7 @@ type Route =
   | { kind: 'shopping' }
   | { kind: 'meal-plan' }
   | { kind: 'events' }
+  | { kind: 'permReq' }
   | { kind: 'profile' }
   | { kind: 'my-profile' }
   | { kind: 'member'; userId: string }
@@ -65,6 +67,7 @@ const NAV_ROUTE: Record<NavKey, Route> = {
   shopping: { kind: 'shopping' },
   'meal-plan': { kind: 'meal-plan' },
   events: { kind: 'events' },
+  permReq: { kind: 'permReq' },
   profile: { kind: 'profile' },
   'my-profile': { kind: 'my-profile' },
   inbox: { kind: 'inbox' },
@@ -108,6 +111,8 @@ function serializeRoute(r: Route): string {
       return '#/meal-plan';
     case 'events':
       return '#/events';
+    case 'permReq':
+      return '#/perm-requests';
     case 'profile':
       return '#/profile';
     case 'my-profile':
@@ -161,6 +166,8 @@ function parseRoute(hash: string): Route {
       return { kind: 'meal-plan' };
     case 'events':
       return { kind: 'events' };
+    case 'perm-requests':
+      return { kind: 'permReq' };
     case 'transfer': {
       const occurrenceId = rest[0];
       if (occurrenceId) return { kind: 'transfer', occurrenceId };
@@ -216,6 +223,8 @@ function navKeyForRoute(r: Route): NavKey {
       return 'meal-plan';
     case 'events':
       return 'events';
+    case 'permReq':
+      return 'permReq';
     case 'inbox':
       return 'inbox';
     case 'search':
@@ -444,6 +453,14 @@ export function FamilyHome({ me, families }: Props) {
       )}
       {route.kind === 'meal-plan' && (
         <MealPlan
+          me={me}
+          family={activeFamily}
+          onBack={onBackFor}
+          onOpenDrawer={onOpenDrawerFor}
+        />
+      )}
+      {route.kind === 'permReq' && (
+        <PermissionRequests
           me={me}
           family={activeFamily}
           onBack={onBackFor}

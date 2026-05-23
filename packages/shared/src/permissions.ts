@@ -10,6 +10,10 @@ export const PERMISSIONS = [
    *  who complete a `requiresApproval` task go through the pending gate
    *  instead of straight to 'done'. */
   'task.approve',
+  /** Decide on free-form permission requests (Approve / Deny). Default
+   *  goes to Owner + Adult. Kids can still create requests; they just
+   *  can't decide on anyone's. */
+  'permission.decide',
   'catalog.manage',
   'template.manage',
   'reward.manage',
@@ -36,6 +40,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<SystemRoleName, Permission[]> = {
     'task.delete.any',
     'task.complete.any',
     'task.approve',
+    'permission.decide',
     'catalog.manage',
     'template.manage',
     'reward.manage',

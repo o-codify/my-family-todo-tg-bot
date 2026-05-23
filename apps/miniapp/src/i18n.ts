@@ -154,6 +154,41 @@ const DICT: Record<string, Record<Locale, string>> = {
   'nav.shopping': { ru: 'Список покупок', en: 'Shopping' },
   'nav.events': { ru: 'Даты и дни рождения', en: 'Dates & birthdays' },
   'nav.mealPlan': { ru: 'План еды', en: 'Meal plan' },
+  'nav.permReq': { ru: 'Разрешения', en: 'Permissions' },
+
+  // ─── permission requests ─────────────────────────────────────────
+  'permReq.title': { ru: 'Разрешения', en: 'Permissions' },
+  'permReq.create': { ru: 'Спросить', en: 'Ask' },
+  'permReq.send': { ru: 'Отправить', en: 'Send' },
+  'permReq.cancel': { ru: 'Отозвать', en: 'Cancel' },
+  'permReq.approve': { ru: 'Разрешить', en: 'Allow' },
+  'permReq.deny': { ru: 'Отказать', en: 'Deny' },
+  'permReq.deny.confirm': { ru: 'Отказать', en: 'Confirm deny' },
+  'permReq.section.pending': { ru: 'Ожидают', en: 'Pending' },
+  'permReq.section.history': { ru: 'История', en: 'History' },
+  'permReq.empty.title': { ru: 'Пока ничего', en: 'Nothing here' },
+  'permReq.empty.hint': {
+    ru: 'Спроси у родителя — что можно',
+    en: 'Ask a parent — anything goes',
+  },
+  'permReq.field.type': { ru: 'Категория', en: 'Type' },
+  'permReq.field.text': { ru: 'Что хочешь', en: 'What you want' },
+  'permReq.field.text.placeholder': {
+    ru: 'Можно посмотреть мультики 30 мин?',
+    en: 'Can I watch cartoons for 30 min?',
+  },
+  'permReq.reason.placeholder': {
+    ru: 'Причина (необязательно)',
+    en: 'Reason (optional)',
+  },
+  'permReq.status.approved': { ru: '✓ Разрешено', en: '✓ Approved' },
+  'permReq.status.denied': { ru: '✗ Отказано', en: '✗ Denied' },
+  'permReq.status.cancelled': { ru: 'Отозвано', en: 'Cancelled' },
+  'permReq.type.screen_time': { ru: 'Экран', en: 'Screen' },
+  'permReq.type.friend_visit': { ru: 'Друзья', en: 'Friends' },
+  'permReq.type.spending': { ru: 'Покупка', en: 'Spending' },
+  'permReq.type.food': { ru: 'Сладкое', en: 'Treat' },
+  'permReq.type.other': { ru: 'Другое', en: 'Other' },
 
   // ─── meal plan ────────────────────────────────────────────────────
   'mealPlan.title': { ru: 'План еды', en: 'Meal plan' },
