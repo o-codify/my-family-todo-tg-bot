@@ -2,7 +2,10 @@ import { and, eq } from 'drizzle-orm';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { db } from '../../src/db/client';
 import { taskOccurrences, users } from '../../src/db/schema';
-import { completeOccurrence } from '../../src/services/occurrence-actions';
+import {
+  completeOccurrence,
+  uncompleteOccurrence,
+} from '../../src/services/occurrence-actions';
 import { createTask, getTaskInFamily } from '../../src/services/tasks';
 import { addMember, closeDb, makeFamily, makeUser, resetTables } from '../db-helpers';
 
@@ -87,6 +90,62 @@ describe('queued tasks (integration)', () => {
 
     expect(secondAssignee).not.toBe(firstAssignee);
     expect([a.id, b.id]).toContain(secondAssignee);
+  });
+
+  it('complete → uncomplete leaves exactly one pending (no duplicates)', async () => {
+    // Regression test for "click checkbox → uncomplete → multiple pending
+    // Мусор rows pile up" report. completeOccurrence spawns the next
+    // round's pending via ensureQueuedOccurrence; uncompleteOccurrence
+    // used to just flip the done row back to pending without cleaning up
+    // the spawned successor, so each round added one duplicate.
+    const a = await makeUser();
+    const b = await makeUser();
+    const { family } = await makeFamily(a);
+    await addMember(family, b, 'Adult');
+
+    const task = await createTask({
+      familyId: family.id,
+      createdBy: a.id,
+      data: {
+        title: 'No dupes',
+        type: 'queued',
+        schedule: { kind: 'queued' },
+        queueUserIds: [a.id, b.id],
+        points: 0,
+        photoRequired: false,
+        singleShot: false,
+      },
+    });
+    const taskFull = (await getTaskInFamily(task.id, family.id))!;
+    const firstOcc = (
+      await db
+        .select()
+        .from(taskOccurrences)
+        .where(and(eq(taskOccurrences.taskId, task.id), eq(taskOccurrences.status, 'pending')))
+    )[0]!;
+    const firstAssignee = firstOcc.assigneeId!;
+
+    // Three complete → uncomplete cycles. Pre-fix this would leave 4
+    // pending rows; we want exactly 1 at every cycle's end.
+    for (let i = 0; i < 3; i++) {
+      const current = (
+        await db
+          .select()
+          .from(taskOccurrences)
+          .where(and(eq(taskOccurrences.taskId, task.id), eq(taskOccurrences.status, 'pending')))
+      )[0]!;
+      await completeOccurrence({
+        occurrence: { ...current, task: taskFull },
+        userId: firstAssignee,
+        data: {},
+      });
+      await uncompleteOccurrence(current.id);
+      const pending = await db
+        .select()
+        .from(taskOccurrences)
+        .where(and(eq(taskOccurrences.taskId, task.id), eq(taskOccurrences.status, 'pending')));
+      expect(pending).toHaveLength(1);
+    }
   });
 
   it('skips members in away-mode', async () => {

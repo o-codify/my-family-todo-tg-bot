@@ -88,11 +88,21 @@ export async function ensureQueuedOccurrence(
   const decision = pickNextAssignee(candidates);
   if (decision.kind === 'nobody_available') return { error: 'nobody_available' };
 
-  const existing = await conn
+  // The queue invariant is "at most one pending row per task". A bug
+  // window in uncompleteOccurrence (now fixed) could leave duplicates
+  // behind. Self-heal here: keep the oldest pending row, delete the
+  // rest, and continue as if only that one existed.
+  const existingAll = await conn
     .select()
     .from(taskOccurrences)
     .where(and(eq(taskOccurrences.taskId, task.id), eq(taskOccurrences.status, 'pending')))
-    .limit(1);
+    .orderBy(taskOccurrences.createdAt);
+
+  if (existingAll.length > 1) {
+    const stale = existingAll.slice(1).map((r) => r.id);
+    await conn.delete(taskOccurrences).where(inArray(taskOccurrences.id, stale));
+  }
+  const existing = existingAll[0] ? [existingAll[0]] : [];
 
   if (existing[0]) {
     if (existing[0].assigneeId !== decision.userId) {

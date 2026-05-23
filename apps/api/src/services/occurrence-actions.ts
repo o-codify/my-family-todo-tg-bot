@@ -1,4 +1,4 @@
-import { and, desc, eq, gte, inArray, isNull, lte, or } from 'drizzle-orm';
+import { and, desc, eq, gte, inArray, isNull, lte, ne, or } from 'drizzle-orm';
 import type { CompleteOccurrenceInput, OccurrencesQuery } from '@family-todo/shared';
 import { db } from '../db/client';
 import {
@@ -290,30 +290,64 @@ export async function completeOccurrence(input: {
 export async function uncompleteOccurrence(
   occurrenceId: string,
 ): Promise<TaskOccurrenceRow | null> {
-  const [updated] = await db
-    .update(taskOccurrences)
-    .set({
-      status: 'pending',
-      completedAt: null,
-      completedBy: null,
-      photoIds: null,
-      pointsAwarded: 0,
-    })
-    .where(eq(taskOccurrences.id, occurrenceId))
-    .returning();
-  // Re-schedule the reminder if the occurrence is still in the future. The
-  // helper handles all the "is it eligible?" checks — we just trigger it.
-  if (updated) {
-    void scheduleReminderForOccurrence(updated.id).catch((err) =>
-      logger.warn({ err, occurrenceId }, 'reschedule reminder on uncomplete failed'),
-    );
-    // We need the familyId to publish; look it up via the task.
-    void (async () => {
-      const t = await db.query.tasks.findFirst({ where: eq(tasks.id, updated.taskId) });
-      if (t) await publishFamilyEvent(t.familyId, { kind: 'invalidate', scope: 'occurrences' });
-    })().catch(() => undefined);
-  }
-  return updated ?? null;
+  // Queue tasks: when completeOccurrence ran, it spawned a successor
+  // pending row via ensureQueuedOccurrence (next rotation slot). Just
+  // flipping THIS row back to 'pending' without touching the successor
+  // would leave two pending rows for the same task — and each subsequent
+  // complete→uncomplete cycle would pile on another duplicate. Wrap in
+  // a transaction so the "delete siblings + flip back" pair is atomic.
+  return await db.transaction(async (tx) => {
+    const existing = await tx.query.taskOccurrences.findFirst({
+      where: eq(taskOccurrences.id, occurrenceId),
+    });
+    if (!existing) return null;
+
+    const task = await tx.query.tasks.findFirst({
+      where: eq(tasks.id, existing.taskId),
+    });
+    if (task?.type === 'queued') {
+      // The queue-task invariant is "≤ 1 pending row at a time". Delete
+      // any pending siblings (the spawned successor, plus any historic
+      // duplicates from earlier complete→uncomplete cycles before this
+      // fix landed — this self-heals corrupt state).
+      await tx
+        .delete(taskOccurrences)
+        .where(
+          and(
+            eq(taskOccurrences.taskId, existing.taskId),
+            eq(taskOccurrences.status, 'pending'),
+            ne(taskOccurrences.id, occurrenceId),
+          ),
+        );
+    }
+
+    const [updated] = await tx
+      .update(taskOccurrences)
+      .set({
+        status: 'pending',
+        completedAt: null,
+        completedBy: null,
+        photoIds: null,
+        pointsAwarded: 0,
+      })
+      .where(eq(taskOccurrences.id, occurrenceId))
+      .returning();
+
+    if (updated) {
+      // Re-schedule the reminder if the occurrence is still in the future.
+      // The helper handles all the "is it eligible?" checks.
+      void scheduleReminderForOccurrence(updated.id).catch((err) =>
+        logger.warn({ err, occurrenceId }, 'reschedule reminder on uncomplete failed'),
+      );
+      if (task) {
+        void publishFamilyEvent(task.familyId, {
+          kind: 'invalidate',
+          scope: 'occurrences',
+        });
+      }
+    }
+    return updated ?? null;
+  });
 }
 
 export class OccurrenceActionError extends Error {
