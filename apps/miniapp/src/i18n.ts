@@ -780,6 +780,10 @@ const DICT: Record<string, Record<Locale, string>> = {
   'ics.copy': { ru: 'Скопировать', en: 'Copy' },
   'ics.rotate': { ru: 'Сменить', en: 'Rotate' },
   'ics.revoke': { ru: 'Отключить', en: 'Revoke' },
+  'ics.subscribe': {
+    ru: '📅 Подписаться в календаре',
+    en: '📅 Subscribe in Calendar app',
+  },
 
   // ─── Google Calendar two-way sync ────────────────────────────────
   'gcal.title': { ru: 'Google Календарь', en: 'Google Calendar' },

@@ -791,14 +791,22 @@ export const api = {
   getIcsToken: (familyId: string) =>
     request<{
       token: string | null;
+      /** Full https URL — apple calendar refuses http. Computed
+       *  server-side from env.API_PUBLIC_URL. */
+      url: string | null;
+      /** Same URL with webcal:// scheme — tapping on iOS auto-opens
+       *  the Subscribe dialog in Calendar.app. */
+      webcal: string | null;
       createdAt: string | null;
       lastUsedAt: string | null;
     }>(`/api/v1/families/${familyId}/ics`),
   issueIcsToken: (familyId: string) =>
-    request<{ token: string; createdAt: string }>(
-      `/api/v1/families/${familyId}/ics/issue`,
-      { method: 'POST' },
-    ),
+    request<{
+      token: string;
+      url: string;
+      webcal: string;
+      createdAt: string;
+    }>(`/api/v1/families/${familyId}/ics/issue`, { method: 'POST' }),
   revokeIcsToken: (familyId: string) =>
     request<{ revoked: boolean }>(
       `/api/v1/families/${familyId}/ics/revoke`,

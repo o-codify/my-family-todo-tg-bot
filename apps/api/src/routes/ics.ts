@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { env } from '../env';
 import { tgAuth, type AuthVariables } from '../middleware/auth';
 import { requireFamily, type FamilyVariables } from '../middleware/family';
 import {
@@ -8,6 +9,23 @@ import {
   resolveToken,
   revokeActiveToken,
 } from '../services/ics';
+
+/**
+ * Build the public feed URL from the server's own configured public URL
+ * (env.API_PUBLIC_URL). Apple Calendar refuses to subscribe to HTTP
+ * feeds — we MUST hand the user an HTTPS URL even in environments
+ * where the miniapp itself is reached via http through a tunnel. The
+ * client used to construct this URL from window.location.origin and
+ * inherited the http scheme; building server-side avoids that. */
+function buildFeedUrl(token: string): { url: string; webcal: string } {
+  const base = env.API_PUBLIC_URL.replace(/\/+$/, '').replace(/\/api(\/v1)?$/, '');
+  const url = `${base}/api/v1/ics/${token}.ics`;
+  // webcal:// is the calendar-subscription protocol scheme Apple +
+  // most other clients auto-recognise — tapping it on iOS opens the
+  // Subscribe dialog directly. Strip the http(s):// from `url`.
+  const webcal = `webcal://${url.replace(/^https?:\/\//, '')}`;
+  return { url, webcal };
+}
 
 /**
  * Two surfaces:
@@ -30,6 +48,8 @@ icsManageRouter.get('/', async (c) => {
   });
   return c.json({
     token: row?.token ?? null,
+    url: row ? buildFeedUrl(row.token).url : null,
+    webcal: row ? buildFeedUrl(row.token).webcal : null,
     createdAt: row?.createdAt.toISOString() ?? null,
     lastUsedAt: row?.lastUsedAt?.toISOString() ?? null,
   });
@@ -40,7 +60,13 @@ icsManageRouter.post('/issue', async (c) => {
     userId: c.get('user').id,
     familyId: c.get('familyId'),
   });
-  return c.json({ token: row.token, createdAt: row.createdAt.toISOString() });
+  const { url, webcal } = buildFeedUrl(row.token);
+  return c.json({
+    token: row.token,
+    url,
+    webcal,
+    createdAt: row.createdAt.toISOString(),
+  });
 });
 
 icsManageRouter.post('/revoke', async (c) => {

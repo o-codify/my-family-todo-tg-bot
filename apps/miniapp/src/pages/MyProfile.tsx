@@ -563,9 +563,16 @@ function IcsSection({ family }: { family: FamilySummary }) {
       queryClient.invalidateQueries({ queryKey: ['ics-token', family.id] }),
   });
   const token = tokenQuery.data?.token ?? null;
-  const url = token
-    ? `${typeof window !== 'undefined' ? window.location.origin : ''}/api/v1/ics/${token}.ics`
-    : null;
+  // Server-side built URL (https). Falls back to deriving from
+  // window.location only when the server didn't return one — older
+  // deploys still work, but the user will hit Apple's "must be https"
+  // error in that path.
+  const url =
+    tokenQuery.data?.url ??
+    (token
+      ? `${typeof window !== 'undefined' ? window.location.origin : ''}/api/v1/ics/${token}.ics`
+      : null);
+  const webcal = tokenQuery.data?.webcal ?? null;
   return (
     <>
       <span className="wf-h3" style={{ marginTop: 8 }}>
@@ -611,6 +618,40 @@ function IcsSection({ family }: { family: FamilySummary }) {
           >
             {url}
           </div>
+          {/* iOS: tap-to-subscribe via webcal://. iOS Calendar
+              auto-recognises the scheme and pre-fills the "Add
+              Subscription" dialog with the URL — no manual paste, no
+              scheme-mangling. On Android/desktop the same link
+              triggers a download/handler if a calendar app is wired
+              up; otherwise users still have the Copy button. */}
+          {webcal && (
+            <button
+              type="button"
+              className="wf-btn primary"
+              onClick={() => {
+                const tg = (
+                  window as unknown as {
+                    Telegram?: { WebApp?: { openLink: (u: string) => void } };
+                  }
+                ).Telegram?.WebApp;
+                if (tg?.openLink) {
+                  tg.openLink(webcal);
+                } else {
+                  window.location.href = webcal;
+                }
+              }}
+              style={{
+                marginTop: 8,
+                padding: '6px 12px',
+                fontSize: 13,
+                cursor: 'pointer',
+                border: 'none',
+                width: '100%',
+              }}
+            >
+              {t('ics.subscribe')}
+            </button>
+          )}
           <div className="wf-row wf-gap-6" style={{ marginTop: 8 }}>
             <button
               type="button"
