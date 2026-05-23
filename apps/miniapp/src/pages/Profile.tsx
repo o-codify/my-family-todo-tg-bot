@@ -9,6 +9,7 @@ import {
 } from '../api';
 import { Av, Icon, Tag, WfBody, type Member } from '../design';
 import { BottomSheet } from '../components/BottomSheet';
+import { CopyButton } from '../components/CopyButton';
 import { PageHeader } from '../components/PageHeader';
 import { SettingsSheet } from '../components/SettingsPickers';
 import { useT, type Locale, type TFn } from '../i18n';
@@ -457,15 +458,7 @@ function InviteCard({ family }: { family: FamilySummary }) {
   const inviteLink = botUsername
     ? `https://t.me/${botUsername}?start=${family.inviteCode}`
     : null;
-  const [copyState, setCopyState] = useState<'idle' | 'ok' | 'err'>('idle');
   const [showCode, setShowCode] = useState(false);
-
-  const handleCopy = async () => {
-    const payload = inviteLink ?? family.inviteCode;
-    const ok = await writeClipboard(payload);
-    setCopyState(ok ? 'ok' : 'err');
-    setTimeout(() => setCopyState('idle'), 2500);
-  };
 
   const handleShare = () => {
     if (!inviteLink) return;
@@ -532,31 +525,12 @@ function InviteCard({ family }: { family: FamilySummary }) {
         </div>
       )}
       <div className="wf-row wf-gap-8" style={{ marginTop: 10 }}>
-        <button
-          className="wf-btn block"
-          onClick={handleCopy}
-          style={{
-            flex: 1,
-            cursor: 'pointer',
-            ...(copyState === 'ok'
-              ? {
-                  borderColor: 'var(--success)',
-                  color: 'var(--success)',
-                  background: 'rgba(74, 154, 90, 0.08)',
-                }
-              : copyState === 'err'
-                ? { borderColor: 'var(--danger)', color: 'var(--danger)' }
-                : null),
-          }}
-        >
-          {copyState === 'ok'
-            ? `✓ ${t('profile.family.copied')}`
-            : copyState === 'err'
-              ? t.locale === 'en'
-                ? 'Failed'
-                : 'Не получилось'
-              : t('profile.family.copy')}
-        </button>
+        <CopyButton
+          value={inviteLink ?? family.inviteCode}
+          label={t('profile.family.copy')}
+          variant="block"
+          style={{ flex: 1 }}
+        />
         {inviteLink && (
           <button
             className="wf-btn primary block"
@@ -830,27 +804,4 @@ function RenameFamilySheet({
   );
 }
 
-async function writeClipboard(text: string): Promise<boolean> {
-  if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
-    try {
-      await navigator.clipboard.writeText(text);
-      return true;
-    } catch {
-      // fall through
-    }
-  }
-  try {
-    const ta = document.createElement('textarea');
-    ta.value = text;
-    ta.style.position = 'fixed';
-    ta.style.opacity = '0';
-    document.body.appendChild(ta);
-    ta.focus();
-    ta.select();
-    const ok = document.execCommand('copy');
-    document.body.removeChild(ta);
-    return ok;
-  } catch {
-    return false;
-  }
-}
+// clipboard write moved to shared components/CopyButton.tsx

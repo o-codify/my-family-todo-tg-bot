@@ -81,14 +81,14 @@ icsManageRouter.post('/revoke', async (c) => {
  *  the credential. Returns 404 for unknown / revoked tokens. */
 export const icsPublicRouter = new Hono();
 
-// IMPORTANT: Hono's `:token` parameter matches greedily up to the next
-// `/`, so the naive `/:token.ics` ended up parsing `.ics` as part of
-// the param name (or capturing the entire segment including `.ics`),
-// leaving `c.req.param('token')` empty. The explicit regex constraint
-// bounds the param to base32-ish chars so the literal `.ics` suffix
-// is left over to match outside the capture.
-icsPublicRouter.get('/:token{[A-Za-z0-9]+}.ics', async (c) => {
-  const token = c.req.param('token');
+// Catch any path segment and strip `.ics` inside the handler. We had
+// `/:token.ics` and `/:token{...}.ics` before; both fought with Hono's
+// param parsing in subtle ways (the dot ended up in the param name,
+// or the regex constraint didn't engage in the runtime's router
+// variant). Stripping in JS is dumb but bulletproof.
+icsPublicRouter.get('/:tokenAndExt', async (c) => {
+  const raw = c.req.param('tokenAndExt');
+  const token = raw?.replace(/\.ics$/i, '') ?? '';
   if (!token) return c.json({ error: 'no_token' }, 400);
   const resolved = await resolveToken(token);
   if (!resolved) return c.json({ error: 'token_not_found_or_revoked' }, 404);

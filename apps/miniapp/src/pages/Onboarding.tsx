@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { api, type ApiError, type FamilySummary, type MeResponse } from '../api';
 import { Av, AvStack, Icon, Tag, WfBody, type Member } from '../design';
+import { CopyButton } from '../components/CopyButton';
 import { useT, type TFn } from '../i18n';
 
 type Props = {
@@ -396,14 +397,6 @@ function ShareStep({ family, onDone }: { family: FamilySummary; onDone: () => vo
   const inviteLink = botUsername
     ? `https://t.me/${botUsername}?start=${family.inviteCode}`
     : null;
-  const [copyState, setCopyState] = useState<'idle' | 'ok' | 'err'>('idle');
-
-  const handleCopy = async () => {
-    const payload = inviteLink ?? family.inviteCode;
-    const ok = await writeClipboard(payload);
-    setCopyState(ok ? 'ok' : 'err');
-    setTimeout(() => setCopyState('idle'), 2500);
-  };
 
   const handleShare = () => {
     if (!inviteLink) return;
@@ -473,51 +466,23 @@ function ShareStep({ family, onDone }: { family: FamilySummary; onDone: () => vo
         </>
       )}
 
-      {/*
-       * Both buttons get an explicit `height` so the ✓ glyph (which has a
-       * taller intrinsic bounding box than Latin letters) can't push the
-       * Copy button above the Share button. The icon now scales to fit
-       * the button via its own constrained inline-flex box.
-       */}
+      {/* Copy button uses the shared <CopyButton/> so its visual states
+       *  (idle / ok / err) stay in lockstep with the Profile invite
+       *  card and the ICS panel. The explicit `height: 38` keeps the
+       *  Share button next to it from shifting when ✓ swaps in. */}
       <div className="wf-row wf-gap-8" style={{ marginTop: 4, alignItems: 'stretch' }}>
-        <button
-          className="wf-btn block"
-          onClick={handleCopy}
+        <CopyButton
+          value={inviteLink ?? family.inviteCode}
+          label={t('onb.share.copy')}
+          variant="block"
           style={{
             flex: 1,
-            cursor: 'pointer',
             height: 38,
             padding: '0 14px',
             lineHeight: 1,
             transition: 'border-color 0.15s, color 0.15s, background 0.15s',
-            ...(copyState === 'ok'
-              ? {
-                  borderColor: 'var(--success)',
-                  color: 'var(--success)',
-                  background: 'rgba(74, 154, 90, 0.08)',
-                }
-              : copyState === 'err'
-                ? {
-                    borderColor: 'var(--danger)',
-                    color: 'var(--danger)',
-                  }
-                : null),
           }}
-        >
-          {copyState === 'ok' ? (
-            <>
-              {/* SVG check from the design icon set — `.ic` has fixed 18×18
-                  dimensions so it can never push the button taller than its
-                  locked 38px height. Wrapper just centers it crisply. */}
-              <Icon name="check" />
-              {t('onb.share.copied')}
-            </>
-          ) : copyState === 'err' ? (
-            t('onb.share.copyFail')
-          ) : (
-            t('onb.share.copy')
-          )}
-        </button>
+        />
         {inviteLink && (
           <button
             className="wf-btn primary block"
@@ -545,53 +510,11 @@ function ShareStep({ family, onDone }: { family: FamilySummary; onDone: () => vo
         {t('onb.share.done')}
       </button>
 
-      {/* Toast above sticky button */}
-      {copyState === 'ok' && (
-        <div className="wf-toast" role="status">
-          <span className="wf-toast__icon">✓</span>
-          <span>{t('onb.toast.copied')}</span>
-        </div>
-      )}
-      {copyState === 'err' && (
-        <div className="wf-toast wf-toast--err" role="status">
-          <span className="wf-toast__icon">⚠</span>
-          <span>{t('onb.toast.copyFail')}</span>
-        </div>
-      )}
     </WfBody>
   );
 }
 
-/**
- * Robust clipboard write: tries the async Clipboard API first, falls back to
- * a hidden textarea + execCommand('copy') (still works in Telegram Mini App
- * webviews on older clients where Permissions API is restricted).
- */
-async function writeClipboard(text: string): Promise<boolean> {
-  if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
-    try {
-      await navigator.clipboard.writeText(text);
-      return true;
-    } catch {
-      // fall through to legacy path
-    }
-  }
-  try {
-    const ta = document.createElement('textarea');
-    ta.value = text;
-    ta.style.position = 'fixed';
-    ta.style.opacity = '0';
-    ta.style.pointerEvents = 'none';
-    document.body.appendChild(ta);
-    ta.focus();
-    ta.select();
-    const ok = document.execCommand('copy');
-    document.body.removeChild(ta);
-    return ok;
-  } catch {
-    return false;
-  }
-}
+// clipboard write moved to shared components/CopyButton.tsx
 
 /* ─── O3 — Join (verbatim port of OnbV3) ───────────────── */
 function JoinStep({

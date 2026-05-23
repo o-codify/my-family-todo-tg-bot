@@ -4,9 +4,9 @@ import { api, type FamilySummary, type MeResponse } from '../api';
 import { Av, Icon, Tag, WfBody } from '../design';
 import { BadgeGrid } from '../components/BadgeGrid';
 import { BottomSheet } from '../components/BottomSheet';
+import { CopyButton } from '../components/CopyButton';
 import { ListRow } from '../components/ListRow';
 import { PageHeader } from '../components/PageHeader';
-import { useToast } from '../components/Toast';
 import {
   DigestPicker,
   LanguagePicker,
@@ -548,7 +548,6 @@ function pluralDaysI18n(n: number, isEn: boolean): string {
  */
 function IcsSection({ family }: { family: FamilySummary }) {
   const t = useT();
-  const toast = useToast();
   const queryClient = useQueryClient();
   const tokenQuery = useQuery({
     queryKey: ['ics-token', family.id],
@@ -649,41 +648,10 @@ function IcsSection({ family }: { family: FamilySummary }) {
             </a>
           )}
           <div className="wf-row wf-gap-6" style={{ marginTop: 8 }}>
-            <button
-              type="button"
-              className="wf-btn"
-              onClick={async () => {
-                if (!url) return;
-                // The Clipboard API isn't available in all Telegram
-                // WebView versions — fall back to a hidden textarea +
-                // execCommand for the legacy path, then surface a
-                // toast either way so the tap doesn't feel like a
-                // no-op (which was the original complaint).
-                try {
-                  if (navigator.clipboard?.writeText) {
-                    await navigator.clipboard.writeText(url);
-                  } else {
-                    const ta = document.createElement('textarea');
-                    ta.value = url;
-                    ta.style.position = 'fixed';
-                    ta.style.left = '-9999px';
-                    document.body.appendChild(ta);
-                    ta.select();
-                    document.execCommand('copy');
-                    document.body.removeChild(ta);
-                  }
-                  toast.show({ message: t('ics.copied'), variant: 'success' });
-                } catch {
-                  toast.show({
-                    message: t('common.copyFailed') ?? 'Не удалось скопировать',
-                    variant: 'error',
-                  });
-                }
-              }}
-              style={{ flex: 1, fontSize: 12, padding: '4px 10px', cursor: 'pointer' }}
-            >
-              {t('ics.copy')}
-            </button>
+            <CopyButton
+              value={url ?? ''}
+              style={{ flex: 1, fontSize: 12, padding: '4px 10px' }}
+            />
             <button
               type="button"
               className="wf-btn"
