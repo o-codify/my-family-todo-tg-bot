@@ -533,13 +533,29 @@ function EventEditor({
                   <button
                     key={n}
                     type="button"
-                    className={'wf-seg' + (active ? ' active' : '')}
+                    className="wf-seg"
                     onClick={() =>
                       setNotifyDaysBefore((prev) =>
                         prev.includes(n) ? prev.filter((x) => x !== n) : [...prev, n].sort(),
                       )
                     }
-                    style={{ fontSize: 12, padding: '4px 10px', cursor: 'pointer' }}
+                    // `.wf-seg.active` had no CSS rule (the design's Seg
+                    // component uses `> span.on` for selection). Apply
+                    // ink-on-paper inline so the chip clearly reflects
+                    // its selected state — without this the user can't
+                    // tell which offsets they picked.
+                    style={{
+                      fontSize: 12,
+                      padding: '4px 10px',
+                      cursor: 'pointer',
+                      ...(active
+                        ? {
+                            background: 'var(--ink)',
+                            color: 'var(--paper)',
+                            borderColor: 'var(--ink)',
+                          }
+                        : null),
+                    }}
                   >
                     {t(`events.notify.${n}`)}
                   </button>
