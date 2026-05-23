@@ -100,6 +100,7 @@ export function CreateTaskSheet({
         points: 0,
         photoRequired: false,
         requiresApproval: false,
+        isQuest: false,
         deadlineAt: null as string | null,
         assigneeId: me.id as string | null,
         queueUserIds: null as string[] | null,
@@ -120,6 +121,7 @@ export function CreateTaskSheet({
   const [points, setPoints] = useState(initial.points);
   const [photoRequired, setPhotoRequired] = useState(initial.photoRequired);
   const [requiresApproval, setRequiresApproval] = useState(initial.requiresApproval);
+  const [isQuest, setIsQuest] = useState(initial.isQuest);
   const [deadlineAt, setDeadlineAt] = useState<string | null>(initial.deadlineAt);
   const [assigneeId, setAssigneeId] = useState<string | null>(initial.assigneeId);
   // Auto-assign mode: server picks the least-loaded member at create time.
@@ -170,6 +172,7 @@ export function CreateTaskSheet({
         points,
         photoRequired,
         requiresApproval,
+        isQuest,
         deadlineAt,
         noDate,
         singleShot,
@@ -718,6 +721,46 @@ export function CreateTaskSheet({
           </div>
         </div>
 
+        {/* Quest mode — only meaningful when the task has subtasks. We
+            still render the toggle so the user can pre-set it before
+            adding steps; backend ignores isQuest on tasks without any
+            subtasks template. */}
+        <div
+          className="wf-box wf-spread"
+          style={{ padding: '6px 10px', cursor: 'pointer', marginTop: 6 }}
+          onClick={() => setIsQuest(!isQuest)}
+        >
+          <div className="wf-col" style={{ gap: 2 }}>
+            <span className="wf-label">{t('create.field.isQuest')}</span>
+            <span className="wf-tiny" style={{ color: 'var(--hint)' }}>
+              {t('create.field.isQuest.hint')}
+            </span>
+          </div>
+          <span
+            style={{
+              width: 28,
+              height: 16,
+              background: isQuest ? 'var(--ink)' : 'var(--softline)',
+              borderRadius: 999,
+              position: 'relative',
+              flex: 'none',
+            }}
+          >
+            <span
+              style={{
+                position: 'absolute',
+                left: isQuest ? 14 : 2,
+                top: 2,
+                width: 12,
+                height: 12,
+                borderRadius: 999,
+                background: 'var(--paper)',
+                transition: 'left 0.15s ease',
+              }}
+            />
+          </span>
+        </div>
+
         {/* Approval gate — adult-controlled: when on, child completions
             land in "Awaiting approval" instead of going straight to done.
             Same toggle visual as photoRequired to keep the row pattern. */}
@@ -858,6 +901,7 @@ function buildPayload(input: {
   points: number;
   photoRequired: boolean;
   requiresApproval: boolean;
+  isQuest: boolean;
   deadlineAt: string | null;
   noDate: boolean;
   singleShot: boolean;
@@ -876,6 +920,7 @@ function buildPayload(input: {
     points: input.points,
     photoRequired: input.photoRequired,
     requiresApproval: input.requiresApproval,
+    isQuest: input.isQuest,
     deadlineAt: input.deadlineAt,
     // singleShot + cooldownDays + subtasks piggyback on the API client's
     // permissive payload type — the backend's createTaskSchema accepts them.
@@ -967,6 +1012,7 @@ function extractFromTask(t: TaskDto): {
   points: number;
   photoRequired: boolean;
   requiresApproval: boolean;
+  isQuest: boolean;
   deadlineAt: string | null;
   assigneeId: string | null;
   queueUserIds: string[] | null;
@@ -1005,6 +1051,7 @@ function extractFromTask(t: TaskDto): {
     points: t.points,
     photoRequired: t.photoRequired,
     requiresApproval: t.requiresApproval,
+    isQuest: t.isQuest,
     deadlineAt: t.deadlineAt,
     assigneeId: t.assigneeId,
     queueUserIds: t.queueUserIds,

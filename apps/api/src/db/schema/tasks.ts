@@ -68,6 +68,12 @@ export const tasks = pgTable(
      *  instead of going straight to 'done'. A parent (Adult/Owner role)
      *  then approves or rejects. Adult/owner completers skip the gate. */
     requiresApproval: boolean('requires_approval').notNull().default(false),
+    /** When true, subtasks behave as ordered "quest steps": each step
+     *  unlocks only when the preceding one is done. The complete-task
+     *  gate (all subtasks done) is unchanged — this just adds sequence
+     *  enforcement on top. Targets ritual flows: morning routine,
+     *  bedtime routine, "before-school" checklist. */
+    isQuest: boolean('is_quest').notNull().default(false),
     singleShot: boolean('single_shot').notNull().default(false),
     cooldownDays: integer('cooldown_days'),
     subtasksTemplate: jsonb('subtasks_template').$type<SubtaskTemplateItem[]>(),

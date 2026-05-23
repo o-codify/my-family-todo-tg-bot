@@ -127,6 +127,13 @@
       "when": 1779512413503,
       "tag": "0017_regular_kate_bishop",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1779512703397,
+      "tag": "0018_real_venom",
+      "breakpoints": true
     }
   ]
 }

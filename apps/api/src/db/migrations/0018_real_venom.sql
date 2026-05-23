@@ -1,0 +1,1 @@
+ALTER TABLE "tasks" ADD COLUMN "is_quest" boolean DEFAULT false NOT NULL;

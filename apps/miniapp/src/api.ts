@@ -188,6 +188,7 @@ export type OccurrenceDto = {
     points: number;
     photoRequired: boolean;
     requiresApproval: boolean;
+    isQuest: boolean;
     deadlineAt: string | null;
   };
 };
@@ -205,6 +206,7 @@ export type TaskDto = {
   points: number;
   photoRequired: boolean;
   requiresApproval: boolean;
+  isQuest: boolean;
   singleShot: boolean;
   cooldownDays: number | null;
   subtasksTemplate: Array<{ id: string; title: string; position: number }> | null;
@@ -373,6 +375,8 @@ export type CreateTaskPayload = {
   photoRequired?: boolean;
   /** When true, child-role completions land in 'pending_approval'. */
   requiresApproval?: boolean;
+  /** When true, subtasks must be completed in order (quest mode). */
+  isQuest?: boolean;
   /** Tag ids to attach. Server rewrites the task_tags join — omit to
    *  leave the existing attachments untouched (on PATCH). */
   tagIds?: string[];

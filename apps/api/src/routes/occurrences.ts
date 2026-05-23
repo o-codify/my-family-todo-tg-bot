@@ -93,12 +93,19 @@ occurrencesRouter.patch(
       return c.json({ error: 'forbidden', permission: 'task.complete.any' }, 403);
     }
 
-    const updated = await patchOccurrenceSubtasks({
-      occurrence: occ,
-      patch: c.req.valid('json').patch,
-    });
-    if (!updated) return c.json({ error: 'no_subtasks' }, 400);
-    return c.json({ occurrence: serializeOccurrence({ ...updated, task: occ.task }) });
+    try {
+      const updated = await patchOccurrenceSubtasks({
+        occurrence: occ,
+        patch: c.req.valid('json').patch,
+      });
+      if (!updated) return c.json({ error: 'no_subtasks' }, 400);
+      return c.json({ occurrence: serializeOccurrence({ ...updated, task: occ.task }) });
+    } catch (err) {
+      if (err instanceof OccurrenceActionError) {
+        return c.json({ error: err.code }, 409);
+      }
+      throw err;
+    }
   },
 );
 

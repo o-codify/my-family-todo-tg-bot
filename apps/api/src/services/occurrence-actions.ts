@@ -114,12 +114,37 @@ function mergeSubtasksState(
  *
  * Returns the updated row or null if nothing to merge (e.g. occurrence has
  * no subtasks template). Caller is responsible for the auth check.
+ *
+ * Quest mode (`task.isQuest`) enforces sequential completion: a step
+ * can only flip from `done=false` → `true` when every step before it
+ * is already done. Out-of-order patches throw `out_of_order`. Unticking
+ * (true → false) is always allowed so the user can undo a wrong tap.
  */
 export async function patchOccurrenceSubtasks(input: {
   occurrence: OccurrenceWithTask;
   patch: NonNullable<CompleteOccurrenceInput['subtasksState']>;
 }): Promise<TaskOccurrenceRow | null> {
-  const merged = mergeSubtasksState(input.occurrence.subtasks, input.patch);
+  const current = input.occurrence.subtasks;
+  if (!current) return null;
+
+  if (input.occurrence.task.isQuest) {
+    // Sort by position so "previous" actually means "earlier".
+    const ordered = [...current].sort((a, b) => a.position - b.position);
+    const byId = new Map(input.patch.map((p) => [p.id, p.done] as const));
+    for (let i = 0; i < ordered.length; i++) {
+      const step = ordered[i]!;
+      const requested = byId.get(step.id);
+      if (requested === true && !step.done) {
+        // Trying to tick this step ON — every prior must already be done.
+        const prior = ordered.slice(0, i);
+        if (prior.some((p) => !p.done && byId.get(p.id) !== true)) {
+          throw new OccurrenceActionError('out_of_order');
+        }
+      }
+    }
+  }
+
+  const merged = mergeSubtasksState(current, input.patch);
   if (!merged) return null;
   const [updated] = await db
     .update(taskOccurrences)
@@ -300,7 +325,8 @@ export class OccurrenceActionError extends Error {
       | 'task_archived'
       | 'already_done'
       | 'date_conflict'
-      | 'wrong_status',
+      | 'wrong_status'
+      | 'out_of_order',
   ) {
     super(code);
     this.name = 'OccurrenceActionError';
@@ -539,6 +565,7 @@ export function serializeOccurrence(row: OccurrenceWithTask) {
       points: row.task.points,
       photoRequired: row.task.photoRequired,
       requiresApproval: row.task.requiresApproval,
+      isQuest: row.task.isQuest,
       deadlineAt: row.task.deadlineAt?.toISOString() ?? null,
     },
   };

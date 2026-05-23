@@ -728,6 +728,16 @@ const DICT: Record<string, Record<Locale, string>> = {
     ru: 'Дети сдают на проверку родителю',
     en: 'Kids submit to a parent',
   },
+  'create.field.isQuest': { ru: 'Квест (по порядку)', en: 'Quest (sequential)' },
+  'create.field.isQuest.hint': {
+    ru: 'Шаги открываются по очереди',
+    en: 'Steps unlock one at a time',
+  },
+  'quest.locked': { ru: 'Закрыто', en: 'Locked' },
+  'quest.errOutOfOrder': {
+    ru: 'Сначала пройди прошлый шаг',
+    en: 'Finish the previous step first',
+  },
   'task.status.pending_approval': {
     ru: 'Ждёт одобрения',
     en: 'Awaiting approval',

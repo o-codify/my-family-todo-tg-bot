@@ -58,6 +58,7 @@ export async function createTask(input: {
         points: data.points,
         photoRequired: data.photoRequired,
         requiresApproval: data.requiresApproval,
+        isQuest: data.isQuest,
         singleShot: data.singleShot,
         cooldownDays: data.cooldownDays ?? null,
         subtasksTemplate: inputToSubtaskTemplate(data.subtasks),
@@ -110,6 +111,7 @@ export async function updateTask(input: {
   if (data.points !== undefined) next.points = data.points;
   if (data.photoRequired !== undefined) next.photoRequired = data.photoRequired;
   if (data.requiresApproval !== undefined) next.requiresApproval = data.requiresApproval;
+  if (data.isQuest !== undefined) next.isQuest = data.isQuest;
   if (data.singleShot !== undefined) next.singleShot = data.singleShot;
   if (data.cooldownDays !== undefined) next.cooldownDays = data.cooldownDays ?? null;
   if (data.subtasks !== undefined) next.subtasksTemplate = inputToSubtaskTemplate(data.subtasks);
@@ -240,6 +242,7 @@ export function serializeTask(row: TaskRow, tagIds: string[] = []) {
     points: row.points,
     photoRequired: row.photoRequired,
     requiresApproval: row.requiresApproval,
+    isQuest: row.isQuest,
     singleShot: row.singleShot,
     cooldownDays: row.cooldownDays,
     subtasksTemplate: row.subtasksTemplate,

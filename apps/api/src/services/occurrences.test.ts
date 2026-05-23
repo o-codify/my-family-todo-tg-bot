@@ -16,6 +16,7 @@ function makeTask(overrides: Partial<TaskRow>): TaskRow {
     points: 0,
     photoRequired: false,
     requiresApproval: false,
+    isQuest: false,
     singleShot: false,
     cooldownDays: null,
     subtasksTemplate: null,

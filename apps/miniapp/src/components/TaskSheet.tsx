@@ -300,26 +300,38 @@ export function TaskSheet({ me, family, occurrence, onClose, onEdit, onTransfer 
           )}
         </div>
 
-        {/* Subtasks — port of lines 173-181 */}
-        {subtasks.length > 0 && (
+        {/* Subtasks — port of lines 173-181.
+            Quest mode: the first not-done step is the "active" one; any
+            step after it renders locked (no click target) until the
+            active one is ticked. Done steps stay clickable so the user
+            can undo a wrong tap. */}
+        {subtasks.length > 0 && (() => {
+          const isQuest = o.task.isQuest;
+          const activeIdx = subtasks.findIndex((s) => !s.done);
+          return (
           <>
             <div className="wf-spread" style={{ marginTop: 12 }}>
               <span className="wf-tiny">
+                {isQuest ? '🎯 ' : ''}
                 {t('task.subtasks.title')} · {subtasksDone}/{subtasks.length}
               </span>
               <Bar pct={(subtasksDone / subtasks.length) * 100} />
             </div>
             <div className="wf-col wf-gap-4" style={{ marginTop: 4 }}>
-              {subtasks.map((s) => {
+              {subtasks.map((s, idx) => {
+                // In quest mode, a step is locked when it's strictly after
+                // the first undone step. `activeIdx === -1` (all done) ⇒
+                // nothing is locked; done steps remain clickable to undo.
+                const locked =
+                  isQuest && activeIdx !== -1 && idx > activeIdx;
                 const toggle = () => {
-                  if (!canEditSubtasks) return;
+                  if (!canEditSubtasks || locked) return;
                   const next = !s.done;
                   setOptimisticPatch((prev) => ({ ...prev, [s.id]: next }));
                   subtaskMut.mutate(
                     { subtaskId: s.id, done: next },
                     {
                       onError: () => {
-                        // Roll back the optimistic flip on failure.
                         setOptimisticPatch((prev) => {
                           const copy = { ...prev };
                           delete copy[s.id];
@@ -334,10 +346,15 @@ export function TaskSheet({ me, family, occurrence, onClose, onEdit, onTransfer 
                     key={s.id}
                     className="wf-row wf-gap-6"
                     onClick={toggle}
-                    style={{ cursor: canEditSubtasks ? 'pointer' : 'default' }}
+                    style={{
+                      cursor:
+                        canEditSubtasks && !locked ? 'pointer' : 'default',
+                      opacity: locked ? 0.4 : 1,
+                    }}
                   >
                     <span className={'wf-check' + (s.done ? ' done' : '')}>
                       {s.done && <Icon name="check" />}
+                      {locked && !s.done && <span style={{ fontSize: 11 }}>🔒</span>}
                     </span>
                     <span
                       className="wf-label"
@@ -354,7 +371,8 @@ export function TaskSheet({ me, family, occurrence, onClose, onEdit, onTransfer 
               })}
             </div>
           </>
-        )}
+          );
+        })()}
 
         {/* Photo section — Telegram-native storage.
             While the task is pending we show the upload affordance even when

@@ -332,6 +332,7 @@ export function Day({ me, family, iso, onBack, onOpenTask, onCreateTask }: Props
                 points: task.points,
                 photoRequired: task.photoRequired,
                 requiresApproval: task.requiresApproval,
+                isQuest: task.isQuest,
                 deadlineAt: task.deadlineAt,
               },
             };

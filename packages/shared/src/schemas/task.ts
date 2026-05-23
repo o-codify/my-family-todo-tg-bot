@@ -47,6 +47,8 @@ export const createTaskSchema = z.object({
   /** When true, child-role members' completions land in 'pending_approval'
    *  and require an Adult/Owner to approve. Adults skip the gate. */
   requiresApproval: z.boolean().default(false),
+  /** Quest mode — subtasks must be completed in order. */
+  isQuest: z.boolean().default(false),
   singleShot: z.boolean().default(false),
   cooldownDays: z.number().int().min(1).max(365).nullable().optional(),
   subtasks: z.array(z.object({ title: z.string().min(1).max(200) })).max(50).optional(),
