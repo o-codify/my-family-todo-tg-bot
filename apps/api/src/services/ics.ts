@@ -3,6 +3,7 @@ import { and, eq, gte, isNull, lte, or } from 'drizzle-orm';
 import { db } from '../db/client';
 import {
   families,
+  familyEvents,
   familyMembers,
   icsTokens,
   taskOccurrences,
@@ -312,6 +313,53 @@ export async function generateFamilyIcs(input: {
     }
   }
 
+  // Family events (birthdays, anniversaries, etc.). Stored as month+day
+  // (+ optional birth year) so they recur annually. We anchor on this
+  // year's MM-DD and use RRULE:FREQ=YEARLY so Apple/Google/Outlook
+  // expand them forward forever — no need to emit one VEVENT per year.
+  // Soft-deleted rows are excluded. The personal scope rule applies in
+  // a relaxed form: events for OTHER members still appear in this
+  // user's feed because birthdays are shared family info, not personal
+  // assignments. (If we hid Zakir's birthday from the spouse's feed
+  // that would be more confusing than helpful.)
+  const events2 = await db
+    .select()
+    .from(familyEvents)
+    .where(
+      and(eq(familyEvents.familyId, input.familyId), isNull(familyEvents.deletedAt)),
+    );
+  const eventVEvents = events2.map((e) => {
+    // Anchor the recurring series on this year. iso "YYYY-MM-DD" → ICS
+    // wants the bare-date form YYYYMMDD for an all-day event.
+    const yy = today.getUTCFullYear();
+    const mm = String(e.month).padStart(2, '0');
+    const dd = String(e.day).padStart(2, '0');
+    const dt = `${yy}${mm}${dd}`;
+    // DTEND = next day per RFC 5545 (all-day events are exclusive at end).
+    const endDate = new Date(Date.UTC(yy, e.month - 1, e.day + 1));
+    const ey = endDate.getUTCFullYear();
+    const em = String(endDate.getUTCMonth() + 1).padStart(2, '0');
+    const ed = String(endDate.getUTCDate()).padStart(2, '0');
+    const dtEnd = `${ey}${em}${ed}`;
+    const ageNote =
+      e.year && e.type === 'birthday'
+        ? ` (${yy - e.year})`
+        : '';
+    const summary = `${e.emoji ?? '🎂'} ${e.title}${ageNote}`;
+    return [
+      'BEGIN:VEVENT',
+      `UID:famevent:${e.id}@family-todo`,
+      `DTSTAMP:${formatDateTimeUtc(new Date())}Z`,
+      `DTSTART;VALUE=DATE:${dt}`,
+      `DTEND;VALUE=DATE:${dtEnd}`,
+      // Annual recurrence forever — calendar apps expand on demand.
+      'RRULE:FREQ=YEARLY',
+      `SUMMARY:${escapeIcs(summary)}`,
+      'TRANSP:TRANSPARENT',
+      'END:VEVENT',
+    ].join('\r\n');
+  });
+
   return [
     'BEGIN:VCALENDAR',
     'VERSION:2.0',
@@ -321,6 +369,7 @@ export async function generateFamilyIcs(input: {
     'METHOD:PUBLISH',
     ...events,
     ...forecastEvents,
+    ...eventVEvents,
     'END:VCALENDAR',
     '',
   ].join('\r\n');

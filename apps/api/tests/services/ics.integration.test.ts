@@ -1,7 +1,7 @@
 import { eq } from 'drizzle-orm';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { db } from '../../src/db/client';
-import { taskOccurrences, tasks } from '../../src/db/schema';
+import { familyEvents, taskOccurrences, tasks } from '../../src/db/schema';
 import {
   findActiveToken,
   generateFamilyIcs,
@@ -366,6 +366,46 @@ describe('ICS feed (integration)', () => {
     const d = String(tomorrow.getUTCDate()).padStart(2, '0');
     expect(ics).toContain('SUMMARY:Trash');
     expect(ics).toContain(`DTSTART;VALUE=DATE:${y}${m}${d}`);
+  });
+
+  it('emits annual VEVENT for family birthdays with RRULE', async () => {
+    const owner = await makeUser();
+    const { family } = await makeFamily(owner);
+    await db.insert(familyEvents).values({
+      familyId: family.id,
+      type: 'birthday',
+      title: 'Anna',
+      emoji: '🎂',
+      month: 3,
+      day: 15,
+      year: 1990,
+      createdByUserId: owner.id,
+    });
+
+    const ics = await generateFamilyIcs({ familyId: family.id, userId: owner.id });
+    const yy = new Date().getUTCFullYear();
+    const expectedAge = yy - 1990;
+    expect(ics).toContain(`DTSTART;VALUE=DATE:${yy}0315`);
+    expect(ics).toContain('RRULE:FREQ=YEARLY');
+    expect(ics).toContain(`SUMMARY:🎂 Anna (${expectedAge})`);
+  });
+
+  it('excludes soft-deleted family events from the feed', async () => {
+    const owner = await makeUser();
+    const { family } = await makeFamily(owner);
+    await db.insert(familyEvents).values({
+      familyId: family.id,
+      type: 'custom',
+      title: 'Removed',
+      month: 6,
+      day: 1,
+      createdByUserId: owner.id,
+      deletedAt: new Date(),
+    });
+
+    const ics = await generateFamilyIcs({ familyId: family.id, userId: owner.id });
+    expect(ics).not.toContain('SUMMARY:🎂 Removed');
+    expect(ics).not.toContain('Removed');
   });
 
   it('escaping: commas, semicolons, backslashes, newlines in title', async () => {
