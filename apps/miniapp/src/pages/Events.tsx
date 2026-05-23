@@ -9,6 +9,7 @@ import {
   type MeResponse,
 } from '../api';
 import { Icon, WfBody } from '../design';
+import { BottomSheet } from '../components/BottomSheet';
 import { PageHeader } from '../components/PageHeader';
 import { useToast } from '../components/Toast';
 import { interpolate, useT, type TFn } from '../i18n';
@@ -424,35 +425,14 @@ function EventEditor({
   const pending = createMut.isPending || updateMut.isPending;
 
   return (
-    <div
-      onClick={onClose}
-      style={{
-        position: 'fixed',
-        inset: 0,
-        background: 'rgba(0,0,0,0.4)',
-        zIndex: 1000,
-        display: 'flex',
-        alignItems: 'flex-end',
-        justifyContent: 'center',
-      }}
-    >
-      <div
-        onClick={(e) => e.stopPropagation()}
-        className="wf-card"
-        style={{
-          maxWidth: 480,
-          width: '100%',
-          borderRadius: '16px 16px 0 0',
-          padding: 16,
-          maxHeight: '85vh',
-          overflow: 'auto',
-          background: 'var(--paper)',
-        }}
-      >
-        <div className="wf-col" style={{ gap: 10 }}>
-          <span className="wf-h3">
-            {existing ? t('events.field.title') : t('events.add')}
-          </span>
+    <BottomSheet onClose={onClose}>
+      {({ close }) => (
+        <>
+          <div className="handle" />
+          <div className="wf-col" style={{ gap: 10 }}>
+            <span className="wf-h3">
+              {existing ? t('events.field.title') : t('events.add')}
+            </span>
 
           <Field label={t('events.field.type')}>
             <select
@@ -568,32 +548,33 @@ function EventEditor({
             </div>
           </Field>
 
-          <div className="wf-row wf-gap-8" style={{ marginTop: 8 }}>
-            <button
-              type="button"
-              className="wf-btn"
-              onClick={onClose}
-              style={{ flex: 1, cursor: 'pointer' }}
-            >
-              {t('events.cancel')}
-            </button>
-            <button
-              type="button"
-              className="wf-btn primary"
-              disabled={pending}
-              onClick={save}
-              style={{
-                flex: 1,
-                cursor: pending ? 'default' : 'pointer',
-                border: 'none',
-              }}
-            >
-              {t('events.save')}
-            </button>
+            <div className="wf-row wf-gap-8" style={{ marginTop: 8 }}>
+              <button
+                type="button"
+                className="wf-btn"
+                onClick={() => close()}
+                style={{ flex: 1, cursor: 'pointer' }}
+              >
+                {t('events.cancel')}
+              </button>
+              <button
+                type="button"
+                className="wf-btn primary"
+                disabled={pending}
+                onClick={save}
+                style={{
+                  flex: 1,
+                  cursor: pending ? 'default' : 'pointer',
+                  border: 'none',
+                }}
+              >
+                {t('events.save')}
+              </button>
+            </div>
           </div>
-        </div>
-      </div>
-    </div>
+        </>
+      )}
+    </BottomSheet>
   );
 }
 

@@ -64,12 +64,40 @@ export function BottomSheet({ onClose, zIndex = 10, children }: Props) {
       className={'wf-sheet-backdrop' + (closing ? ' is-closing' : '')}
       style={{ zIndex }}
     >
+      {/* Two-layer scroll containment:
+          - outer `.wf-sheet` is a flex column capped at 90vh with NO
+            scrolling — that anchors the visual top of the sheet so the
+            handle + the consumer's first row (typically a title + close
+            button) stay put as the user scrolls inside;
+          - inner `.wf-sheet__scroll` is the actual scroll surface.
+          We keep `wf-sheet` declaring overflow:auto in CSS for legacy
+          consumers, so we explicitly null it out here. */}
       <div
         className={'wf-sheet wf-sheet--animated' + (closing ? ' is-closing' : '')}
         onClick={(e) => e.stopPropagation()}
-        style={{ position: 'static', maxHeight: '90vh', overflowY: 'auto', width: '100%' }}
+        style={{
+          position: 'static',
+          maxHeight: '90vh',
+          overflow: 'hidden',
+          display: 'flex',
+          flexDirection: 'column',
+          width: '100%',
+        }}
       >
-        {children({ close })}
+        <div
+          className="wf-sheet__scroll"
+          style={{
+            flex: 1,
+            minHeight: 0,
+            overflowY: 'auto',
+            // Match the padding the .wf-sheet selector applied before —
+            // the consumer's spacing was tuned for that. Keeping it on
+            // the inner scroller lets the handle/title hug the top edge.
+            padding: 'inherit',
+          }}
+        >
+          {children({ close })}
+        </div>
       </div>
     </div>,
     document.body,

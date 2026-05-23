@@ -9,6 +9,7 @@ import {
   type MeResponse,
 } from '../api';
 import { Icon, WfBody } from '../design';
+import { BottomSheet } from '../components/BottomSheet';
 import { PageHeader } from '../components/PageHeader';
 import { useToast } from '../components/Toast';
 import { interpolate, useT, type TFn } from '../i18n';
@@ -406,95 +407,75 @@ function MealEntryEditor({
   const pending = createMut.isPending || updateMut.isPending;
 
   return (
-    <div
-      onClick={onClose}
-      style={{
-        position: 'fixed',
-        inset: 0,
-        background: 'rgba(0,0,0,0.4)',
-        zIndex: 1000,
-        display: 'flex',
-        alignItems: 'flex-end',
-        justifyContent: 'center',
-      }}
-    >
-      <div
-        onClick={(e) => e.stopPropagation()}
-        className="wf-card"
-        style={{
-          maxWidth: 480,
-          width: '100%',
-          borderRadius: '16px 16px 0 0',
-          padding: 16,
-          maxHeight: '85vh',
-          overflow: 'auto',
-          background: 'var(--paper)',
-        }}
-      >
-        <div className="wf-col" style={{ gap: 10 }}>
-          <span className="wf-h3">
-            {SLOT_EMOJI[slot]} {t(`mealPlan.slot.${slot}`)} · {date}
-          </span>
+    <BottomSheet onClose={onClose}>
+      {({ close }) => (
+        <>
+          <div className="handle" />
+          <div className="wf-col" style={{ gap: 10 }}>
+            <span className="wf-h3">
+              {SLOT_EMOJI[slot]} {t(`mealPlan.slot.${slot}`)} · {date}
+            </span>
 
-          <div className="wf-col" style={{ gap: 4 }}>
-            <span className="wf-tiny">{t('mealPlan.field.title')}</span>
-            <input
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              maxLength={120}
-              style={inputStyle}
-              autoFocus
-            />
-          </div>
+            <div className="wf-col" style={{ gap: 4 }}>
+              <span className="wf-tiny">{t('mealPlan.field.title')}</span>
+              <input
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                maxLength={120}
+                style={inputStyle}
+                autoFocus
+              />
+            </div>
 
-          <div className="wf-col" style={{ gap: 4 }}>
-            <span className="wf-tiny">{t('mealPlan.field.ingredients')}</span>
-            <textarea
-              value={ingText}
-              onChange={(e) => setIngText(e.target.value)}
-              placeholder={t('mealPlan.ingredients.placeholder')}
-              rows={5}
-              style={{ ...inputStyle, resize: 'vertical' }}
-            />
-          </div>
+            <div className="wf-col" style={{ gap: 4 }}>
+              <span className="wf-tiny">{t('mealPlan.field.ingredients')}</span>
+              <textarea
+                value={ingText}
+                onChange={(e) => setIngText(e.target.value)}
+                placeholder={t('mealPlan.ingredients.placeholder')}
+                rows={5}
+                style={{ ...inputStyle, resize: 'vertical' }}
+              />
+            </div>
 
-          <div className="wf-col" style={{ gap: 4 }}>
-            <span className="wf-tiny">{t('mealPlan.field.notes')}</span>
-            <textarea
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              rows={2}
-              maxLength={2000}
-              style={{ ...inputStyle, resize: 'vertical' }}
-            />
-          </div>
+            <div className="wf-col" style={{ gap: 4 }}>
+              <span className="wf-tiny">{t('mealPlan.field.notes')}</span>
+              <textarea
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                rows={2}
+                maxLength={2000}
+                style={{ ...inputStyle, resize: 'vertical' }}
+              />
+            </div>
 
-          <div className="wf-row wf-gap-8" style={{ marginTop: 8 }}>
-            <button
-              type="button"
-              className="wf-btn"
-              onClick={onClose}
-              style={{ flex: 1, cursor: 'pointer' }}
-            >
-              {t('common.cancel')}
-            </button>
-            <button
-              type="button"
-              className="wf-btn primary"
-              disabled={pending || !title.trim()}
-              onClick={save}
-              style={{
-                flex: 1,
-                cursor: pending || !title.trim() ? 'default' : 'pointer',
-                border: 'none',
-              }}
-            >
-              {t('common.save')}
-            </button>
+            <div className="wf-row wf-gap-8" style={{ marginTop: 8 }}>
+              <button
+                type="button"
+                className="wf-btn"
+                onClick={() => close()}
+                style={{ flex: 1, cursor: 'pointer' }}
+              >
+                {t('common.cancel')}
+              </button>
+              <button
+                type="button"
+                className="wf-btn primary"
+                disabled={pending || !title.trim()}
+                onClick={save}
+                style={{
+                  flex: 1,
+                  cursor: pending || !title.trim() ? 'default' : 'pointer',
+                  border: 'none',
+                }}
+              >
+                {t('common.save')}
+              </button>
+            </div>
           </div>
-        </div>
-      </div>
-    </div>
+        </>
+      )}
+    </BottomSheet>
   );
 }
 

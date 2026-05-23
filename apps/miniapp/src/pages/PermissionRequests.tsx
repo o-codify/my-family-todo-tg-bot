@@ -8,6 +8,7 @@ import {
   type PermissionRequestType,
 } from '../api';
 import { Icon, WfBody } from '../design';
+import { BottomSheet } from '../components/BottomSheet';
 import { PageHeader } from '../components/PageHeader';
 import { useToast } from '../components/Toast';
 import { useT, type TFn } from '../i18n';
@@ -361,31 +362,12 @@ function Composer({
   const [type, setType] = useState<PermissionRequestType>('other');
   const [text, setText] = useState('');
   return (
-    <div
-      onClick={onClose}
-      style={{
-        position: 'fixed',
-        inset: 0,
-        background: 'rgba(0,0,0,0.4)',
-        zIndex: 1000,
-        display: 'flex',
-        alignItems: 'flex-end',
-        justifyContent: 'center',
-      }}
-    >
-      <div
-        onClick={(e) => e.stopPropagation()}
-        className="wf-card"
-        style={{
-          maxWidth: 480,
-          width: '100%',
-          borderRadius: '16px 16px 0 0',
-          padding: 16,
-          background: 'var(--paper)',
-        }}
-      >
-        <div className="wf-col" style={{ gap: 10 }}>
-          <span className="wf-h3">{t('permReq.create')}</span>
+    <BottomSheet onClose={onClose}>
+      {({ close }) => (
+        <>
+          <div className="handle" />
+          <div className="wf-col" style={{ gap: 10 }}>
+            <span className="wf-h3">{t('permReq.create')}</span>
 
           <div className="wf-col" style={{ gap: 4 }}>
             <span className="wf-tiny">{t('permReq.field.type')}</span>
@@ -426,31 +408,32 @@ function Composer({
             />
           </div>
 
-          <div className="wf-row wf-gap-8" style={{ marginTop: 8 }}>
-            <button
-              type="button"
-              className="wf-btn"
-              onClick={onClose}
-              style={{ flex: 1, cursor: 'pointer' }}
-            >
-              {t('common.cancel')}
-            </button>
-            <button
-              type="button"
-              className="wf-btn primary"
-              onClick={() => text.trim() && onSubmit({ type, text: text.trim() })}
-              disabled={submitting || !text.trim()}
-              style={{
-                flex: 1,
-                cursor: submitting || !text.trim() ? 'default' : 'pointer',
-                border: 'none',
-              }}
-            >
-              {t('permReq.send')}
-            </button>
+            <div className="wf-row wf-gap-8" style={{ marginTop: 8 }}>
+              <button
+                type="button"
+                className="wf-btn"
+                onClick={() => close()}
+                style={{ flex: 1, cursor: 'pointer' }}
+              >
+                {t('common.cancel')}
+              </button>
+              <button
+                type="button"
+                className="wf-btn primary"
+                onClick={() => text.trim() && onSubmit({ type, text: text.trim() })}
+                disabled={submitting || !text.trim()}
+                style={{
+                  flex: 1,
+                  cursor: submitting || !text.trim() ? 'default' : 'pointer',
+                  border: 'none',
+                }}
+              >
+                {t('permReq.send')}
+              </button>
+            </div>
           </div>
-        </div>
-      </div>
-    </div>
+        </>
+      )}
+    </BottomSheet>
   );
 }

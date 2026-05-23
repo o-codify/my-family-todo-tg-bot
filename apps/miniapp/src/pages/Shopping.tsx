@@ -213,17 +213,24 @@ export function Shopping({ me, family, onBack, onOpenDrawer }: Props) {
           background: 'var(--paper)',
         }}
       >
-        <div className="wf-row wf-gap-6">
+        {/* Three children in a flexbox row: select (auto), input (grow,
+            min-width:0 so the flex item shrinks below its content width),
+            button (auto). Without min-width:0 the input's intrinsic
+            width pushes the "+" off-screen on narrow phones. */}
+        <div className="wf-row wf-gap-6" style={{ minWidth: 0 }}>
           <select
             value={category}
             onChange={(e) => setCategory(e.target.value as ShoppingCategory)}
             style={{
               border: '1.5px solid var(--line)',
               borderRadius: 8,
-              padding: '6px 8px',
+              padding: '6px 6px',
               background: 'var(--paper)',
               font: 'inherit',
-              fontSize: 13,
+              fontSize: 12,
+              flex: 'none',
+              // Cap so a long category label can't crowd out the input.
+              maxWidth: 120,
             }}
           >
             {CATEGORY_ORDER.map((c) => (
@@ -245,6 +252,7 @@ export function Shopping({ me, family, onBack, onOpenDrawer }: Props) {
             className="wf-label"
             style={{
               flex: 1,
+              minWidth: 0,
               border: '1.5px solid var(--line)',
               borderRadius: 8,
               padding: '6px 10px',
@@ -264,6 +272,7 @@ export function Shopping({ me, family, onBack, onOpenDrawer }: Props) {
               fontSize: 13,
               cursor: !text.trim() || addMut.isPending ? 'default' : 'pointer',
               border: 'none',
+              flex: 'none',
             }}
           >
             +
