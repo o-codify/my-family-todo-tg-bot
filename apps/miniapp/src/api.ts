@@ -334,6 +334,9 @@ export type CreateTaskPayload = {
     | { kind: 'floating' }
     | { kind: 'queued' };
   assigneeId?: string | null;
+  /** When true, server picks the least-loaded family member as the
+   *  assignee at creation time (ignored if `assigneeId` is set). */
+  autoAssign?: boolean;
   /** Members who participate in a queued task's rotation. `null` (default)
    *  means "all family members". Ignored for non-queued task types. */
   queueUserIds?: string[] | null;

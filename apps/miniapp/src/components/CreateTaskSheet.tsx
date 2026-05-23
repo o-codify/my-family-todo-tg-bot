@@ -122,6 +122,10 @@ export function CreateTaskSheet({
   const [requiresApproval, setRequiresApproval] = useState(initial.requiresApproval);
   const [deadlineAt, setDeadlineAt] = useState<string | null>(initial.deadlineAt);
   const [assigneeId, setAssigneeId] = useState<string | null>(initial.assigneeId);
+  // Auto-assign mode: server picks the least-loaded member at create time.
+  // Mutually exclusive with a pinned assignee — when on, we send a null
+  // assigneeId + autoAssign:true and let the backend choose.
+  const [autoAssign, setAutoAssign] = useState(false);
   // queueUserIds: explicit roster for `queued` tasks. `null` means "all
   // family members" (server default). Editing flips to an explicit list.
   const [queueUserIds, setQueueUserIds] = useState<string[] | null>(initial.queueUserIds);
@@ -161,6 +165,7 @@ export function CreateTaskSheet({
         daysOfWeek,
         cooldownDays,
         assigneeId,
+        autoAssign,
         queueUserIds,
         points,
         photoRequired,
@@ -258,11 +263,28 @@ export function CreateTaskSheet({
   const cycleAssignee = () => {
     if (members.length === 0) {
       setAssigneeId(null);
+      setAutoAssign(false);
+      return;
+    }
+    // Cycle: members[0], members[1], ..., null, auto, members[0]...
+    if (autoAssign) {
+      // auto → first member
+      setAutoAssign(false);
+      setAssigneeId(members[0]?.id ?? null);
       return;
     }
     const idx = assigneeId ? members.findIndex((m) => m.id === assigneeId) : -1;
-    const next = idx === members.length - 1 ? null : members[idx + 1];
-    setAssigneeId(next?.id ?? null);
+    if (idx === members.length - 1) {
+      // last member → null (unassigned)
+      setAssigneeId(null);
+      setAutoAssign(false);
+    } else if (idx === -1 && assigneeId === null && !autoAssign) {
+      // null → auto
+      setAutoAssign(true);
+    } else {
+      setAssigneeId(members[idx + 1]?.id ?? null);
+      setAutoAssign(false);
+    }
   };
 
   return (
@@ -506,7 +528,12 @@ export function CreateTaskSheet({
               style={{ padding: '8px 10px', cursor: 'pointer' }}
               onClick={cycleAssignee}
             >
-              {assignee ? (
+              {autoAssign ? (
+                <div className="wf-row wf-gap-6">
+                  <span style={{ fontSize: 18 }}>🎲</span>
+                  <span className="wf-label">{t('create.assignee.auto')}</span>
+                </div>
+              ) : assignee ? (
                 <div className="wf-row wf-gap-6">
                   <Av m={assignee} size="sm" />
                   <span className="wf-label">{assignee.name}</span>
@@ -826,6 +853,7 @@ function buildPayload(input: {
   daysOfWeek: number[];
   cooldownDays: number | null;
   assigneeId: string | null;
+  autoAssign: boolean;
   queueUserIds: string[] | null;
   points: number;
   photoRequired: boolean;
@@ -838,7 +866,10 @@ function buildPayload(input: {
 }): CreateTaskPayload {
   const base = {
     title: input.title,
-    assigneeId: input.assigneeId,
+    // When auto-assign is on, send `assigneeId: null` so the server's
+    // pickAutoAssignee fills it in; explicit user always wins client-side.
+    assigneeId: input.autoAssign ? null : input.assigneeId,
+    autoAssign: input.autoAssign,
     // Only send queueUserIds for queued tasks. Other types ignore it
     // server-side, but it's cleaner to omit.
     queueUserIds: input.kind === 'queued' ? input.queueUserIds : undefined,

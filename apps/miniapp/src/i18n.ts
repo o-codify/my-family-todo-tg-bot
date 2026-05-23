@@ -352,6 +352,10 @@ const DICT: Record<string, Record<Locale, string>> = {
   'create.cooldown.month': { ru: 'месяц', en: '1 month' },
   'create.field.assignee': { ru: 'Ответственный', en: 'Assignee' },
   'create.assignee.unassigned': { ru: 'Свободная', en: 'Unassigned' },
+  'create.assignee.auto': {
+    ru: 'Авто — наименее загружен',
+    en: 'Auto — least loaded',
+  },
   'create.field.deadline': { ru: 'Дедлайн', en: 'Deadline' },
   'create.deadline.empty': { ru: '— нет —', en: '— none —' },
   'create.field.reward': { ru: 'Награда', en: 'Reward' },

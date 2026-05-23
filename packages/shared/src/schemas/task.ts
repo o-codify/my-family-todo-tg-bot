@@ -37,6 +37,9 @@ export const createTaskSchema = z.object({
   type: taskTypeSchema,
   schedule: taskScheduleSchema,
   assigneeId: z.string().uuid().nullable().optional(),
+  /** When true (and `assigneeId` is null/absent), the server picks the
+   *  least-loaded family member as the assignee at creation time. */
+  autoAssign: z.boolean().optional(),
   queueUserIds: z.array(z.string().uuid()).nullable().optional(),
   deadlineAt: z.string().datetime().nullable().optional(),
   points: z.number().int().nonnegative().max(10_000).default(0),

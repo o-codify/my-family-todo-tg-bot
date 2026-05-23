@@ -33,6 +33,16 @@ export async function createTask(input: {
 }): Promise<TaskRow> {
   const { data } = input;
 
+  // Auto-balance: when the caller asked for it AND didn't pin a specific
+  // assignee, pick the least-loaded member. Returning null (everyone is
+  // away) leaves the task unassigned, which is a saner fallback than
+  // forcing it onto an away member.
+  let assigneeId = data.assigneeId ?? null;
+  if (data.autoAssign && !assigneeId) {
+    const { pickAutoAssignee } = await import('./auto-balance');
+    assigneeId = await pickAutoAssignee({ familyId: input.familyId });
+  }
+
   const task = await db.transaction(async (tx) => {
     const [t] = await tx
       .insert(tasks)
@@ -42,7 +52,7 @@ export async function createTask(input: {
         description: data.description?.trim() ?? null,
         type: data.type,
         schedule: data.schedule,
-        assigneeId: data.assigneeId ?? null,
+        assigneeId,
         queueUserIds: data.queueUserIds ?? null,
         deadlineAt: data.deadlineAt ? new Date(data.deadlineAt) : null,
         points: data.points,
