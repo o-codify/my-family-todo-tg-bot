@@ -1,5 +1,5 @@
 import { customAlphabet } from 'nanoid';
-import { and, eq, gte, inArray, isNull, lte, or } from 'drizzle-orm';
+import { and, eq, gte, isNull, lte, or } from 'drizzle-orm';
 import { db } from '../db/client';
 import {
   families,
@@ -109,25 +109,45 @@ export async function resolveToken(token: string): Promise<{
 }
 
 /**
- * Generate an ICS document for the family's occurrences.
- * Scope:
- *   - Both pending and done occurrences — the user explicitly wants
- *     completed tasks visible too. Done events get a ✓ prefix + a
- *     STATUS:COMPLETED line so a calendar that knows STATUS can show
- *     them struck through. Skipped/expired are dropped — they're noise.
- *   - 90 days back, 365 days forward for dated occurrences — calendar
- *     apps cache; we err wide so a once-a-day fetch sees the next year.
- *   - Floating completions (no scheduledDate, status=done, completedAt
- *     set — typical for singleShot tasks finished without a planned
- *     date) are anchored on completedAt's calendar date. Without this
- *     anchor they'd be invisible despite existing in the app.
+ * Generate a personal ICS document. Mirrors the in-app calendar query
+ * (see `listFamilyOccurrences`) so every occurrence the user sees in
+ * the app shows up in their subscribed calendar.
  *
- * The output uses CRLF line endings per RFC 5545. We don't fold lines
- * (the RFC asks for ≤75 octets per line) — modern parsers accept
- * unfolded lines and our titles are usually short.
+ * Per-user scope:
+ *   - `userId` comes from the token. We include occurrences assigned to
+ *     this user PLUS unassigned occurrences (shared/anyone tasks the
+ *     in-app calendar shows to everyone). Other people's personal
+ *     assignments are hidden — this is a personal feed.
+ *
+ * Status handling — all statuses are included, but each is rendered
+ * differently so a glance at the calendar shows what state the task
+ * is in:
+ *   - pending           → plain title
+ *   - done              → "✓ Title" + STATUS:COMPLETED (strike-through
+ *                         in capable clients)
+ *   - pending_approval  → "⏳ Title" + STATUS:TENTATIVE (greyed out)
+ *   - skipped / expired → "⊘ Title" + STATUS:CANCELLED (struck-through)
+ *
+ * Date handling:
+ *   - Dated rows inside ±window appear on their scheduled date.
+ *   - Done dateless rows (typical for singleShot floating completions)
+ *     are anchored on `completedAt` — without this they'd be invisible.
+ *   - Pending dateless rows (the "Когда-нибудь" / queued backlog the
+ *     in-app calendar pins to today) are anchored on the current day
+ *     as all-day events. Apple/Google don't have a "no date" bucket
+ *     so this is the closest analogue.
+ *
+ * Window: 90 days back, 365 forward. Calendar apps cache aggressively;
+ * we err wide so a once-a-day fetch covers the next year.
+ *
+ * Output uses CRLF per RFC 5545. We don't fold lines (the RFC asks for
+ * ≤75 octets per line) — modern parsers accept unfolded lines and our
+ * titles are usually short.
  */
 export async function generateFamilyIcs(input: {
   familyId: string;
+  /** Token-owning user. Filters occurrences to "mine + unassigned". */
+  userId: string;
 }): Promise<string> {
   const family = await db.query.families.findFirst({
     where: eq(families.id, input.familyId),
@@ -144,6 +164,7 @@ export async function generateFamilyIcs(input: {
   // For floating completions we anchor on completedAt. Use the same
   // 90-day lookback so an old completion doesn't pollute the calendar.
   const completedFrom = new Date(today.getTime() - 90 * 86_400_000);
+  const todayIso = today.toISOString().slice(0, 10);
 
   const rows = await db
     .select({
@@ -152,6 +173,7 @@ export async function generateFamilyIcs(input: {
       scheduledTime: taskOccurrences.scheduledTime,
       status: taskOccurrences.status,
       completedAt: taskOccurrences.completedAt,
+      assigneeId: taskOccurrences.assigneeId,
       title: tasks.title,
       description: tasks.description,
     })
@@ -161,17 +183,28 @@ export async function generateFamilyIcs(input: {
       and(
         eq(tasks.familyId, input.familyId),
         isNull(tasks.archivedAt),
-        inArray(taskOccurrences.status, ['pending', 'done']),
+        // Personal feed: my tasks + unassigned (shared) tasks. Skip
+        // occurrences explicitly assigned to other family members.
         or(
-          // Dated rows inside the visible window.
+          eq(taskOccurrences.assigneeId, input.userId),
+          isNull(taskOccurrences.assigneeId),
+        ),
+        or(
+          // Dated rows inside the visible window — any status.
           and(
             gte(taskOccurrences.scheduledDate, from),
             lte(taskOccurrences.scheduledDate, to),
           ),
-          // Floating completions: no scheduledDate, but a recent
-          // completedAt — anchor those on the completion date below.
+          // Dateless pending (queued/"Когда-нибудь") — always include.
+          // We pin them to today as all-day below.
           and(
             isNull(taskOccurrences.scheduledDate),
+            eq(taskOccurrences.status, 'pending'),
+          ),
+          // Dateless done (floating completion) inside completion window.
+          and(
+            isNull(taskOccurrences.scheduledDate),
+            eq(taskOccurrences.status, 'done'),
             gte(taskOccurrences.completedAt, completedFrom),
           ),
         ),
@@ -180,19 +213,23 @@ export async function generateFamilyIcs(input: {
 
   const events = rows
     .map((r) => {
-      // Prefer the scheduled date when set, otherwise anchor on
-      // completion date for floating completions. Anything else has
-      // no anchor and we skip it.
-      const anchor = r.scheduledDate ?? isoDate(r.completedAt);
+      // Pick the anchor: scheduled date wins; otherwise completedAt for
+      // done rows; otherwise today for pending dateless ("Когда-нибудь")
+      // rows so they show up in the user's calendar each day.
+      const anchor =
+        r.scheduledDate ??
+        (r.status === 'done' ? isoDate(r.completedAt) : todayIso);
       if (!anchor) return null;
-      const done = r.status === 'done';
+      const presentation = presentStatus(r.status);
       return formatVEvent({
         uid: `occ:${r.id}@family-todo`,
-        title: done ? `✓ ${r.title}` : r.title,
+        title: presentation.prefix
+          ? `${presentation.prefix} ${r.title}`
+          : r.title,
         description: r.description ?? '',
         date: anchor,
         time: r.scheduledTime ?? null,
-        completed: done,
+        status: presentation.icsStatus,
       });
     })
     .filter((s): s is string => s !== null);
@@ -229,11 +266,12 @@ function formatVEvent(input: {
   date: string;
   /** HH:MM or HH:MM:SS, optional */
   time: string | null;
-  /** Whether the occurrence is done — emits STATUS:COMPLETED so clients
-   *  that support it can render the event differently (strikethrough,
-   *  greyed out, etc.). The ✓ prefix in the SUMMARY is the universal
-   *  fallback for clients that ignore STATUS. */
-  completed?: boolean;
+  /** Optional RFC 5545 STATUS property value (CONFIRMED / TENTATIVE /
+   *  CANCELLED / COMPLETED). When set, capable clients render the
+   *  event differently (strikethrough for COMPLETED/CANCELLED, greyed
+   *  out for TENTATIVE). The SUMMARY prefix is the universal fallback
+   *  for clients that ignore STATUS. */
+  status?: 'COMPLETED' | 'TENTATIVE' | 'CANCELLED' | null;
 }): string {
   const dtStamp = formatDateTimeUtc(new Date());
   const [y, m, d] = input.date.split('-');
@@ -275,9 +313,37 @@ function formatVEvent(input: {
     ...(input.description
       ? [`DESCRIPTION:${escapeIcs(input.description)}`]
       : []),
-    ...(input.completed ? ['STATUS:COMPLETED'] : []),
+    ...(input.status ? [`STATUS:${input.status}`] : []),
     'END:VEVENT',
   ].join('\r\n');
+}
+
+/** Map our internal occurrence status to (a) a SUMMARY prefix that
+ *  works in every client, and (b) an RFC 5545 STATUS value (or null
+ *  when the default CONFIRMED is fine). Keeping this in one function
+ *  means a glance at the calendar tells you the task state without
+ *  having to inspect each event. */
+function presentStatus(status: string): {
+  prefix: string | null;
+  icsStatus: 'COMPLETED' | 'TENTATIVE' | 'CANCELLED' | null;
+} {
+  switch (status) {
+    case 'done':
+      return { prefix: '✓', icsStatus: 'COMPLETED' };
+    case 'pending_approval':
+      // Hourglass = "waiting on approval". TENTATIVE makes most
+      // clients render the event greyed out.
+      return { prefix: '⏳', icsStatus: 'TENTATIVE' };
+    case 'skipped':
+    case 'expired':
+      // Slashed-zero looks like a "no" badge; CANCELLED gives strike-
+      // through. We still show these so the user can see what got
+      // dropped — matches the in-app calendar's behaviour.
+      return { prefix: '⊘', icsStatus: 'CANCELLED' };
+    case 'pending':
+    default:
+      return { prefix: null, icsStatus: null };
+  }
 }
 
 /** Convert a Date (or null) to YYYY-MM-DD in UTC. Returns null when the

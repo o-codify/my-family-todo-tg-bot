@@ -68,7 +68,7 @@ describe('ICS feed (integration)', () => {
         singleShot: false,
       },
     });
-    const ics = await generateFamilyIcs({ familyId: family.id });
+    const ics = await generateFamilyIcs({ familyId: family.id, userId: owner.id });
     expect(ics).toContain('BEGIN:VCALENDAR');
     expect(ics).toContain('SUMMARY:Take out trash');
     expect(ics).toContain('BEGIN:VEVENT');
@@ -100,7 +100,7 @@ describe('ICS feed (integration)', () => {
         singleShot: false,
       },
     });
-    const ics = await generateFamilyIcs({ familyId: family.id });
+    const ics = await generateFamilyIcs({ familyId: family.id, userId: owner.id });
     expect(ics).toContain(`DTSTART;VALUE=DATE:${y}${m}${d}`);
     // DTEND is the day AFTER per RFC 5545.
     const next = new Date(iso + 'T00:00:00Z');
@@ -134,7 +134,7 @@ describe('ICS feed (integration)', () => {
       .set({ status: 'done', completedAt: new Date(), completedBy: owner.id })
       .where(eq(taskOccurrences.taskId, created.id));
 
-    const ics = await generateFamilyIcs({ familyId: family.id });
+    const ics = await generateFamilyIcs({ familyId: family.id, userId: owner.id });
     expect(ics).toContain('SUMMARY:✓ Wash dishes');
     expect(ics).toContain('STATUS:COMPLETED');
   });
@@ -168,13 +168,160 @@ describe('ICS feed (integration)', () => {
       completedBy: owner.id,
     });
 
-    const ics = await generateFamilyIcs({ familyId: family.id });
+    const ics = await generateFamilyIcs({ familyId: family.id, userId: owner.id });
     const y = today.getUTCFullYear();
     const m = String(today.getUTCMonth() + 1).padStart(2, '0');
     const d = String(today.getUTCDate()).padStart(2, '0');
     expect(ics).toContain('SUMMARY:✓ Spontaneous chore');
     expect(ics).toContain(`DTSTART;VALUE=DATE:${y}${m}${d}`);
     expect(ics).toContain('STATUS:COMPLETED');
+  });
+
+  it('filters per-user: my assignments + unassigned, hides others', async () => {
+    const me = await makeUser();
+    const sibling = await makeUser();
+    const { family } = await makeFamily(me);
+    // Owner adds sibling as a member so we have two real users in family.
+    const { addMember } = await import('../db-helpers');
+    await addMember(family, sibling, 'Adult');
+
+    // Three tasks: one assigned to me, one assigned to sibling, one
+    // unassigned (shared). All scheduled for tomorrow.
+    const tomorrow = isoTomorrow();
+    const mine = await createTask({
+      familyId: family.id,
+      createdBy: me.id,
+      data: {
+        title: 'Mine',
+        type: 'oneoff',
+        schedule: { kind: 'oneoff', date: tomorrow },
+        points: 0,
+        photoRequired: false,
+        requiresApproval: false,
+        singleShot: false,
+        assigneeId: me.id,
+      },
+    });
+    const theirs = await createTask({
+      familyId: family.id,
+      createdBy: me.id,
+      data: {
+        title: 'Theirs',
+        type: 'oneoff',
+        schedule: { kind: 'oneoff', date: tomorrow },
+        points: 0,
+        photoRequired: false,
+        requiresApproval: false,
+        singleShot: false,
+        assigneeId: sibling.id,
+      },
+    });
+    await createTask({
+      familyId: family.id,
+      createdBy: me.id,
+      data: {
+        title: 'Shared',
+        type: 'oneoff',
+        schedule: { kind: 'oneoff', date: tomorrow },
+        points: 0,
+        photoRequired: false,
+        requiresApproval: false,
+        singleShot: false,
+      },
+    });
+    // createTask doesn't propagate assigneeId to the occurrence — patch
+    // it directly so the ICS query has something to filter on. This
+    // matches what the in-app "assign" action does at runtime.
+    await db
+      .update(taskOccurrences)
+      .set({ assigneeId: me.id })
+      .where(eq(taskOccurrences.taskId, mine.id));
+    await db
+      .update(taskOccurrences)
+      .set({ assigneeId: sibling.id })
+      .where(eq(taskOccurrences.taskId, theirs.id));
+
+    const ics = await generateFamilyIcs({ familyId: family.id, userId: me.id });
+    expect(ics).toContain('SUMMARY:Mine');
+    expect(ics).toContain('SUMMARY:Shared');
+    expect(ics).not.toContain('SUMMARY:Theirs');
+  });
+
+  it('anchors dateless pending ("Когда-нибудь") on today as all-day', async () => {
+    const owner = await makeUser();
+    const { family } = await makeFamily(owner);
+    const [task] = await db
+      .insert(tasks)
+      .values({
+        familyId: family.id,
+        title: 'Eventually',
+        type: 'floating',
+        schedule: { kind: 'floating' },
+        createdBy: owner.id,
+        points: 0,
+        photoRequired: false,
+        requiresApproval: false,
+        singleShot: false,
+      })
+      .returning();
+    await db.insert(taskOccurrences).values({
+      taskId: task!.id,
+      scheduledDate: null,
+      status: 'pending',
+    });
+
+    const ics = await generateFamilyIcs({ familyId: family.id, userId: owner.id });
+    const today = new Date();
+    const y = today.getUTCFullYear();
+    const m = String(today.getUTCMonth() + 1).padStart(2, '0');
+    const d = String(today.getUTCDate()).padStart(2, '0');
+    expect(ics).toContain('SUMMARY:Eventually');
+    expect(ics).toContain(`DTSTART;VALUE=DATE:${y}${m}${d}`);
+  });
+
+  it('pending_approval and skipped get distinct prefixes + STATUS', async () => {
+    const owner = await makeUser();
+    const { family } = await makeFamily(owner);
+    const pa = await createTask({
+      familyId: family.id,
+      createdBy: owner.id,
+      data: {
+        title: 'Awaits ok',
+        type: 'oneoff',
+        schedule: { kind: 'oneoff', date: isoTomorrow() },
+        points: 0,
+        photoRequired: false,
+        requiresApproval: false,
+        singleShot: false,
+      },
+    });
+    const sk = await createTask({
+      familyId: family.id,
+      createdBy: owner.id,
+      data: {
+        title: 'Skipped one',
+        type: 'oneoff',
+        schedule: { kind: 'oneoff', date: isoTomorrow() },
+        points: 0,
+        photoRequired: false,
+        requiresApproval: false,
+        singleShot: false,
+      },
+    });
+    await db
+      .update(taskOccurrences)
+      .set({ status: 'pending_approval' })
+      .where(eq(taskOccurrences.taskId, pa.id));
+    await db
+      .update(taskOccurrences)
+      .set({ status: 'skipped' })
+      .where(eq(taskOccurrences.taskId, sk.id));
+
+    const ics = await generateFamilyIcs({ familyId: family.id, userId: owner.id });
+    expect(ics).toContain('SUMMARY:⏳ Awaits ok');
+    expect(ics).toContain('STATUS:TENTATIVE');
+    expect(ics).toContain('SUMMARY:⊘ Skipped one');
+    expect(ics).toContain('STATUS:CANCELLED');
   });
 
   it('escaping: commas, semicolons, backslashes, newlines in title', async () => {
@@ -193,7 +340,7 @@ describe('ICS feed (integration)', () => {
         singleShot: false,
       },
     });
-    const ics = await generateFamilyIcs({ familyId: family.id });
+    const ics = await generateFamilyIcs({ familyId: family.id, userId: owner.id });
     // Each special char doubled-escaped per RFC 5545 §3.3.11.
     expect(ics).toContain('SUMMARY:A\\; B\\, C \\\\ D\\nE');
   });

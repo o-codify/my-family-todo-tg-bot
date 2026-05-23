@@ -120,7 +120,10 @@ icsPublicRouter.get('/:tokenAndExt', async (c) => {
   if (!token) return c.json({ error: 'no_token' }, 400);
   const resolved = await resolveToken(token);
   if (!resolved) return c.json({ error: 'token_not_found_or_revoked' }, 404);
-  const body = await generateFamilyIcs({ familyId: resolved.familyId });
+  const body = await generateFamilyIcs({
+    familyId: resolved.familyId,
+    userId: resolved.userId,
+  });
   return new Response(body, {
     status: 200,
     headers: {
