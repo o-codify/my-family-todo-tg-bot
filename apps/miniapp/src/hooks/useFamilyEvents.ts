@@ -18,7 +18,14 @@ import { getInitData } from '../telegram';
 type Event =
   | {
       kind: 'invalidate';
-      scope: 'occurrences' | 'tasks' | 'members' | 'families' | 'stats' | 'shopping';
+      scope:
+        | 'occurrences'
+        | 'tasks'
+        | 'members'
+        | 'families'
+        | 'stats'
+        | 'shopping'
+        | 'events';
     }
   | { kind: 'invalidate-all' }
   | { kind: 'hello' };
@@ -70,6 +77,9 @@ export function useFamilyEvents(familyId: string | null): void {
             break;
           case 'shopping':
             queryClient.invalidateQueries({ queryKey: ['shopping', familyId] });
+            break;
+          case 'events':
+            queryClient.invalidateQueries({ queryKey: ['family-events', familyId] });
             break;
         }
       }

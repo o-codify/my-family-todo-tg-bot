@@ -22,6 +22,7 @@ import { transfersRouter } from './routes/transfers';
 import { rolesRouter } from './routes/roles';
 import { statsRouter } from './routes/stats';
 import { eventsRouter } from './routes/events';
+import { familyEventsRouter } from './routes/family-events';
 import { closeRealtime } from './realtime/pubsub';
 import { closeQueue } from './queue';
 import { hydrateDigestSchedulers, startNotificationsWorker, stopNotificationsWorker } from './queue/worker';
@@ -108,6 +109,7 @@ app.route('/api/v1/families/:familyId/stats', statsRouter);
 app.route('/api/v1/families/:familyId/tags', tagsRouter);
 app.route('/api/v1/families/:familyId/badges', badgesRouter);
 app.route('/api/v1/families/:familyId/shopping', shoppingRouter);
+app.route('/api/v1/families/:familyId/family-events', familyEventsRouter);
 // SSE stream — auth via query string (EventSource can't set headers).
 app.route('/api/v1/families', eventsRouter);
 // Photo routes share the family-id scope but expose three distinct shapes

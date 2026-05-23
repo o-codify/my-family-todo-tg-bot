@@ -268,6 +268,29 @@ export type ShoppingItemDto = {
   createdAt: string;
 };
 
+export type FamilyEventType =
+  | 'birthday'
+  | 'anniversary'
+  | 'nameday'
+  | 'memorial'
+  | 'custom';
+
+export type FamilyEventDto = {
+  id: string;
+  familyId: string;
+  type: FamilyEventType;
+  title: string;
+  emoji: string | null;
+  month: number;
+  day: number;
+  year: number | null;
+  memberUserId: string | null;
+  notifyDaysBefore: number[];
+  createdByUserId: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type CreateTaskPayload = {
   title: string;
   type: TaskType;
@@ -488,6 +511,55 @@ export const api = {
   archiveBoughtShopping: (familyId: string, olderThanDays = 0) =>
     request<{ archived: number }>(
       `/api/v1/families/${familyId}/shopping/archive-bought?olderThanDays=${olderThanDays}`,
+      { method: 'POST' },
+    ),
+
+  listFamilyEvents: (familyId: string) =>
+    request<{ events: FamilyEventDto[] }>(
+      `/api/v1/families/${familyId}/family-events`,
+    ),
+  createFamilyEvent: (
+    familyId: string,
+    payload: {
+      type: FamilyEventType;
+      title: string;
+      emoji?: string | null;
+      month: number;
+      day: number;
+      year?: number | null;
+      memberUserId?: string | null;
+      notifyDaysBefore?: number[];
+    },
+  ) =>
+    request<{ event: FamilyEventDto }>(
+      `/api/v1/families/${familyId}/family-events`,
+      { method: 'POST', body: JSON.stringify(payload) },
+    ),
+  updateFamilyEvent: (
+    familyId: string,
+    eventId: string,
+    patch: {
+      type?: FamilyEventType;
+      title?: string;
+      emoji?: string | null;
+      month?: number;
+      day?: number;
+      year?: number | null;
+      memberUserId?: string | null;
+      notifyDaysBefore?: number[];
+    },
+  ) =>
+    request<{ event: FamilyEventDto }>(
+      `/api/v1/families/${familyId}/family-events/${eventId}`,
+      { method: 'PATCH', body: JSON.stringify(patch) },
+    ),
+  deleteFamilyEvent: (familyId: string, eventId: string) =>
+    request<null>(`/api/v1/families/${familyId}/family-events/${eventId}`, {
+      method: 'DELETE',
+    }),
+  restoreFamilyEvent: (familyId: string, eventId: string) =>
+    request<{ event: FamilyEventDto }>(
+      `/api/v1/families/${familyId}/family-events/${eventId}/restore`,
       { method: 'POST' },
     ),
 

@@ -12,3 +12,4 @@ export * from './notifications';
 export * from './tags';
 export * from './badges';
 export * from './shopping';
+export * from './events';

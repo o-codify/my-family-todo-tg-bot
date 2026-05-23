@@ -15,6 +15,7 @@ import { Roles } from './Roles';
 import { Search } from './Search';
 import { Shop } from './Shop';
 import { Shopping } from './Shopping';
+import { Events } from './Events';
 import { Stats } from './Stats';
 import { Templates } from './Templates';
 import { TaskSheet } from '../components/TaskSheet';
@@ -38,6 +39,7 @@ type Route =
   | { kind: 'queue'; taskId: string }
   | { kind: 'shop' }
   | { kind: 'shopping' }
+  | { kind: 'events' }
   | { kind: 'profile' }
   | { kind: 'my-profile' }
   | { kind: 'member'; userId: string }
@@ -59,6 +61,7 @@ const NAV_ROUTE: Record<NavKey, Route> = {
   queues: { kind: 'queues' },
   shop: { kind: 'shop' },
   shopping: { kind: 'shopping' },
+  events: { kind: 'events' },
   profile: { kind: 'profile' },
   'my-profile': { kind: 'my-profile' },
   inbox: { kind: 'inbox' },
@@ -98,6 +101,8 @@ function serializeRoute(r: Route): string {
       return '#/shop';
     case 'shopping':
       return '#/shopping';
+    case 'events':
+      return '#/events';
     case 'profile':
       return '#/profile';
     case 'my-profile':
@@ -147,6 +152,8 @@ function parseRoute(hash: string): Route {
       return { kind: 'shop' };
     case 'shopping':
       return { kind: 'shopping' };
+    case 'events':
+      return { kind: 'events' };
     case 'transfer': {
       const occurrenceId = rest[0];
       if (occurrenceId) return { kind: 'transfer', occurrenceId };
@@ -198,6 +205,8 @@ function navKeyForRoute(r: Route): NavKey {
       return 'shop';
     case 'shopping':
       return 'shopping';
+    case 'events':
+      return 'events';
     case 'inbox':
       return 'inbox';
     case 'search':
@@ -410,6 +419,14 @@ export function FamilyHome({ me, families }: Props) {
       )}
       {route.kind === 'shopping' && (
         <Shopping
+          me={me}
+          family={activeFamily}
+          onBack={onBackFor}
+          onOpenDrawer={onOpenDrawerFor}
+        />
+      )}
+      {route.kind === 'events' && (
+        <Events
           me={me}
           family={activeFamily}
           onBack={onBackFor}

@@ -18,7 +18,14 @@ import { logger } from '../logger';
 export type RealtimeEvent =
   | {
       kind: 'invalidate';
-      scope: 'occurrences' | 'tasks' | 'members' | 'families' | 'stats' | 'shopping';
+      scope:
+        | 'occurrences'
+        | 'tasks'
+        | 'members'
+        | 'families'
+        | 'stats'
+        | 'shopping'
+        | 'events';
     }
   | { kind: 'invalidate-all' };
 
