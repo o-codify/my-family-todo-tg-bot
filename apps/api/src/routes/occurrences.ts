@@ -1,6 +1,7 @@
 import { zValidator } from '@hono/zod-validator';
 import { Hono } from 'hono';
 import {
+  bulkCompleteOccurrencesSchema,
   completeOccurrenceSchema,
   occurrencesQuerySchema,
   rescheduleOccurrenceSchema,
@@ -10,6 +11,7 @@ import { tgAuth, type AuthVariables } from '../middleware/auth';
 import { requireFamily, type FamilyVariables } from '../middleware/family';
 import {
   approveOccurrence,
+  bulkCompleteOccurrences,
   completeOccurrence,
   getOccurrenceInFamily,
   listFamilyOccurrences,
@@ -141,6 +143,23 @@ occurrencesRouter.post(
       }
       throw err;
     }
+  },
+);
+
+/** Bulk-complete a set of occurrences in one round-trip. Per-id
+ *  results so the UI can render "3 done, 1 needs a photo". */
+occurrencesRouter.post(
+  '/bulk-complete',
+  zValidator('json', bulkCompleteOccurrencesSchema),
+  async (c) => {
+    const user = c.get('user');
+    const familyId = c.get('familyId');
+    const results = await bulkCompleteOccurrences({
+      familyId,
+      userId: user.id,
+      occurrenceIds: c.req.valid('json').ids,
+    });
+    return c.json({ results });
   },
 );
 

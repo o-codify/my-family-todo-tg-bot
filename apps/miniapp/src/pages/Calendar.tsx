@@ -11,6 +11,7 @@ import {
 import { AvStack, Dot, Icon, Seg, Tag, WfBody, type Member } from '../design';
 import { FloatingSection } from '../components/FloatingSection';
 import { PinnedNote } from '../components/PinnedNote';
+import { useToast } from '../components/Toast';
 import { usePreferences } from '../hooks/usePreferences';
 import { useDragReschedule } from '../hooks/useDragReschedule';
 import { pluralize, useT } from '../i18n';
@@ -223,6 +224,41 @@ export function Calendar({
       // hook treats this as a no-op drop.
       if (occurrenceId.startsWith('floating:')) return;
       dragRescheduleMut.mutate({ occurrenceId, scheduledDate: targetIso });
+    },
+  });
+
+  // ── bulk select mode ──────────────────────────────────────────────
+  // When on, DayTaskCard rows render a checkbox and tapping a row
+  // toggles its membership in `selectedIds` instead of opening the
+  // task. A bottom action bar shows "Complete N" + Cancel.
+  const bulkToast = useToast();
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const toggleSelected = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+  const clearSelection = () => {
+    setSelectedIds(new Set());
+    setSelectMode(false);
+  };
+  const bulkCompleteMut = useMutation({
+    mutationFn: (ids: string[]) => api.bulkCompleteOccurrences(family.id, ids),
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['occurrences', family.id] });
+      // Best-effort toast summary; rely on the page list to refresh.
+      const ok = data.results.filter((r) => r.status !== 'error').length;
+      const fail = data.results.filter((r) => r.status === 'error').length;
+      const msg =
+        fail === 0
+          ? `${ok} ${t('bulk.completed')}`
+          : `${ok} ${t('bulk.completed')} · ${fail} ${t('bulk.failed')}`;
+      bulkToast.show({ message: msg, variant: fail === 0 ? 'success' : 'error' });
+      clearSelection();
     },
   });
 
@@ -738,10 +774,18 @@ export function Calendar({
               else completeMut.mutate(occ.id);
             }}
             dragBinding={
-              draggable
+              !selectMode && draggable
                 ? dragReschedule.bindCard(o.id, o.scheduledDate, () =>
                     onOpenTask?.(o),
                   )
+                : undefined
+            }
+            selectionState={
+              selectMode
+                ? {
+                    selected: selectedIds.has(o.id),
+                    onToggle: () => toggleSelected(o.id),
+                  }
                 : undefined
             }
           />
@@ -832,16 +876,91 @@ export function Calendar({
         }
       />
 
-      {/* Add-task pill — centered above the bottom-nav. */}
-      <div
-        className="wf-fab"
-        onClick={() => onCreateTask?.(selectedIso)}
-        role="button"
-        aria-label={t('calendar.fab')}
-      >
-        <span className="wf-fab__plus">+</span>
-        <span>{t('calendar.fab')}</span>
-      </div>
+      {/* Add-task pill — centered above the bottom-nav. Replaced by
+          a Bulk-action bar when select-mode is on. */}
+      {selectMode ? (
+        <div
+          className="wf-fab"
+          role="region"
+          aria-label="bulk actions"
+          style={{
+            display: 'flex',
+            gap: 8,
+            alignItems: 'center',
+            padding: '8px 16px',
+          }}
+        >
+          <button
+            type="button"
+            onClick={clearSelection}
+            disabled={bulkCompleteMut.isPending}
+            style={{
+              background: 'transparent',
+              border: 'none',
+              color: 'var(--paper)',
+              cursor: 'pointer',
+              padding: 4,
+              opacity: 0.85,
+            }}
+          >
+            ✕ {t('common.cancel')}
+          </button>
+          <button
+            type="button"
+            onClick={() =>
+              selectedIds.size > 0 &&
+              bulkCompleteMut.mutate(Array.from(selectedIds))
+            }
+            disabled={selectedIds.size === 0 || bulkCompleteMut.isPending}
+            style={{
+              background: 'var(--paper)',
+              color: 'var(--ink)',
+              border: 'none',
+              borderRadius: 999,
+              padding: '6px 14px',
+              fontWeight: 600,
+              cursor:
+                selectedIds.size === 0 || bulkCompleteMut.isPending
+                  ? 'default'
+                  : 'pointer',
+              marginLeft: 'auto',
+            }}
+          >
+            ✓ {t('bulk.complete')} ({selectedIds.size})
+          </button>
+        </div>
+      ) : (
+        <div
+          className="wf-fab"
+          onClick={() => onCreateTask?.(selectedIso)}
+          role="button"
+          aria-label={t('calendar.fab')}
+        >
+          <span className="wf-fab__plus">+</span>
+          <span>{t('calendar.fab')}</span>
+          {/* Quick toggle to enter select-mode. Stop propagation so the
+              parent FAB click (which creates a task) doesn't also fire. */}
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              setSelectMode(true);
+            }}
+            aria-label={t('bulk.enterSelect')}
+            style={{
+              background: 'transparent',
+              border: 'none',
+              color: 'var(--paper)',
+              cursor: 'pointer',
+              padding: 4,
+              marginLeft: 8,
+              opacity: 0.7,
+            }}
+          >
+            ☑
+          </button>
+        </div>
+      )}
     </WfBody>
   );
 }
@@ -856,6 +975,7 @@ function DayTaskCard({
   onOpenTask,
   onToggle,
   dragBinding,
+  selectionState,
 }: {
   o: OccurrenceDto;
   memberById: Map<string, Member>;
@@ -870,6 +990,11 @@ function DayTaskCard({
     onPointerDown: (e: React.PointerEvent) => void;
     style: React.CSSProperties;
   };
+  /** When set, the card renders in select-mode: a leading round
+   *  checkbox replaces the normal one, the row's onClick toggles
+   *  selection (instead of opening the task), and the strict-tap path
+   *  through `dragBinding.onTap` also selects rather than opens. */
+  selectionState?: { selected: boolean; onToggle: () => void };
 }) {
   const t = useT();
   const isEn = t.locale === 'en';
@@ -895,15 +1020,47 @@ function DayTaskCard({
       // calls our `onTap` callback on a pure tap; we suppress the
       // native onClick so we don't double-fire onOpenTask.
       onClick={
-        dragBinding ? undefined : () => !isForecast && onOpenTask?.(o)
+        selectionState
+          ? () => selectionState.onToggle()
+          : dragBinding
+            ? undefined
+            : () => !isForecast && onOpenTask?.(o)
       }
-      onPointerDown={dragBinding?.onPointerDown}
+      onPointerDown={selectionState ? undefined : dragBinding?.onPointerDown}
       style={{
-        cursor: !isForecast && onOpenTask ? 'pointer' : 'default',
+        cursor:
+          selectionState || (!isForecast && onOpenTask) ? 'pointer' : 'default',
         opacity: isForecast ? 0.55 : 1,
+        ...(selectionState?.selected
+          ? { outline: '2px solid var(--ink)', outlineOffset: -2 }
+          : null),
         ...(dragBinding?.style ?? null),
       }}
     >
+      {selectionState && (
+        <div
+          className="wf-row wf-gap-6"
+          style={{ marginBottom: 4, alignItems: 'center' }}
+        >
+          <span
+            style={{
+              width: 16,
+              height: 16,
+              borderRadius: 4,
+              border: '1.5px solid var(--ink)',
+              background: selectionState.selected ? 'var(--ink)' : 'transparent',
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: 'var(--paper)',
+              fontSize: 11,
+              flex: 'none',
+            }}
+          >
+            {selectionState.selected ? '✓' : ''}
+          </span>
+        </div>
+      )}
       <div className="wf-row wf-gap-10">
         {isForecast ? (
           // Placeholder dot instead of a checkbox so the row isn't tap-bait

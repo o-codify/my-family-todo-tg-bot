@@ -734,6 +734,12 @@ const DICT: Record<string, Record<Locale, string>> = {
     en: 'Steps unlock one at a time',
   },
   'quest.locked': { ru: 'Закрыто', en: 'Locked' },
+
+  // ─── bulk actions ────────────────────────────────────────────────
+  'bulk.enterSelect': { ru: 'Выбрать несколько', en: 'Select several' },
+  'bulk.complete': { ru: 'Завершить', en: 'Complete' },
+  'bulk.completed': { ru: 'завершено', en: 'completed' },
+  'bulk.failed': { ru: 'с ошибкой', en: 'failed' },
   'quest.errOutOfOrder': {
     ru: 'Сначала пройди прошлый шаг',
     en: 'Finish the previous step first',

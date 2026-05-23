@@ -492,6 +492,19 @@ export const api = {
       `/api/v1/families/${familyId}/occurrences/${occurrenceId}/uncomplete`,
       { method: 'POST' },
     ),
+  /** Bulk-complete a set of occurrences in one round-trip. Returns
+   *  per-id results — the UI shows mixed outcomes. */
+  bulkCompleteOccurrences: (familyId: string, ids: string[]) =>
+    request<{
+      results: Array<{
+        occurrenceId: string;
+        status: 'done' | 'pending_approval' | 'error';
+        error?: string;
+      }>;
+    }>(`/api/v1/families/${familyId}/occurrences/bulk-complete`, {
+      method: 'POST',
+      body: JSON.stringify({ ids }),
+    }),
   /** Approve a 'pending_approval' occurrence — flips to done + awards points. */
   approveOccurrence: (familyId: string, occurrenceId: string) =>
     request<{ occurrence: OccurrenceDto }>(

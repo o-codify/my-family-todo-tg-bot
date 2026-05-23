@@ -708,6 +708,57 @@ export async function rejectOccurrence(input: {
 }
 
 /**
+ * Bulk-complete a list of occurrences. Iterates and calls the regular
+ * `completeOccurrence` per id so each goes through the standard rules
+ * (photo gate, subtasks gate, approval gate, queue spawn, badges).
+ * Returns a per-id result so the UI can render mixed outcomes ("3
+ * completed, 1 needs a photo").
+ *
+ * Failures don't abort the loop — one bad id shouldn't block the rest
+ * from going through. Each row is fetched independently because the
+ * inputs span families/tasks; we re-check `familyId` per id to keep
+ * the auth boundary tight.
+ */
+export type BulkCompleteResult = {
+  occurrenceId: string;
+  status: 'done' | 'pending_approval' | 'error';
+  error?: string;
+};
+
+export async function bulkCompleteOccurrences(input: {
+  familyId: string;
+  userId: string;
+  occurrenceIds: string[];
+}): Promise<BulkCompleteResult[]> {
+  const out: BulkCompleteResult[] = [];
+  for (const id of input.occurrenceIds) {
+    const occ = await getOccurrenceInFamily(id, input.familyId);
+    if (!occ) {
+      out.push({ occurrenceId: id, status: 'error', error: 'not_found' });
+      continue;
+    }
+    try {
+      const updated = await completeOccurrence({
+        occurrence: occ,
+        userId: input.userId,
+        data: {},
+      });
+      out.push({
+        occurrenceId: id,
+        status: updated.status === 'pending_approval' ? 'pending_approval' : 'done',
+      });
+    } catch (err) {
+      if (err instanceof OccurrenceActionError) {
+        out.push({ occurrenceId: id, status: 'error', error: err.code });
+      } else {
+        out.push({ occurrenceId: id, status: 'error', error: 'internal' });
+      }
+    }
+  }
+  return out;
+}
+
+/**
  * List all 'pending_approval' occurrences across the family, newest
  * first. Used by the Inbox "Awaiting approval" section visible to
  * users with the `task.approve` permission.

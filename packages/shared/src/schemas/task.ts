@@ -98,3 +98,13 @@ export const occurrencesQuerySchema = z.object({
 });
 
 export type OccurrencesQuery = z.infer<typeof occurrencesQuerySchema>;
+
+/** Bulk-complete a set of occurrences in one round-trip. Each id is
+ *  attempted independently — the response carries per-id success/error
+ *  so the UI can show "5 completed · 2 need a photo". */
+export const bulkCompleteOccurrencesSchema = z.object({
+  ids: z.array(z.string().uuid()).min(1).max(50),
+});
+export type BulkCompleteOccurrencesInput = z.infer<
+  typeof bulkCompleteOccurrencesSchema
+>;
