@@ -505,6 +505,11 @@ export async function completeFloatingTask(input: {
           completedBy: userId,
           photoIds: data.photoIds ?? null,
           pointsAwarded: task.points,
+          // Backfill the assignee if the existing pending row was
+          // missing one — happens for legacy rows created before this
+          // fix landed. Without this, the done row leaks into other
+          // members' ICS feeds via the `assigneeId IS NULL` branch.
+          assigneeId: pending[0].assigneeId ?? task.assigneeId ?? userId,
         })
         .where(eq(taskOccurrences.id, pending[0].id))
         .returning();
@@ -517,6 +522,11 @@ export async function completeFloatingTask(input: {
           status: 'done',
           completedAt: today,
           completedBy: userId,
+          // Inherit the task's assignee; for shared tasks (task.
+          // assigneeId is null) fall back to the completer so the
+          // row still has an owner and doesn't appear in everybody
+          // else's per-user ICS feed.
+          assigneeId: task.assigneeId ?? userId,
           photoIds: data.photoIds ?? null,
           pointsAwarded: task.points,
         })
@@ -533,14 +543,22 @@ export async function completeFloatingTask(input: {
     if (decision.kind === 'archive') {
       await tx.update(tasks).set({ archivedAt: today }).where(eq(tasks.id, task.id));
     } else if (decision.kind === 'wait_then_reopen') {
+      // Inherit task.assigneeId on the reopened row — see the comment
+      // above. Without this, the next pending sits in the DB with
+      // assigneeId=NULL and leaks into every member's ICS feed.
       await tx.insert(taskOccurrences).values({
         taskId: task.id,
         status: 'pending',
         availableAt: decision.availableAt,
+        assigneeId: task.assigneeId ?? null,
       });
     } else {
       // reopen_immediately
-      await tx.insert(taskOccurrences).values({ taskId: task.id, status: 'pending' });
+      await tx.insert(taskOccurrences).values({
+        taskId: task.id,
+        status: 'pending',
+        assigneeId: task.assigneeId ?? null,
+      });
     }
 
     // Award points (kept inside the tx so the ledger stays consistent with

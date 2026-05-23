@@ -242,6 +242,113 @@ describe('ICS feed: two-user personal-scope leak check (integration)', () => {
     expect(bobFeed).toMatch(/Trash/);
   });
 
+  it('floating completion leaves NEW pending with assignee inherited (no NULL leak)', async () => {
+    // Regression for: "Так он добавил ее после всех фиксов. Это именно
+    // задача без даты, которая закреплена за мной." completeFloatingTask
+    // used to insert the new pending row WITHOUT an assigneeId — the
+    // task.assigneeId was on the task, but every fresh reopened pending
+    // row had occurrence.assigneeId=NULL, which the ICS personal filter
+    // happily included in *every* member's feed via `IS NULL`.
+    const alice = await makeUser({ firstName: 'Alice' });
+    const bob = await makeUser({ firstName: 'Bob' });
+    const { family } = await makeFamily(alice);
+    await addMember(family, bob, 'Adult');
+
+    // Alice creates a floating task assigned to herself. cooldownDays=1
+    // so completing it triggers the wait_then_reopen branch which is
+    // where the new pending row is inserted with the previously-missing
+    // assignee.
+    const [task] = await db
+      .insert(tasks)
+      .values({
+        familyId: family.id,
+        title: 'Alice-Floating',
+        type: 'floating',
+        schedule: { kind: 'floating' },
+        createdBy: alice.id,
+        assigneeId: alice.id,
+        cooldownDays: 1,
+        points: 0,
+        photoRequired: false,
+        requiresApproval: false,
+        singleShot: false,
+      })
+      .returning();
+    // Seed an initial pending row (with the correct assignee) — this is
+    // what would exist after the first /complete-floating round.
+    await db.insert(taskOccurrences).values({
+      taskId: task!.id,
+      status: 'pending',
+      assigneeId: alice.id,
+    });
+
+    // Simulate completion via the service.
+    const { completeFloatingTask } = await import(
+      '../../src/services/occurrence-actions'
+    );
+    await completeFloatingTask({ task: task!, userId: alice.id, data: {} });
+
+    // Assertions: the reopened pending row must carry Alice's
+    // assigneeId, so Bob's ICS feed doesn't see it.
+    const allOccs = await db
+      .select()
+      .from(taskOccurrences)
+      .where(eq(taskOccurrences.taskId, task!.id));
+    const reopenedPending = allOccs.find((o) => o.status === 'pending');
+    expect(reopenedPending?.assigneeId).toBe(alice.id);
+
+    const bobFeed = await generateFamilyIcs({
+      familyId: family.id,
+      userId: bob.id,
+    });
+    expect(bobFeed).not.toContain('Alice-Floating');
+  });
+
+  it('legacy occurrence with assigneeId=NULL but task.assigneeId set is filtered defensively', async () => {
+    // Even if existing rows in production still have occurrence.
+    // assigneeId=NULL (pre-fix), the ICS query has a defensive fallback
+    // that looks at tasks.assigneeId. Verifies the leak doesn't recur
+    // for legacy data.
+    const alice = await makeUser({ firstName: 'Alice' });
+    const bob = await makeUser({ firstName: 'Bob' });
+    const { family } = await makeFamily(alice);
+    await addMember(family, bob, 'Adult');
+
+    const [task] = await db
+      .insert(tasks)
+      .values({
+        familyId: family.id,
+        title: 'Alice-LegacyFloating',
+        type: 'floating',
+        schedule: { kind: 'floating' },
+        createdBy: alice.id,
+        assigneeId: alice.id, // task knows it's Alice's
+        points: 0,
+        photoRequired: false,
+        requiresApproval: false,
+        singleShot: false,
+      })
+      .returning();
+    // Insert a pending occurrence WITHOUT assigneeId — mimics the
+    // legacy bug state already in the wild before the fix landed.
+    await db.insert(taskOccurrences).values({
+      taskId: task!.id,
+      status: 'pending',
+      assigneeId: null,
+    });
+
+    const aliceFeed = await generateFamilyIcs({
+      familyId: family.id,
+      userId: alice.id,
+    });
+    const bobFeed = await generateFamilyIcs({
+      familyId: family.id,
+      userId: bob.id,
+    });
+    expect(aliceFeed).toContain('Alice-LegacyFloating');
+    expect(bobFeed).not.toContain('Alice-LegacyFloating');
+  });
+
   it('forecast for queue assigned to OTHER user does not appear in my feed', async () => {
     // A queue with only two members rotates "their turn / my turn" by
     // cooldownDays. Make sure the OTHER user's turn days don't leak

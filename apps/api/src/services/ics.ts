@@ -186,11 +186,26 @@ export async function generateFamilyIcs(input: {
       and(
         eq(tasks.familyId, input.familyId),
         isNull(tasks.archivedAt),
-        // Personal feed: my tasks + unassigned (shared) tasks. Skip
-        // occurrences explicitly assigned to other family members.
+        // Personal feed rules:
+        //   1. Mine by occurrence assignment.
+        //   2. Mine by completion (I closed it — even if assigned
+        //      elsewhere, like a transferred task or a child's task
+        //      a parent finished).
+        //   3. Genuinely shared: occurrence assignee is null AND the
+        //      underlying task's assignee is null too. (If the task
+        //      is assigned to a specific user but the occurrence row
+        //      is missing that, treat it as "theirs, not mine" — this
+        //      is the floating-completion regression the user hit.)
         or(
           eq(taskOccurrences.assigneeId, input.userId),
-          isNull(taskOccurrences.assigneeId),
+          eq(taskOccurrences.completedBy, input.userId),
+          and(
+            isNull(taskOccurrences.assigneeId),
+            or(
+              eq(tasks.assigneeId, input.userId),
+              isNull(tasks.assigneeId),
+            ),
+          ),
         ),
         or(
           // Dated rows inside the visible window — any status.
