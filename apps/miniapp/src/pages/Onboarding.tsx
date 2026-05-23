@@ -15,6 +15,11 @@ type Props = {
   }) => Promise<{ family: FamilySummary }>;
   onJoin: (code: string) => Promise<unknown>;
   onComplete: () => void;
+  /** Optional escape hatch. The initial onboarding (no families yet)
+   *  has nowhere to go back to, so we omit this. When the same flow is
+   *  reused for "add another family", the caller passes a cancel that
+   *  pops back to FamilyHome. */
+  onCancel?: () => void;
   createError: ApiError | null;
   joinError: ApiError | null;
 };
@@ -50,6 +55,7 @@ export function Onboarding({
   onCreate,
   onJoin,
   onComplete,
+  onCancel,
   createError,
   joinError,
 }: Props) {
@@ -67,6 +73,7 @@ export function Onboarding({
       <ChooseStep
         onCreateClick={() => setMode('create')}
         onJoinClick={() => setMode('join')}
+        onCancel={onCancel}
       />
     );
   }
@@ -97,15 +104,43 @@ export function Onboarding({
 function ChooseStep({
   onCreateClick,
   onJoinClick,
+  onCancel,
 }: {
   onCreateClick: () => void;
   onJoinClick: () => void;
+  /** Optional — shown as a top-left back button when set (the "add
+   *  another family" flow has somewhere to return to). */
+  onCancel?: () => void;
 }) {
   const t = useT();
   return (
     <WfBody
       style={{ alignItems: 'center', textAlign: 'center', padding: '28px 24px 28px', gap: 14 }}
     >
+      {onCancel && (
+        <button
+          type="button"
+          onClick={onCancel}
+          aria-label={t('common.back')}
+          style={{
+            position: 'absolute',
+            top: 12,
+            left: 12,
+            background: 'var(--ink)',
+            color: 'var(--paper)',
+            border: 'none',
+            borderRadius: 999,
+            width: 36,
+            height: 36,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            cursor: 'pointer',
+          }}
+        >
+          <Icon name="chevL" />
+        </button>
+      )}
       <div
         style={{
           width: 80,

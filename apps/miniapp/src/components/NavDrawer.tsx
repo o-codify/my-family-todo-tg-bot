@@ -34,6 +34,12 @@ type Props = {
   onClose: () => void;
   onNavigate: (key: NavKey) => void;
   onSwitchFamily?: (id: string) => void;
+  /** Opens the create/join-family overlay. Rendered as an explicit
+   *  entry next to the family switcher so users in N≥1 families have
+   *  a discoverable way to add another. Without this, the only way
+   *  in was the initial-onboarding screen which is unreachable once
+   *  you're a member of any family. */
+  onAddFamily?: () => void;
 };
 
 type Entry = { key: NavKey; icon: IconName; labelKey: string };
@@ -72,6 +78,7 @@ export function NavDrawer({
   onClose,
   onNavigate,
   onSwitchFamily,
+  onAddFamily,
 }: Props) {
   const t = useT();
   const isEn = t.locale === 'en';
@@ -162,6 +169,22 @@ export function NavDrawer({
                 <Icon name="x" />
               </button>
             </div>
+
+            {onAddFamily && (
+              <button
+                type="button"
+                className="wf-drawer__item"
+                onClick={() => close(onAddFamily)}
+              >
+                <Icon name="plus" />
+                <span style={{ flex: 1, textAlign: 'left' }}>
+                  {isEn ? 'Add family' : 'Добавить семью'}
+                </span>
+                <span className="wf-tiny" style={{ color: 'var(--hint)' }}>
+                  {isEn ? 'create or join' : 'создать или войти'}
+                </span>
+              </button>
+            )}
 
             <div className="wf-drawer__section">{t('nav.section.main')}</div>
             {MAIN.map((e) => (

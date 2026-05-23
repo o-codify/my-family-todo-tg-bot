@@ -32,6 +32,10 @@ import { useT } from '../i18n';
 type Props = {
   me: MeResponse;
   families: FamilySummary[];
+  /** Triggered from the NavDrawer's "+ Family" entry; the parent (App)
+   *  flips an addingFamily flag so the Onboarding flow is rendered on
+   *  top of FamilyHome until the user creates or joins. */
+  onAddFamily?: () => void;
 };
 
 type Route =
@@ -249,7 +253,7 @@ function navKeyForRoute(r: Route): NavKey {
   }
 }
 
-export function FamilyHome({ me, families }: Props) {
+export function FamilyHome({ me, families, onAddFamily }: Props) {
   const queryClient = useQueryClient();
   const t = useT();
   const [activeFamilyId, setActiveFamilyId] = useState(() => families[0]?.id);
@@ -604,6 +608,14 @@ export function FamilyHome({ me, families }: Props) {
           onClose={() => setDrawerOpen(false)}
           onNavigate={onNavigate}
           onSwitchFamily={setActiveFamilyId}
+          onAddFamily={
+            onAddFamily
+              ? () => {
+                  setDrawerOpen(false);
+                  onAddFamily();
+                }
+              : undefined
+          }
         />
       )}
 

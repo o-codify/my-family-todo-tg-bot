@@ -19,6 +19,12 @@ export function App() {
   });
 
   const [shareOverride, setShareOverride] = useState(false);
+  // When true, render the Onboarding flow on top of FamilyHome so an
+  // existing user can create another family or join one by code. The
+  // user reported: "А если я в семье, то как создать новую или как
+  // ввести код, если есть только код. Вернуть к главной странице же
+  // никак" — there was no entrypoint after the initial onboarding.
+  const [addingFamily, setAddingFamily] = useState(false);
   const createFamily = useMutation({
     mutationFn: async ({
       name,
@@ -45,7 +51,12 @@ export function App() {
 
   const joinFamily = useMutation({
     mutationFn: (code: string) => api.joinFamily(code),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['families'] }),
+    onSuccess: () => {
+      // Join is single-step (no ShareStep follow-up), so close the
+      // add-family overlay as soon as the new membership lands.
+      setAddingFamily(false);
+      queryClient.invalidateQueries({ queryKey: ['families'] });
+    },
   });
 
   // We don't know the user's locale until /me resolves — so the loading
@@ -69,7 +80,7 @@ export function App() {
   const me = meQuery.data!;
   const families = familiesQuery.data?.families ?? [];
 
-  if (families.length === 0 || shareOverride) {
+  if (families.length === 0 || shareOverride || addingFamily) {
     return (
       <LocaleProvider locale={me.locale}>
         <Onboarding
@@ -77,7 +88,16 @@ export function App() {
           initialInviteCode={startInviteCode}
           onCreate={(input) => createFamily.mutateAsync(input)}
           onJoin={(code) => joinFamily.mutateAsync(code)}
-          onComplete={() => setShareOverride(false)}
+          onComplete={() => {
+            // ShareStep "Done" → close both overlays. If we got here via
+            // the add-family flow, the user already had at least one
+            // family; clear that flag too.
+            setShareOverride(false);
+            setAddingFamily(false);
+          }}
+          // Only expose the cancel/back affordance when the user has
+          // somewhere to go back to — the initial onboarding doesn't.
+          onCancel={addingFamily ? () => setAddingFamily(false) : undefined}
           createError={createFamily.error as ApiError | null}
           joinError={joinFamily.error as ApiError | null}
         />
@@ -87,7 +107,11 @@ export function App() {
 
   return (
     <LocaleProvider locale={me.locale}>
-      <FamilyHome me={me} families={families} />
+      <FamilyHome
+        me={me}
+        families={families}
+        onAddFamily={() => setAddingFamily(true)}
+      />
     </LocaleProvider>
   );
 }
