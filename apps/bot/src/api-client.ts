@@ -85,6 +85,49 @@ export type TodayResponse = {
  * Fetch today's pending tasks for a Telegram user (across all families).
  * Returns null if the user has never opened the Mini App (no DB row yet).
  */
+/**
+ * Bot-callback: complete an occurrence on behalf of a Telegram user.
+ * Mirrors the regular /complete flow (points, badges, queue spawn).
+ * Returns `null` when the call failed (404, 403, photo_required, etc.)
+ * — the caller should answer the callback query with a friendly toast.
+ */
+export async function completeOccurrenceForChat(
+  occurrenceId: string,
+  telegramId: number,
+): Promise<{ status: string } | null> {
+  const url = `${INTERNAL_PREFIX}/occurrences/${encodeURIComponent(occurrenceId)}/complete-by-tg`;
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'x-service-token': env.INTERNAL_SERVICE_TOKEN,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ telegramId: String(telegramId) }),
+  });
+  if (!res.ok) return null;
+  const json = (await res.json()) as { ok: boolean; status?: string };
+  return json.ok && json.status ? { status: json.status } : null;
+}
+
+/** Bot-callback: bump an occurrence's scheduled_date by 1 day. */
+export async function snoozeOccurrenceForChat(
+  occurrenceId: string,
+  telegramId: number,
+): Promise<{ newDate: string | null } | null> {
+  const url = `${INTERNAL_PREFIX}/occurrences/${encodeURIComponent(occurrenceId)}/snooze-by-tg`;
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'x-service-token': env.INTERNAL_SERVICE_TOKEN,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ telegramId: String(telegramId) }),
+  });
+  if (!res.ok) return null;
+  const json = (await res.json()) as { ok: boolean; newDate?: string | null };
+  return json.ok ? { newDate: json.newDate ?? null } : null;
+}
+
 export async function fetchTodayForUser(telegramId: number): Promise<TodayResponse | null> {
   const url = `${INTERNAL_PREFIX}/today/${telegramId}`;
   const res = await fetch(url, {

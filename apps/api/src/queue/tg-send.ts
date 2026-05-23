@@ -9,10 +9,22 @@ import { logger } from '../logger';
  * Returns `true` on success. Logs and returns `false` on Telegram-side
  * rejection (most often: user blocked the bot, or hasn't pressed /start).
  */
+export type InlineKeyboardButton = {
+  text: string;
+  /** Short opaque callback data — Telegram caps at 64 bytes. We pack
+   *  `<action>:<occurrenceId>` where action ∈ done | snooze1h | open. */
+  callback_data?: string;
+  /** Mini-app deep-link URL (https://t.me/<bot>?startapp=<param>). */
+  url?: string;
+};
+
 export async function sendBotMessage(input: {
   chatId: number;
   text: string;
   parseMode?: 'HTML' | 'MarkdownV2';
+  /** Optional 2-D matrix of inline buttons. Each row becomes a row in
+   *  the keyboard; cells can be callback_data or URL buttons. */
+  inlineKeyboard?: InlineKeyboardButton[][];
 }): Promise<boolean> {
   const url = `https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/sendMessage`;
   try {
@@ -24,6 +36,9 @@ export async function sendBotMessage(input: {
         text: input.text,
         parse_mode: input.parseMode,
         disable_web_page_preview: true,
+        ...(input.inlineKeyboard
+          ? { reply_markup: { inline_keyboard: input.inlineKeyboard } }
+          : {}),
       }),
     });
     const json = (await res.json()) as { ok: boolean; description?: string };

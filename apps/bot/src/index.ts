@@ -2,9 +2,11 @@ import { createServer, type IncomingMessage, type ServerResponse } from 'node:ht
 import { Bot, InlineKeyboard, webhookCallback } from 'grammy';
 import {
   BotApiError,
+  completeOccurrenceForChat,
   deletePhotoForChat,
   fetchTodayForUser,
   lookupInviteCode,
+  snoozeOccurrenceForChat,
 } from './api-client';
 import { env } from './env';
 import { logger } from './logger';
@@ -167,6 +169,87 @@ bot.callbackQuery(/^delphoto:(.+)$/, async (ctx) => {
     logger.error({ err: err instanceof Error ? err.message : err, photoId }, 'Failed to delete photo');
     await ctx.answerCallbackQuery({
       text: 'Не удалось удалить, попробуйте позже',
+      show_alert: true,
+    });
+  }
+});
+
+/**
+ * Inline-keyboard actions on reminder messages. Callback data is
+ * `occ-done:<occurrenceId>` / `occ-tomorrow:<occurrenceId>` — both
+ * keep the message but strip the keyboard so the user sees the
+ * outcome without an extra chat line.
+ */
+bot.callbackQuery(/^occ-done:(.+)$/, async (ctx) => {
+  const occurrenceId = ctx.match?.[1];
+  const tgId = ctx.from?.id;
+  if (!occurrenceId || !tgId) {
+    await ctx.answerCallbackQuery({ text: '—' });
+    return;
+  }
+  try {
+    const result = await completeOccurrenceForChat(occurrenceId, tgId);
+    if (!result) {
+      await ctx.answerCallbackQuery({
+        text: 'Не удалось — открой задачу в приложении',
+        show_alert: true,
+      });
+      return;
+    }
+    const toast =
+      result.status === 'pending_approval'
+        ? '⏳ Отправлено на проверку'
+        : '✓ Готово';
+    await ctx.answerCallbackQuery({ text: toast });
+    // Strip the keyboard — the action is terminal from chat.
+    try {
+      await ctx.editMessageReplyMarkup(undefined);
+    } catch {
+      // Older messages may be uneditable (>48h); ignore.
+    }
+  } catch (err) {
+    logger.error(
+      { err: err instanceof Error ? err.message : err, occurrenceId },
+      'occ-done callback failed',
+    );
+    await ctx.answerCallbackQuery({
+      text: 'Не получилось — попробуйте позже',
+      show_alert: true,
+    });
+  }
+});
+
+bot.callbackQuery(/^occ-tomorrow:(.+)$/, async (ctx) => {
+  const occurrenceId = ctx.match?.[1];
+  const tgId = ctx.from?.id;
+  if (!occurrenceId || !tgId) {
+    await ctx.answerCallbackQuery({ text: '—' });
+    return;
+  }
+  try {
+    const result = await snoozeOccurrenceForChat(occurrenceId, tgId);
+    if (!result) {
+      await ctx.answerCallbackQuery({
+        text: 'Не получилось перенести',
+        show_alert: true,
+      });
+      return;
+    }
+    await ctx.answerCallbackQuery({
+      text: result.newDate ? `⏰ На ${result.newDate}` : '⏰ Перенесено',
+    });
+    try {
+      await ctx.editMessageReplyMarkup(undefined);
+    } catch {
+      // 48h edit window — ignore.
+    }
+  } catch (err) {
+    logger.error(
+      { err: err instanceof Error ? err.message : err, occurrenceId },
+      'occ-tomorrow callback failed',
+    );
+    await ctx.answerCallbackQuery({
+      text: 'Не получилось — попробуйте позже',
       show_alert: true,
     });
   }

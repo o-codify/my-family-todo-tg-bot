@@ -5,6 +5,10 @@ import { families, familyMembers, taskOccurrences, tasks, users } from '../db/sc
 import { serviceAuth } from '../middleware/service';
 import { deletePhoto, getPhotoById } from '../services/photos';
 import { localDate } from '../queue/quiet-hours';
+import {
+  completeOccurrence,
+  rescheduleOccurrence,
+} from '../services/occurrence-actions';
 
 export const internalRouter = new Hono().use('*', serviceAuth);
 
@@ -113,4 +117,96 @@ internalRouter.get('/today/:telegramId', async (c) => {
       points: r.points,
     })),
   });
+});
+
+/**
+ * Bot-callback endpoints for the reminder inline keyboard. The bot
+ * looks up the user by `telegramId`, finds the occurrence, then runs
+ * the regular service path (so points / badges / queue spawn all
+ * fire). Both endpoints return { ok, status } so the bot can render
+ * a short toast / answerCallbackQuery.
+ */
+internalRouter.post('/occurrences/:occurrenceId/complete-by-tg', async (c) => {
+  const body = (await c.req.json().catch(() => ({}))) as { telegramId?: string };
+  if (!body.telegramId) return c.json({ error: 'missing_telegram_id' }, 400);
+  const user = await db.query.users.findFirst({
+    where: eq(users.telegramId, BigInt(body.telegramId)),
+  });
+  if (!user) return c.json({ error: 'user_not_found' }, 404);
+
+  // Resolve task + family via the occurrence row directly (no familyId
+  // in the URL — the bot doesn't know which family the link was for).
+  const occRow = await db.query.taskOccurrences.findFirst({
+    where: eq(taskOccurrences.id, c.req.param('occurrenceId')),
+  });
+  if (!occRow) return c.json({ error: 'occurrence_not_found' }, 404);
+  const task = await db.query.tasks.findFirst({
+    where: eq(tasks.id, occRow.taskId),
+  });
+  if (!task) return c.json({ error: 'occurrence_not_found' }, 404);
+
+  // Verify the user is a member of the task's family.
+  const member = await db.query.familyMembers.findFirst({
+    where: and(
+      eq(familyMembers.familyId, task.familyId),
+      eq(familyMembers.userId, user.id),
+    ),
+  });
+  if (!member) return c.json({ error: 'forbidden' }, 403);
+
+  try {
+    const updated = await completeOccurrence({
+      occurrence: { ...occRow, task },
+      userId: user.id,
+      data: {},
+    });
+    return c.json({ ok: true, status: updated.status });
+  } catch (err) {
+    return c.json({ ok: false, error: (err as Error).message }, 409);
+  }
+});
+
+/** Reschedule an occurrence to +1 day. Used by the "⏰ Tomorrow"
+ *  button on reminder messages. */
+internalRouter.post('/occurrences/:occurrenceId/snooze-by-tg', async (c) => {
+  const body = (await c.req.json().catch(() => ({}))) as { telegramId?: string };
+  if (!body.telegramId) return c.json({ error: 'missing_telegram_id' }, 400);
+  const user = await db.query.users.findFirst({
+    where: eq(users.telegramId, BigInt(body.telegramId)),
+  });
+  if (!user) return c.json({ error: 'user_not_found' }, 404);
+
+  const occRow = await db.query.taskOccurrences.findFirst({
+    where: eq(taskOccurrences.id, c.req.param('occurrenceId')),
+  });
+  if (!occRow) return c.json({ error: 'occurrence_not_found' }, 404);
+  const task = await db.query.tasks.findFirst({
+    where: eq(tasks.id, occRow.taskId),
+  });
+  if (!task) return c.json({ error: 'occurrence_not_found' }, 404);
+
+  // Same membership check as complete.
+  const member = await db.query.familyMembers.findFirst({
+    where: and(
+      eq(familyMembers.familyId, task.familyId),
+      eq(familyMembers.userId, user.id),
+    ),
+  });
+  if (!member) return c.json({ error: 'forbidden' }, 403);
+
+  if (!occRow.scheduledDate) {
+    return c.json({ ok: false, error: 'no_date_to_snooze' }, 409);
+  }
+  const next = new Date(`${occRow.scheduledDate}T00:00:00Z`);
+  next.setUTCDate(next.getUTCDate() + 1);
+  const targetIso = next.toISOString().slice(0, 10);
+  try {
+    const updated = await rescheduleOccurrence({
+      occurrence: { ...occRow, task },
+      scheduledDate: targetIso,
+    });
+    return c.json({ ok: true, newDate: updated.scheduledDate });
+  } catch (err) {
+    return c.json({ ok: false, error: (err as Error).message }, 409);
+  }
 });

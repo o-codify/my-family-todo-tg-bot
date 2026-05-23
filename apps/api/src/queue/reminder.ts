@@ -267,7 +267,25 @@ export async function runReminder(input: {
   const text = isEn
     ? `⏰ Reminder${when}: ${input.taskTitle} — ${lead}`
     : `⏰ Напоминание${when}: ${input.taskTitle} — ${lead}`;
-  await sendBotMessage({ chatId: Number(user.telegramId), text });
+  // Inline keyboard — three quick actions on every reminder so the user
+  // can dispatch from Telegram itself without opening the miniapp.
+  // callback_data limit is 64 bytes; `<action>:<uuid>` is 7 + 36 = 43.
+  await sendBotMessage({
+    chatId: Number(user.telegramId),
+    text,
+    inlineKeyboard: [
+      [
+        {
+          text: isEn ? '✓ Done' : '✓ Готово',
+          callback_data: `occ-done:${input.occurrenceId}`,
+        },
+        {
+          text: isEn ? '⏰ Tomorrow' : '⏰ Завтра',
+          callback_data: `occ-tomorrow:${input.occurrenceId}`,
+        },
+      ],
+    ],
+  });
 }
 
 async function tryInsertLog(userId: string, kind: string, dedupeKey: string): Promise<boolean> {
