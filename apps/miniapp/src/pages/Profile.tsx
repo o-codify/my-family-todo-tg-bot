@@ -111,6 +111,17 @@ export function Profile({
       api.assignMemberRole(family.id, input.userId, input.roleId),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['members', family.id] }),
   });
+  const transferOwnership = useMutation({
+    mutationFn: (toUserId: string) =>
+      api.transferOwnership(family.id, toUserId),
+    onSuccess: () => {
+      // Invalidate everything role-related — caller is no longer Owner,
+      // and the new owner's badge needs to appear in member list. The
+      // outer ['families'] query carries each family's per-user role.
+      queryClient.invalidateQueries({ queryKey: ['members', family.id] });
+      queryClient.invalidateQueries({ queryKey: ['families'] });
+    },
+  });
   const rolesQuery = useQuery({
     queryKey: ['roles', family.id],
     queryFn: () => api.listRoles(family.id),
@@ -288,6 +299,9 @@ export function Profile({
             roles={rolesQuery.data?.roles ?? []}
             canKick={canKick && target.role !== 'Owner'}
             canManageRoles={canManageRoles && target.role !== 'Owner'}
+            // Transfer is intrinsically owner-only (gated server-side too).
+            // We additionally hide the action on the owner's own row.
+            canTransferOwnership={isFamilyOwner && target.id !== me.id}
             onClose={() => setMemberActionId(null)}
             onKick={() => {
               if (
@@ -302,6 +316,16 @@ export function Profile({
             onAssignRole={(roleId) => {
               assignRole.mutate({ userId: target.id, roleId });
               setMemberActionId(null);
+            }}
+            onTransferOwnership={() => {
+              if (
+                window.confirm(
+                  t('profile.member.confirmTransferOwner', { name: target.name }),
+                )
+              ) {
+                transferOwnership.mutate(target.id);
+                setMemberActionId(null);
+              }
             }}
           />
         );
@@ -622,21 +646,29 @@ function MemberActionsSheet({
   roles,
   canKick,
   canManageRoles,
+  canTransferOwnership,
   onClose,
   onKick,
   onAssignRole,
+  onTransferOwnership,
 }: {
   t: T;
   target: Member;
   roles: { id: string; name: string; isSystem: boolean }[];
   canKick: boolean;
   canManageRoles: boolean;
+  /** Caller is the current Owner and the target is someone else.
+   *  Surfaces the "Make Owner" action which calls the dedicated
+   *  /transfer-owner endpoint (different flow from role assignment). */
+  canTransferOwnership: boolean;
   onClose: () => void;
   onKick: () => void;
   onAssignRole: (roleId: string) => void;
+  onTransferOwnership: () => void;
 }) {
-  // Hide Owner from the role-picker — making someone Owner is *transfer of
-  // ownership*, which is a different flow (not implemented yet).
+  // Hide Owner from the role-picker — making someone Owner goes through
+  // the dedicated transfer flow below (different invariants: only one
+  // owner at a time, demotes the previous one).
   const assignableRoles = roles.filter((r) => r.name !== 'Owner');
   const [showRoles, setShowRoles] = useState(false);
   const isEn = t.locale === 'en';
@@ -706,6 +738,23 @@ function MemberActionsSheet({
               })}
             </>
           )}
+          {canTransferOwnership && !showRoles && (
+            <div
+              className="wf-card compact"
+              onClick={() => close(onTransferOwnership)}
+              style={{ cursor: 'pointer', marginBottom: 4 }}
+            >
+              <div className="wf-spread">
+                <div className="wf-row wf-gap-8">
+                  <Icon name="star" />
+                  <span className="wf-label">
+                    {isEn ? 'Make Owner' : 'Передать владение'}
+                  </span>
+                </div>
+                <Icon name="chevR" />
+              </div>
+            </div>
+          )}
           {canKick && !showRoles && (
             <div
               className="wf-card compact"
@@ -725,7 +774,7 @@ function MemberActionsSheet({
               </div>
             </div>
           )}
-          {!canKick && !canManageRoles && (
+          {!canKick && !canManageRoles && !canTransferOwnership && (
             <span className="wf-hint" style={{ display: 'block', padding: 6 }}>
               {isEn ? 'No actions available.' : 'Нет доступных действий.'}
             </span>

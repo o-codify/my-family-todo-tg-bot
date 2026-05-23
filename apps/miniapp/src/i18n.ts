@@ -544,6 +544,10 @@ const DICT: Record<string, Record<Locale, string>> = {
     ru: 'Удалить {name} из семьи?',
     en: 'Remove {name} from the family?',
   },
+  'profile.member.confirmTransferOwner': {
+    ru: 'Передать владение семьёй {name}? Ты станешь обычным взрослым (Adult) и потеряешь права владельца.',
+    en: 'Transfer family ownership to {name}? You will be demoted to Adult and lose owner-only powers.',
+  },
 
   // ─── language picker ───────────────────────────────────────────────
   'language.picker.title': { ru: 'Язык интерфейса', en: 'Interface language' },

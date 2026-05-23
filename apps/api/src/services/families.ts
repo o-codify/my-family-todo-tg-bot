@@ -224,6 +224,103 @@ export async function deleteFamily(familyId: string): Promise<void> {
   await db.delete(families).where(eq(families.id, familyId));
 }
 
+/**
+ * Owner-only: hand the family's ownership over to another existing
+ * member. Atomic so the family is never without an owner:
+ *   1. Move `families.ownerId` to the new user.
+ *   2. Assign the new user the system "Owner" role (it always exists
+ *      per family — created at family-create time).
+ *   3. Demote the old owner to "Adult" so they keep useful permissions
+ *      but lose owner-exclusive ones (e.g. transferring back).
+ *
+ * Errors:
+ *   - `family_not_found` — bad familyId
+ *   - `not_owner`        — caller isn't the current owner
+ *   - `not_member`       — target user isn't in the family
+ *   - `same_user`        — caller transferring to themselves
+ *   - `missing_roles`    — defensive; the Owner/Adult system roles for
+ *                          this family don't exist (shouldn't happen).
+ */
+export async function transferOwnership(input: {
+  familyId: string;
+  fromUserId: string;
+  toUserId: string;
+}): Promise<
+  | 'ok'
+  | 'family_not_found'
+  | 'not_owner'
+  | 'not_member'
+  | 'same_user'
+  | 'missing_roles'
+> {
+  if (input.fromUserId === input.toUserId) return 'same_user';
+
+  return await db.transaction(async (tx) => {
+    const family = await tx.query.families.findFirst({
+      where: eq(families.id, input.familyId),
+    });
+    if (!family) return 'family_not_found' as const;
+    if (family.ownerId !== input.fromUserId) return 'not_owner' as const;
+
+    const targetMembership = await tx.query.familyMembers.findFirst({
+      where: and(
+        eq(familyMembers.familyId, input.familyId),
+        eq(familyMembers.userId, input.toUserId),
+      ),
+    });
+    if (!targetMembership) return 'not_member' as const;
+
+    // System roles are seeded per-family at create time. They're
+    // identified by `(familyId, name=…)` where the name is the
+    // display string ("Owner" / "Adult" / "Child"). We look them
+    // up rather than caching IDs because the user could have
+    // renamed/duped them — but the display still maps deterministically.
+    const ownerRole = await tx.query.roles.findFirst({
+      where: and(
+        eq(roles.familyId, input.familyId),
+        eq(roles.name, ROLE_DISPLAY.owner),
+      ),
+    });
+    const adultRole = await tx.query.roles.findFirst({
+      where: and(
+        eq(roles.familyId, input.familyId),
+        eq(roles.name, ROLE_DISPLAY.adult),
+      ),
+    });
+    if (!ownerRole || !adultRole) return 'missing_roles' as const;
+
+    await tx
+      .update(families)
+      .set({ ownerId: input.toUserId })
+      .where(eq(families.id, input.familyId));
+
+    // Promote target to Owner role.
+    await tx
+      .update(familyMembers)
+      .set({ roleId: ownerRole.id })
+      .where(
+        and(
+          eq(familyMembers.familyId, input.familyId),
+          eq(familyMembers.userId, input.toUserId),
+        ),
+      );
+
+    // Demote previous owner to Adult — they keep most family-management
+    // powers but lose owner-exclusive ones (transfer / delete family).
+    await tx
+      .update(familyMembers)
+      .set({ roleId: adultRole.id })
+      .where(
+        and(
+          eq(familyMembers.familyId, input.familyId),
+          eq(familyMembers.userId, input.fromUserId),
+        ),
+      );
+
+    return 'ok' as const;
+  });
+}
+
 export async function leaveFamily(input: {
   familyId: string;
   userId: string;

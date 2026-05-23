@@ -22,6 +22,7 @@ import {
   rotateInviteCode,
   serializeFamily,
   serializeRole,
+  transferOwnership,
   updateFamily,
 } from '../services/families';
 
@@ -145,6 +146,40 @@ familiesRouter.delete('/:familyId/members/:userId', requireFamily, async (c) => 
   if (result === 'cannot_kick_owner') return c.json({ error: 'cannot_kick_owner' }, 409);
   if (result === 'not_member') return c.json({ error: 'not_member' }, 404);
   return c.body(null, 204);
+});
+
+/**
+ * POST /api/v1/families/:familyId/transfer-owner — hand ownership to
+ * another member. Owner-only (we check via families.ownerId, not the
+ * permission system — ownership is intrinsic, not delegable). Body:
+ * { toUserId: uuid }. On success the caller is demoted to Adult.
+ */
+familiesRouter.post('/:familyId/transfer-owner', async (c) => {
+  const user = c.get('user');
+  const familyId = c.req.param('familyId');
+  if (!familyId) return c.json({ error: 'family_id_required' }, 400);
+  const body = (await c.req.json().catch(() => null)) as { toUserId?: unknown } | null;
+  const toUserId = typeof body?.toUserId === 'string' ? body.toUserId : null;
+  if (!toUserId) return c.json({ error: 'to_user_id_required' }, 400);
+
+  const result = await transferOwnership({
+    familyId,
+    fromUserId: user.id,
+    toUserId,
+  });
+  if (result === 'family_not_found') return c.json({ error: 'family_not_found' }, 404);
+  if (result === 'not_owner') return c.json({ error: 'not_owner' }, 403);
+  if (result === 'not_member') return c.json({ error: 'not_member' }, 404);
+  if (result === 'same_user') return c.json({ error: 'same_user' }, 400);
+  if (result === 'missing_roles') return c.json({ error: 'missing_roles' }, 500);
+
+  // Pub-sub so both the old and new owner's clients refresh role state.
+  // 'families' invalidates the listMyFamilies query (which carries each
+  // user's role per family), 'members' refreshes the per-family member
+  // list so the new owner badge updates instantly.
+  void publishFamilyEvent(familyId, { kind: 'invalidate', scope: 'families' });
+  void publishFamilyEvent(familyId, { kind: 'invalidate', scope: 'members' });
+  return c.json({ ok: true });
 });
 
 familiesRouter.post('/:familyId/leave', async (c) => {

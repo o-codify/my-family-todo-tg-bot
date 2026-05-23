@@ -457,6 +457,13 @@ export const api = {
     request<null>(`/api/v1/families/${familyId}/members/${userId}`, {
       method: 'DELETE',
     }),
+  /** Owner-only — hand the family's ownership over to another existing
+   *  member. The caller is automatically demoted to Adult. */
+  transferOwnership: (familyId: string, toUserId: string) =>
+    request<{ ok: true }>(
+      `/api/v1/families/${familyId}/transfer-owner`,
+      { method: 'POST', body: JSON.stringify({ toUserId }) },
+    ),
 
   listTasks: (familyId: string) =>
     request<{ tasks: TaskDto[] }>(`/api/v1/families/${familyId}/tasks`),
