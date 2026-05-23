@@ -778,6 +778,11 @@ const DICT: Record<string, Record<Locale, string>> = {
   'ics.connect': { ru: 'Подключить', en: 'Connect' },
   'ics.urlLabel': { ru: 'Ссылка iCal', en: 'iCal URL' },
   'ics.copy': { ru: 'Скопировать', en: 'Copy' },
+  'ics.copied': { ru: '✓ Скопировано', en: '✓ Copied' },
+  'common.copyFailed': {
+    ru: 'Не удалось скопировать',
+    en: 'Could not copy',
+  },
   'ics.rotate': { ru: 'Сменить', en: 'Rotate' },
   'ics.revoke': { ru: 'Отключить', en: 'Revoke' },
   'ics.subscribe': {

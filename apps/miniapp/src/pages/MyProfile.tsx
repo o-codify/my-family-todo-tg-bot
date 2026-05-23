@@ -6,6 +6,7 @@ import { BadgeGrid } from '../components/BadgeGrid';
 import { BottomSheet } from '../components/BottomSheet';
 import { ListRow } from '../components/ListRow';
 import { PageHeader } from '../components/PageHeader';
+import { useToast } from '../components/Toast';
 import {
   DigestPicker,
   LanguagePicker,
@@ -547,6 +548,7 @@ function pluralDaysI18n(n: number, isEn: boolean): string {
  */
 function IcsSection({ family }: { family: FamilySummary }) {
   const t = useT();
+  const toast = useToast();
   const queryClient = useQueryClient();
   const tokenQuery = useQuery({
     queryKey: ['ics-token', family.id],
@@ -618,45 +620,66 @@ function IcsSection({ family }: { family: FamilySummary }) {
           >
             {url}
           </div>
-          {/* iOS: tap-to-subscribe via webcal://. iOS Calendar
-              auto-recognises the scheme and pre-fills the "Add
-              Subscription" dialog with the URL — no manual paste, no
-              scheme-mangling. On Android/desktop the same link
-              triggers a download/handler if a calendar app is wired
-              up; otherwise users still have the Copy button. */}
+          {/* iOS subscribe: a real <a> element with webcal:// href —
+              Telegram.WebApp.openLink only handles http(s), so the
+              previous JS-driven button silently no-op'd on iOS. An
+              anchor tag lets the OS take over via its native scheme
+              handler, which on iOS pops the "Subscribe to Calendar"
+              dialog. We style the link as a button. */}
           {webcal && (
-            <button
-              type="button"
+            <a
+              href={webcal}
+              // `noopener` is good hygiene; not strictly needed since
+              // webcal:// doesn't open a JS-capable context.
+              rel="noopener"
               className="wf-btn primary"
-              onClick={() => {
-                const tg = (
-                  window as unknown as {
-                    Telegram?: { WebApp?: { openLink: (u: string) => void } };
-                  }
-                ).Telegram?.WebApp;
-                if (tg?.openLink) {
-                  tg.openLink(webcal);
-                } else {
-                  window.location.href = webcal;
-                }
-              }}
               style={{
+                display: 'block',
+                textAlign: 'center',
+                textDecoration: 'none',
                 marginTop: 8,
-                padding: '6px 12px',
+                padding: '8px 12px',
                 fontSize: 13,
                 cursor: 'pointer',
                 border: 'none',
-                width: '100%',
+                color: 'var(--paper)',
               }}
             >
               {t('ics.subscribe')}
-            </button>
+            </a>
           )}
           <div className="wf-row wf-gap-6" style={{ marginTop: 8 }}>
             <button
               type="button"
               className="wf-btn"
-              onClick={() => url && navigator.clipboard?.writeText(url)}
+              onClick={async () => {
+                if (!url) return;
+                // The Clipboard API isn't available in all Telegram
+                // WebView versions — fall back to a hidden textarea +
+                // execCommand for the legacy path, then surface a
+                // toast either way so the tap doesn't feel like a
+                // no-op (which was the original complaint).
+                try {
+                  if (navigator.clipboard?.writeText) {
+                    await navigator.clipboard.writeText(url);
+                  } else {
+                    const ta = document.createElement('textarea');
+                    ta.value = url;
+                    ta.style.position = 'fixed';
+                    ta.style.left = '-9999px';
+                    document.body.appendChild(ta);
+                    ta.select();
+                    document.execCommand('copy');
+                    document.body.removeChild(ta);
+                  }
+                  toast.show({ message: t('ics.copied'), variant: 'success' });
+                } catch {
+                  toast.show({
+                    message: t('common.copyFailed') ?? 'Не удалось скопировать',
+                    variant: 'error',
+                  });
+                }
+              }}
               style={{ flex: 1, fontSize: 12, padding: '4px 10px', cursor: 'pointer' }}
             >
               {t('ics.copy')}
