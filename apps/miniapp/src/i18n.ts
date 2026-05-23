@@ -675,6 +675,27 @@ const DICT: Record<string, Record<Locale, string>> = {
   // ─── inbox ─────────────────────────────────────────────────────────
   'inbox.title': { ru: 'Входящие', en: 'Inbox' },
   'inbox.transfers': { ru: 'Передачи мне', en: 'Transfers to me' },
+  'inbox.approvals': { ru: 'На подтверждение', en: 'Awaiting approval' },
+  'create.field.requiresApproval': {
+    ru: 'Требует одобрения',
+    en: 'Requires approval',
+  },
+  'create.field.requiresApproval.hint': {
+    ru: 'Дети сдают на проверку родителю',
+    en: 'Kids submit to a parent',
+  },
+  'task.status.pending_approval': {
+    ru: 'Ждёт одобрения',
+    en: 'Awaiting approval',
+  },
+  'task.rejection.label': { ru: 'Отклонено', en: 'Rejected' },
+  'inbox.approval.approve': { ru: 'Подтвердить', en: 'Approve' },
+  'inbox.approval.reject': { ru: 'Отклонить', en: 'Reject' },
+  'inbox.approval.reject.confirm': { ru: 'Отклонить', en: 'Confirm reject' },
+  'inbox.approval.reason.placeholder': {
+    ru: 'Причина (необязательно)',
+    en: 'Reason (optional)',
+  },
   'inbox.rewards': { ru: 'Запросы призов', en: 'Reward requests' },
   'inbox.reward.wants': { ru: 'хочет приз', en: 'wants a reward' },
   'inbox.reward.reject': { ru: 'Отказать', en: 'Reject' },

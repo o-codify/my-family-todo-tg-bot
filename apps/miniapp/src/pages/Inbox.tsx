@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   api,
@@ -65,6 +65,16 @@ export function Inbox({ me, family, onBack, onOpenDrawer }: Props) {
     queryKey: ['redemptions', family.id, 'pending'],
     queryFn: () => api.listRedemptions(family.id, 'pending'),
   });
+  // Pending-approval queue — only fetched (and rendered) for users with
+  // the `task.approve` permission. Family-summary's `myRole.permissions`
+  // tells us up-front, so no extra round-trip when the section is empty
+  // for a child viewer.
+  const canApprove = family.myRole.permissions.includes('task.approve');
+  const approvalsQuery = useQuery({
+    queryKey: ['pending-approvals', family.id],
+    queryFn: () => api.listPendingApprovals(family.id),
+    enabled: canApprove,
+  });
 
   const members = useMemo(
     () => (membersQuery.data?.members ?? []).map(memberFromDto),
@@ -97,17 +107,55 @@ export function Inbox({ me, family, onBack, onOpenDrawer }: Props) {
     mutationFn: (id: string) => api.rejectRedemption(family.id, id),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['redemptions', family.id] }),
   });
+  const approveMut = useMutation({
+    mutationFn: (id: string) => api.approveOccurrence(family.id, id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['pending-approvals', family.id] });
+      queryClient.invalidateQueries({ queryKey: ['occurrences', family.id] });
+    },
+  });
+  const rejectApprovalMut = useMutation({
+    mutationFn: (input: { id: string; reason: string }) =>
+      api.rejectOccurrence(family.id, input.id, input.reason),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['pending-approvals', family.id] });
+      queryClient.invalidateQueries({ queryKey: ['occurrences', family.id] });
+    },
+  });
 
   const transfers = transfersQuery.data?.transfers ?? [];
   const redemptions = redemptionsQuery.data?.redemptions ?? [];
+  const approvals = approvalsQuery.data?.occurrences ?? [];
 
-  const isAnyLoading = transfersQuery.isLoading || redemptionsQuery.isLoading;
+  const isAnyLoading =
+    transfersQuery.isLoading || redemptionsQuery.isLoading || approvalsQuery.isLoading;
 
   return (
     <WfBody onBack={onBack}>
       <PageHeader title={t('inbox.title')} onBack={onBack} onOpenDrawer={onOpenDrawer} />
 
       {isAnyLoading && <span className="wf-hint">{t('common.loading')}</span>}
+
+      {approvals.length > 0 && (
+        <>
+          <span className="wf-h3" style={{ marginTop: 4 }}>
+            {t('inbox.approvals')} · {approvals.length}
+          </span>
+          {approvals.map((occ) => (
+            <ApprovalRow
+              key={occ.id}
+              occ={occ}
+              completer={
+                occ.completedBy ? (memberById.get(occ.completedBy) ?? null) : null
+              }
+              tr={t}
+              onApprove={() => approveMut.mutate(occ.id)}
+              onReject={(reason) => rejectApprovalMut.mutate({ id: occ.id, reason })}
+              pending={approveMut.isPending || rejectApprovalMut.isPending}
+            />
+          ))}
+        </>
+      )}
 
       {transfers.length > 0 && (
         <>
@@ -182,7 +230,10 @@ export function Inbox({ me, family, onBack, onOpenDrawer }: Props) {
         </>
       )}
 
-      {!isAnyLoading && transfers.length === 0 && redemptions.length === 0 && (
+      {!isAnyLoading &&
+        transfers.length === 0 &&
+        redemptions.length === 0 &&
+        approvals.length === 0 && (
         <div className="wf-card subtle" style={{ textAlign: 'center', padding: 24 }}>
           <div style={{ fontSize: 36 }}>📭</div>
           <span className="wf-h3" style={{ display: 'block', marginTop: 8 }}>
@@ -252,6 +303,128 @@ function TransferRow({
         >
           {tr('inbox.transfer.accept')}
         </button>
+      </div>
+    </div>
+  );
+}
+
+function ApprovalRow({
+  occ,
+  completer,
+  tr,
+  onApprove,
+  onReject,
+  pending,
+}: {
+  occ: OccurrenceDto;
+  completer: Member | null;
+  tr: TFn;
+  onApprove: () => void;
+  onReject: (reason: string) => void;
+  pending: boolean;
+}) {
+  // Inline "reject with reason" — the textarea expands when the user
+  // taps Reject the first time, so the simple case (approve in one tap)
+  // stays a single click and rejection requires a deliberate second step.
+  const [rejecting, setRejecting] = useState(false);
+  const [reason, setReason] = useState('');
+  const ts = occ.completedAt
+    ? new Date(occ.completedAt).toLocaleString(tr.locale === 'en' ? 'en-US' : 'ru-RU')
+    : '';
+
+  return (
+    <div className="wf-card">
+      <div className="wf-row wf-gap-10">
+        <Av m={completer} size="md" />
+        <div className="wf-col" style={{ flex: 1, minWidth: 0 }}>
+          <span className="wf-label">
+            {occ.task.title}
+            {occ.task.points > 0 && (
+              <span className="wf-tiny" style={{ marginLeft: 6, color: 'var(--hint)' }}>
+                · +{occ.task.points} ⭐
+              </span>
+            )}
+          </span>
+          <span className="wf-hint">
+            {completer?.name ?? '—'} · {ts}
+          </span>
+        </div>
+        {(occ.photoIds?.length ?? 0) > 0 && (
+          <Tag>📷 {occ.photoIds?.length}</Tag>
+        )}
+      </div>
+
+      {rejecting && (
+        <div className="wf-col" style={{ gap: 6, marginTop: 8 }}>
+          <textarea
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            placeholder={tr('inbox.approval.reason.placeholder')}
+            rows={2}
+            maxLength={280}
+            style={{
+              border: '1.5px solid var(--line)',
+              borderRadius: 8,
+              padding: '6px 10px',
+              background: 'var(--paper)',
+              font: 'inherit',
+              color: 'var(--ink)',
+              fontSize: 13,
+              resize: 'vertical',
+            }}
+          />
+        </div>
+      )}
+
+      <div className="wf-row wf-gap-8" style={{ marginTop: 10 }}>
+        {rejecting ? (
+          <>
+            <button
+              className="wf-btn"
+              onClick={() => {
+                setRejecting(false);
+                setReason('');
+              }}
+              disabled={pending}
+              style={{ cursor: pending ? 'default' : 'pointer' }}
+            >
+              {tr('common.cancel')}
+            </button>
+            <button
+              className="wf-btn"
+              onClick={() => onReject(reason)}
+              disabled={pending}
+              style={{
+                flex: 1,
+                cursor: pending ? 'default' : 'pointer',
+                background: 'var(--danger, #d33)',
+                color: 'white',
+                border: 'none',
+              }}
+            >
+              {tr('inbox.approval.reject.confirm')}
+            </button>
+          </>
+        ) : (
+          <>
+            <button
+              className="wf-btn"
+              onClick={() => setRejecting(true)}
+              disabled={pending}
+              style={{ cursor: pending ? 'default' : 'pointer' }}
+            >
+              {tr('inbox.approval.reject')}
+            </button>
+            <button
+              className="wf-btn primary"
+              onClick={onApprove}
+              disabled={pending}
+              style={{ flex: 1, cursor: pending ? 'default' : 'pointer', border: 'none' }}
+            >
+              {tr('inbox.approval.approve')}
+            </button>
+          </>
+        )}
       </div>
     </div>
   );

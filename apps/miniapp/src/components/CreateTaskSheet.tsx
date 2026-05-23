@@ -99,6 +99,7 @@ export function CreateTaskSheet({
         cooldownDays: null as number | null,
         points: 0,
         photoRequired: false,
+        requiresApproval: false,
         deadlineAt: null as string | null,
         assigneeId: me.id as string | null,
         queueUserIds: null as string[] | null,
@@ -118,6 +119,7 @@ export function CreateTaskSheet({
   const [cooldownDays, setCooldownDays] = useState<number | null>(initial.cooldownDays);
   const [points, setPoints] = useState(initial.points);
   const [photoRequired, setPhotoRequired] = useState(initial.photoRequired);
+  const [requiresApproval, setRequiresApproval] = useState(initial.requiresApproval);
   const [deadlineAt, setDeadlineAt] = useState<string | null>(initial.deadlineAt);
   const [assigneeId, setAssigneeId] = useState<string | null>(initial.assigneeId);
   // queueUserIds: explicit roster for `queued` tasks. `null` means "all
@@ -162,6 +164,7 @@ export function CreateTaskSheet({
         queueUserIds,
         points,
         photoRequired,
+        requiresApproval,
         deadlineAt,
         noDate,
         singleShot,
@@ -688,6 +691,45 @@ export function CreateTaskSheet({
           </div>
         </div>
 
+        {/* Approval gate — adult-controlled: when on, child completions
+            land in "Awaiting approval" instead of going straight to done.
+            Same toggle visual as photoRequired to keep the row pattern. */}
+        <div
+          className="wf-box wf-spread"
+          style={{ padding: '6px 10px', cursor: 'pointer', marginTop: 6 }}
+          onClick={() => setRequiresApproval(!requiresApproval)}
+        >
+          <div className="wf-col" style={{ gap: 2 }}>
+            <span className="wf-label">{t('create.field.requiresApproval')}</span>
+            <span className="wf-tiny" style={{ color: 'var(--hint)' }}>
+              {t('create.field.requiresApproval.hint')}
+            </span>
+          </div>
+          <span
+            style={{
+              width: 28,
+              height: 16,
+              background: requiresApproval ? 'var(--ink)' : 'var(--softline)',
+              borderRadius: 999,
+              position: 'relative',
+              flex: 'none',
+            }}
+          >
+            <span
+              style={{
+                position: 'absolute',
+                left: requiresApproval ? 14 : 2,
+                top: 2,
+                width: 12,
+                height: 12,
+                borderRadius: 999,
+                background: 'var(--paper)',
+                transition: 'left 0.15s ease',
+              }}
+            />
+          </span>
+        </div>
+
         {mutation.error && (
           <div
             className="wf-card"
@@ -787,6 +829,7 @@ function buildPayload(input: {
   queueUserIds: string[] | null;
   points: number;
   photoRequired: boolean;
+  requiresApproval: boolean;
   deadlineAt: string | null;
   noDate: boolean;
   singleShot: boolean;
@@ -801,6 +844,7 @@ function buildPayload(input: {
     queueUserIds: input.kind === 'queued' ? input.queueUserIds : undefined,
     points: input.points,
     photoRequired: input.photoRequired,
+    requiresApproval: input.requiresApproval,
     deadlineAt: input.deadlineAt,
     // singleShot + cooldownDays + subtasks piggyback on the API client's
     // permissive payload type — the backend's createTaskSchema accepts them.
@@ -891,6 +935,7 @@ function extractFromTask(t: TaskDto): {
   cooldownDays: number | null;
   points: number;
   photoRequired: boolean;
+  requiresApproval: boolean;
   deadlineAt: string | null;
   assigneeId: string | null;
   queueUserIds: string[] | null;
@@ -928,6 +973,7 @@ function extractFromTask(t: TaskDto): {
     cooldownDays: t.cooldownDays,
     points: t.points,
     photoRequired: t.photoRequired,
+    requiresApproval: t.requiresApproval,
     deadlineAt: t.deadlineAt,
     assigneeId: t.assigneeId,
     queueUserIds: t.queueUserIds,

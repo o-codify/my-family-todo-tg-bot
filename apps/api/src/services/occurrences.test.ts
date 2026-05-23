@@ -15,6 +15,7 @@ function makeTask(overrides: Partial<TaskRow>): TaskRow {
     deadlineAt: null,
     points: 0,
     photoRequired: false,
+    requiresApproval: false,
     singleShot: false,
     cooldownDays: null,
     subtasksTemplate: null,

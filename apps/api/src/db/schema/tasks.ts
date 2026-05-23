@@ -22,6 +22,11 @@ export const occurrenceStatusEnum = pgEnum('occurrence_status', [
   'done',
   'skipped',
   'expired',
+  /** Completion submitted by a child but not yet approved by a parent.
+   *  `completedAt` and `completedBy` are filled in; points are NOT yet
+   *  awarded — that happens when an adult/owner flips the row to 'done'
+   *  via /approve, or it reverts to 'pending' via /reject. */
+  'pending_approval',
 ]);
 
 export type TaskScheduleOneoff = { kind: 'oneoff'; date: string; time?: string };
@@ -59,6 +64,10 @@ export const tasks = pgTable(
     deadlineAt: timestamp('deadline_at', { withTimezone: true }),
     points: integer('points').notNull().default(0),
     photoRequired: boolean('photo_required').notNull().default(false),
+    /** When true, completions by Child-role members enter 'pending_approval'
+     *  instead of going straight to 'done'. A parent (Adult/Owner role)
+     *  then approves or rejects. Adult/owner completers skip the gate. */
+    requiresApproval: boolean('requires_approval').notNull().default(false),
     singleShot: boolean('single_shot').notNull().default(false),
     cooldownDays: integer('cooldown_days'),
     subtasksTemplate: jsonb('subtasks_template').$type<SubtaskTemplateItem[]>(),
@@ -95,6 +104,14 @@ export const taskOccurrences = pgTable(
     completedBy: uuid('completed_by').references(() => users.id, { onDelete: 'set null' }),
     photoIds: uuid('photo_ids').array(),
     pointsAwarded: integer('points_awarded').notNull().default(0),
+    /** Set when an Adult/Owner approves a 'pending_approval' completion. */
+    approvedAt: timestamp('approved_at', { withTimezone: true }),
+    approvedBy: uuid('approved_by').references(() => users.id, { onDelete: 'set null' }),
+    /** Set when an Adult/Owner rejects a 'pending_approval' completion;
+     *  the row also flips back to status='pending' so the kid can retry. */
+    rejectedAt: timestamp('rejected_at', { withTimezone: true }),
+    rejectedBy: uuid('rejected_by').references(() => users.id, { onDelete: 'set null' }),
+    rejectionReason: text('rejection_reason'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => ({

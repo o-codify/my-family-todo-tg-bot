@@ -9,11 +9,14 @@ import {
 import { tgAuth, type AuthVariables } from '../middleware/auth';
 import { requireFamily, type FamilyVariables } from '../middleware/family';
 import {
+  approveOccurrence,
   completeOccurrence,
   getOccurrenceInFamily,
   listFamilyOccurrences,
+  listPendingApprovals,
   OccurrenceActionError,
   patchOccurrenceSubtasks,
+  rejectOccurrence,
   rescheduleOccurrence,
   serializeOccurrence,
   uncompleteOccurrence,
@@ -133,6 +136,73 @@ occurrencesRouter.post(
     }
   },
 );
+
+/** List 'pending_approval' occurrences in the family. Caller must hold
+ *  the `task.approve` permission (Inbox surfaces this section to
+ *  approvers only). */
+occurrencesRouter.get('/pending-approvals/list', async (c) => {
+  if (!c.get('permissions').includes('task.approve')) {
+    return c.json({ error: 'forbidden', permission: 'task.approve' }, 403);
+  }
+  const rows = await listPendingApprovals(c.get('familyId'));
+  return c.json({ occurrences: rows.map(serializeOccurrence) });
+});
+
+occurrencesRouter.post('/:occurrenceId/approve', async (c) => {
+  if (!c.get('permissions').includes('task.approve')) {
+    return c.json({ error: 'forbidden', permission: 'task.approve' }, 403);
+  }
+  const user = c.get('user');
+  const familyId = c.get('familyId');
+  const occ = await getOccurrenceInFamily(c.req.param('occurrenceId'), familyId);
+  if (!occ) return c.json({ error: 'occurrence_not_found' }, 404);
+  try {
+    const updated = await approveOccurrence({
+      occurrenceId: occ.id,
+      approverId: user.id,
+    });
+    if (!updated) return c.json({ error: 'occurrence_not_found' }, 404);
+    return c.json({ occurrence: serializeOccurrence({ ...updated, task: occ.task }) });
+  } catch (err) {
+    if (err instanceof OccurrenceActionError) {
+      return c.json({ error: err.code }, 409);
+    }
+    throw err;
+  }
+});
+
+occurrencesRouter.post('/:occurrenceId/reject', async (c) => {
+  if (!c.get('permissions').includes('task.approve')) {
+    return c.json({ error: 'forbidden', permission: 'task.approve' }, 403);
+  }
+  const user = c.get('user');
+  const familyId = c.get('familyId');
+  const occ = await getOccurrenceInFamily(c.req.param('occurrenceId'), familyId);
+  if (!occ) return c.json({ error: 'occurrence_not_found' }, 404);
+  // Reason is optional, plain text. We don't enforce schema validation
+  // here — body is small and the field is non-critical.
+  let reason: string | null = null;
+  try {
+    const body = (await c.req.json()) as { reason?: string };
+    if (typeof body?.reason === 'string') reason = body.reason;
+  } catch {
+    // Empty body is fine.
+  }
+  try {
+    const updated = await rejectOccurrence({
+      occurrenceId: occ.id,
+      rejecterId: user.id,
+      reason,
+    });
+    if (!updated) return c.json({ error: 'occurrence_not_found' }, 404);
+    return c.json({ occurrence: serializeOccurrence({ ...updated, task: occ.task }) });
+  } catch (err) {
+    if (err instanceof OccurrenceActionError) {
+      return c.json({ error: err.code }, 409);
+    }
+    throw err;
+  }
+});
 
 occurrencesRouter.post('/:occurrenceId/uncomplete', async (c) => {
   const user = c.get('user');

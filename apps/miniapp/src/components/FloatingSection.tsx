@@ -82,12 +82,18 @@ export function FloatingSection({
             photoIds: null,
             pointsAwarded: 0,
             availableAt: null,
+            approvedAt: null,
+            approvedBy: null,
+            rejectedAt: null,
+            rejectedBy: null,
+            rejectionReason: null,
             task: {
               id: ft.id,
               title: ft.title,
               type: ft.type,
               points: ft.points,
               photoRequired: ft.photoRequired,
+              requiresApproval: ft.requiresApproval,
               deadlineAt: ft.deadlineAt,
             },
           };

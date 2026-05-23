@@ -5,6 +5,11 @@ export const PERMISSIONS = [
   'task.delete.own',
   'task.delete.any',
   'task.complete.any',
+  /** Approve / reject a 'pending_approval' completion (kid → parent flow).
+   *  Granted to Owner + Adult by default. Members without this permission
+   *  who complete a `requiresApproval` task go through the pending gate
+   *  instead of straight to 'done'. */
+  'task.approve',
   'catalog.manage',
   'template.manage',
   'reward.manage',
@@ -30,6 +35,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<SystemRoleName, Permission[]> = {
     'task.delete.own',
     'task.delete.any',
     'task.complete.any',
+    'task.approve',
     'catalog.manage',
     'template.manage',
     'reward.manage',

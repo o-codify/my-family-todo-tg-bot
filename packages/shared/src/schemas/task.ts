@@ -41,6 +41,9 @@ export const createTaskSchema = z.object({
   deadlineAt: z.string().datetime().nullable().optional(),
   points: z.number().int().nonnegative().max(10_000).default(0),
   photoRequired: z.boolean().default(false),
+  /** When true, child-role members' completions land in 'pending_approval'
+   *  and require an Adult/Owner to approve. Adults skip the gate. */
+  requiresApproval: z.boolean().default(false),
   singleShot: z.boolean().default(false),
   cooldownDays: z.number().int().min(1).max(365).nullable().optional(),
   subtasks: z.array(z.object({ title: z.string().min(1).max(200) })).max(50).optional(),

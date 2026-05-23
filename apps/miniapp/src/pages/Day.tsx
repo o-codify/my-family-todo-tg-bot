@@ -320,12 +320,18 @@ export function Day({ me, family, iso, onBack, onOpenTask, onCreateTask }: Props
               photoIds: null,
               pointsAwarded: 0,
               availableAt: null,
+              approvedAt: null,
+              approvedBy: null,
+              rejectedAt: null,
+              rejectedBy: null,
+              rejectionReason: null,
               task: {
                 id: task.id,
                 title: task.title,
                 type: task.type,
                 points: task.points,
                 photoRequired: task.photoRequired,
+                requiresApproval: task.requiresApproval,
                 deadlineAt: task.deadlineAt,
               },
             };

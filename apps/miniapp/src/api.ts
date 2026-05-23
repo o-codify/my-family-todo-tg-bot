@@ -169,19 +169,25 @@ export type OccurrenceDto = {
   scheduledDate: string | null;
   scheduledTime: string | null;
   assigneeId: string | null;
-  status: 'pending' | 'done' | 'skipped' | 'expired';
+  status: 'pending' | 'done' | 'skipped' | 'expired' | 'pending_approval';
   subtasks: Array<{ id: string; title: string; position: number; done: boolean }> | null;
   completedAt: string | null;
   completedBy: string | null;
   photoIds: string[] | null;
   pointsAwarded: number;
   availableAt: string | null;
+  approvedAt: string | null;
+  approvedBy: string | null;
+  rejectedAt: string | null;
+  rejectedBy: string | null;
+  rejectionReason: string | null;
   task: {
     id: string;
     title: string;
     type: TaskType;
     points: number;
     photoRequired: boolean;
+    requiresApproval: boolean;
     deadlineAt: string | null;
   };
 };
@@ -198,6 +204,7 @@ export type TaskDto = {
   deadlineAt: string | null;
   points: number;
   photoRequired: boolean;
+  requiresApproval: boolean;
   singleShot: boolean;
   cooldownDays: number | null;
   subtasksTemplate: Array<{ id: string; title: string; position: number }> | null;
@@ -332,6 +339,8 @@ export type CreateTaskPayload = {
   queueUserIds?: string[] | null;
   points?: number;
   photoRequired?: boolean;
+  /** When true, child-role completions land in 'pending_approval'. */
+  requiresApproval?: boolean;
   /** Tag ids to attach. Server rewrites the task_tags join — omit to
    *  leave the existing attachments untouched (on PATCH). */
   tagIds?: string[];
@@ -446,6 +455,23 @@ export const api = {
     request<{ occurrence: OccurrenceDto }>(
       `/api/v1/families/${familyId}/occurrences/${occurrenceId}/uncomplete`,
       { method: 'POST' },
+    ),
+  /** Approve a 'pending_approval' occurrence — flips to done + awards points. */
+  approveOccurrence: (familyId: string, occurrenceId: string) =>
+    request<{ occurrence: OccurrenceDto }>(
+      `/api/v1/families/${familyId}/occurrences/${occurrenceId}/approve`,
+      { method: 'POST' },
+    ),
+  /** Reject a 'pending_approval' occurrence — flips back to pending with reason. */
+  rejectOccurrence: (familyId: string, occurrenceId: string, reason?: string) =>
+    request<{ occurrence: OccurrenceDto }>(
+      `/api/v1/families/${familyId}/occurrences/${occurrenceId}/reject`,
+      { method: 'POST', body: JSON.stringify({ reason: reason ?? '' }) },
+    ),
+  /** All pending_approval occurrences across the family (Inbox section). */
+  listPendingApprovals: (familyId: string) =>
+    request<{ occurrences: OccurrenceDto[] }>(
+      `/api/v1/families/${familyId}/occurrences/pending-approvals/list`,
     ),
   /** Move a pending occurrence to another calendar date (YYYY-MM-DD). */
   rescheduleOccurrence: (
