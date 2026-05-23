@@ -428,6 +428,7 @@ export async function addItem(input: {
       text: input.data.text,
       quantity: input.data.quantity ?? null,
       category: input.data.category,
+      emoji: input.data.emoji ?? null,
       assignedUserId: input.data.assignedUserId ?? null,
       createdByUserId: input.userId,
       position: nextPosition,
@@ -519,6 +520,7 @@ export async function updateItem(input: {
   if (input.patch.text !== undefined) next.text = input.patch.text;
   if (input.patch.quantity !== undefined) next.quantity = input.patch.quantity;
   if (input.patch.category !== undefined) next.category = input.patch.category;
+  if (input.patch.emoji !== undefined) next.emoji = input.patch.emoji;
   if (input.patch.assignedUserId !== undefined) {
     next.assignedUserId = input.patch.assignedUserId;
   }
@@ -647,6 +649,7 @@ export function serializeShoppingItem(row: ShoppingItemRow) {
     text: row.text,
     quantity: row.quantity,
     category: row.category as ShoppingCategory,
+    emoji: row.emoji,
     status: row.status as 'open' | 'bought',
     assignedUserId: row.assignedUserId,
     boughtByUserId: row.boughtByUserId,

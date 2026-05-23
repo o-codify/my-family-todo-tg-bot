@@ -280,6 +280,9 @@ export type ShoppingItemDto = {
   text: string;
   quantity: string | null;
   category: ShoppingCategory;
+  /** Per-item emoji override. When null, UI falls back to the
+   *  category's default glyph. */
+  emoji: string | null;
   status: 'open' | 'bought';
   assignedUserId: string | null;
   boughtByUserId: string | null;
@@ -605,6 +608,7 @@ export const api = {
       text: string;
       quantity?: string | null;
       category?: ShoppingCategory;
+      emoji?: string | null;
       catalogItemId?: string | null;
     },
   ) =>

@@ -89,6 +89,12 @@ export const shoppingItems = pgTable(
     text: text('text').notNull(),
     quantity: text('quantity'), // freeform: "2 шт", "500 г", null
     category: text('category').notNull().default('other'),
+    /** Per-item emoji override. When set, the UI shows this glyph
+     *  next to the item; when null, it falls back to the category's
+     *  default emoji. Picked from the catalog-style emoji palette
+     *  at create time so the user can express "milk = 🥛" but also
+     *  "Sergey's birthday cake = 🎂". */
+    emoji: text('emoji'),
     status: text('status').notNull().default('open'), // 'open' | 'bought'
     assignedUserId: uuid('assigned_user_id').references(() => users.id, {
       onDelete: 'set null',

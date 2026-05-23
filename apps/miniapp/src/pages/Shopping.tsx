@@ -48,6 +48,46 @@ const CATEGORY_EMOJI: Record<ShoppingCategory, string> = {
   other: '🛒',
 };
 
+/** Catalog-style emoji palette (mirrors apps/miniapp/src/pages/Catalog.tsx).
+ *  When the user picks one in the add form, we infer the matching
+ *  ShoppingCategory via EMOJI_TO_CATEGORY below — so the data model
+ *  doesn't change but the picker reads as a free-emoji palette. */
+const PRESET_EMOJI = [
+  '🥛', '🧀', '🥚', '🧈',
+  '🍎', '🍌', '🍅', '🥕', '🥔', '🥬', '🥒', '🧅',
+  '🍋', '🍓', '🍇', '🍊', '🍉', '🍑', '🥑', '🌽',
+  '🥩', '🍗', '🌭', '🥓', '🐟', '🍤',
+  '🍞', '🥖', '🥐', '🥨', '🍝', '🍚', '🥣', '🥯',
+  '☕', '🍵', '🧃', '🥤', '🍷', '🍺',
+  '🍫', '🍪', '🍰', '🍬',
+  '🧴', '🧻', '🧽', '🧂', '🥫', '🍯', '📦',
+];
+
+/** Map every PRESET_EMOJI glyph to its shopping aisle. Unknown emoji
+ *  fall back to 'other' — protects against typos / future palette
+ *  drift. The backend still owns the canonical category enum; this map
+ *  just exists to keep the picker's "what category is this?" answer
+ *  consistent with the visual grouping above. */
+const EMOJI_TO_CATEGORY: Record<string, ShoppingCategory> = {
+  '🥛': 'dairy', '🧀': 'dairy', '🥚': 'dairy', '🧈': 'dairy',
+  '🍎': 'produce', '🍌': 'produce', '🍅': 'produce', '🥕': 'produce',
+  '🥔': 'produce', '🥬': 'produce', '🥒': 'produce', '🧅': 'produce',
+  '🍋': 'produce', '🍓': 'produce', '🍇': 'produce', '🍊': 'produce',
+  '🍉': 'produce', '🍑': 'produce', '🥑': 'produce', '🌽': 'produce',
+  '🥩': 'meat', '🍗': 'meat', '🌭': 'meat', '🥓': 'meat',
+  '🐟': 'meat', '🍤': 'meat',
+  '🍞': 'bakery', '🥖': 'bakery', '🥐': 'bakery', '🥨': 'bakery',
+  '🍝': 'bakery', '🍚': 'bakery', '🥣': 'bakery', '🥯': 'bakery',
+  '☕': 'drinks', '🍵': 'drinks', '🧃': 'drinks', '🥤': 'drinks',
+  '🍷': 'drinks', '🍺': 'drinks',
+  '🍫': 'other', '🍪': 'other', '🍰': 'other', '🍬': 'other',
+  '🧴': 'household', '🧻': 'household', '🧽': 'household', '🧂': 'household',
+  '🥫': 'household', '🍯': 'household', '📦': 'other',
+};
+function categoryForEmoji(e: string): ShoppingCategory {
+  return EMOJI_TO_CATEGORY[e] ?? 'other';
+}
+
 /**
  * Shopping page — two modes:
  *   1. Index (listId === null): cards for each shopping list with
@@ -282,8 +322,11 @@ function ShoppingListView({
     queryClient.invalidateQueries({ queryKey: ['shopping', family.id] });
   };
   const addMut = useMutation({
-    mutationFn: (payload: { text: string; category: ShoppingCategory }) =>
-      api.addShoppingItem(family.id, listId, payload),
+    mutationFn: (payload: {
+      text: string;
+      category: ShoppingCategory;
+      emoji: string;
+    }) => api.addShoppingItem(family.id, listId, payload),
     onSuccess: invalidate,
   });
   const toggleMut = useMutation({
@@ -335,7 +378,11 @@ function ShoppingListView({
   });
 
   const [text, setText] = useState('');
-  const [category, setCategory] = useState<ShoppingCategory>('other');
+  // Emoji-first picker: chosen emoji drives the persisted category via
+  // EMOJI_TO_CATEGORY. Default to 📦 / 'other' so the form is usable
+  // before the user touches anything.
+  const [emoji, setEmoji] = useState<string>('📦');
+  const category: ShoppingCategory = categoryForEmoji(emoji);
   const [catalogOpen, setCatalogOpen] = useState(false);
   const [moveTarget, setMoveTarget] = useState<ShoppingItemDto | null>(null);
   const [listEditorOpen, setListEditorOpen] = useState(false);
@@ -356,7 +403,7 @@ function ShoppingListView({
   const commit = () => {
     const trimmed = text.trim();
     if (!trimmed) return;
-    addMut.mutate({ text: trimmed, category });
+    addMut.mutate({ text: trimmed, category, emoji });
     setText('');
   };
 
@@ -473,11 +520,12 @@ function ShoppingListView({
           background: 'var(--paper)',
         }}
       >
-        {/* Add bar mirrors the catalog "new item" form: an avatar circle
-            shows the picked category emoji, the name input is on the
-            same row, and a tile grid below lets the user re-pick the
-            category visually (replacing the cramped <select>). The
-            big primary button finishes the row. */}
+        {/* Add bar mirrors the catalog "new item" form 1:1: an avatar
+            circle with the picked emoji + name input on the first row,
+            the full 53-emoji palette below (same set as Catalog.tsx),
+            and a full-width primary button. The picked emoji drives
+            both the visual and (via EMOJI_TO_CATEGORY) the persisted
+            shopping category. */}
         <div className="wf-col wf-gap-8" style={{ minWidth: 0 }}>
           <div className="wf-row wf-gap-8" style={{ minWidth: 0 }}>
             <div
@@ -495,7 +543,7 @@ function ShoppingListView({
                 flex: 'none',
               }}
             >
-              {CATEGORY_EMOJI[category]}
+              {emoji}
             </div>
             <input
               value={text}
@@ -528,30 +576,24 @@ function ShoppingListView({
               gap: 4,
             }}
           >
-            {CATEGORY_ORDER.map((c) => {
-              const selected = c === category;
-              return (
-                <button
-                  key={c}
-                  type="button"
-                  onClick={() => setCategory(c)}
-                  aria-label={t(`shopping.category.${c}`)}
-                  title={t(`shopping.category.${c}`)}
-                  style={{
-                    background: selected ? 'var(--ink)' : 'var(--paper)',
-                    color: selected ? 'var(--paper)' : 'var(--ink)',
-                    border: '1.5px solid var(--line)',
-                    borderRadius: 8,
-                    fontSize: 18,
-                    padding: 4,
-                    aspectRatio: '1',
-                    cursor: 'pointer',
-                  }}
-                >
-                  {CATEGORY_EMOJI[c]}
-                </button>
-              );
-            })}
+            {PRESET_EMOJI.map((e) => (
+              <button
+                key={e}
+                type="button"
+                onClick={() => setEmoji(e)}
+                style={{
+                  background: e === emoji ? 'var(--ink)' : 'var(--paper)',
+                  border: '1.5px solid var(--line)',
+                  borderRadius: 8,
+                  fontSize: 18,
+                  padding: 4,
+                  aspectRatio: '1',
+                  cursor: 'pointer',
+                }}
+              >
+                {e}
+              </button>
+            ))}
           </div>
           <button
             type="button"
@@ -633,11 +675,11 @@ function ItemRow({
   onMove: () => void;
 }) {
   const isDone = item.status === 'bought';
-  // Each item carries a category — pick the matching emoji so the list
-  // is visually scannable. User report: "В списке покупок не показывает
-  // иконку". The same CATEGORY_EMOJI map is already used in the
-  // dropdown above; reusing it here keeps icons consistent.
-  const categoryIcon = CATEGORY_EMOJI[item.category as ShoppingCategory] ?? '🛒';
+  // Prefer the per-item emoji override (picked at add time from the
+  // catalog-style palette); fall back to the category's default glyph
+  // for legacy rows that don't have one set.
+  const categoryIcon =
+    item.emoji ?? CATEGORY_EMOJI[item.category as ShoppingCategory] ?? '🛒';
   return (
     <div className="wf-card" style={{ padding: 8, opacity: isDone ? 0.55 : 1 }}>
       <div className="wf-row wf-gap-8">
