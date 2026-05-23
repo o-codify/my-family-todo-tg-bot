@@ -4,3 +4,4 @@ export * from './task';
 export * from './catalog';
 export * from './stats';
 export * from './tag';
+export * from './shopping';

@@ -13,6 +13,7 @@ import { meRouter } from './routes/me';
 import { occurrencesRouter } from './routes/occurrences';
 import { photosRouter } from './routes/photos';
 import { badgesRouter } from './routes/badges';
+import { shoppingRouter } from './routes/shopping';
 import { tagsRouter } from './routes/tags';
 import { tasksRouter } from './routes/tasks';
 import { templatesRouter } from './routes/templates';
@@ -106,6 +107,7 @@ app.route('/api/v1/families/:familyId/roles', rolesRouter);
 app.route('/api/v1/families/:familyId/stats', statsRouter);
 app.route('/api/v1/families/:familyId/tags', tagsRouter);
 app.route('/api/v1/families/:familyId/badges', badgesRouter);
+app.route('/api/v1/families/:familyId/shopping', shoppingRouter);
 // SSE stream — auth via query string (EventSource can't set headers).
 app.route('/api/v1/families', eventsRouter);
 // Photo routes share the family-id scope but expose three distinct shapes

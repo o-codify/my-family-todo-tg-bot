@@ -16,7 +16,10 @@ import { logger } from '../logger';
  */
 
 export type RealtimeEvent =
-  | { kind: 'invalidate'; scope: 'occurrences' | 'tasks' | 'members' | 'families' | 'stats' }
+  | {
+      kind: 'invalidate';
+      scope: 'occurrences' | 'tasks' | 'members' | 'families' | 'stats' | 'shopping';
+    }
   | { kind: 'invalidate-all' };
 
 function channelFor(familyId: string): string {

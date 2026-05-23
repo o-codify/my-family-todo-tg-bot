@@ -234,6 +234,40 @@ export type BadgeCatalogEntryDto = {
   icon: string;
 };
 
+export type ShoppingCategory =
+  | 'dairy'
+  | 'produce'
+  | 'meat'
+  | 'bakery'
+  | 'household'
+  | 'drinks'
+  | 'frozen'
+  | 'other';
+
+export type ShoppingListDto = {
+  id: string;
+  familyId: string;
+  name: string;
+  isPrimary: boolean;
+  archivedAt: string | null;
+  createdAt: string;
+};
+
+export type ShoppingItemDto = {
+  id: string;
+  listId: string;
+  text: string;
+  quantity: string | null;
+  category: ShoppingCategory;
+  status: 'open' | 'bought';
+  assignedUserId: string | null;
+  boughtByUserId: string | null;
+  boughtAt: string | null;
+  createdByUserId: string;
+  position: number;
+  createdAt: string;
+};
+
 export type CreateTaskPayload = {
   title: string;
   type: TaskType;
@@ -396,6 +430,66 @@ export const api = {
 
   listTags: (familyId: string) =>
     request<{ tags: TagDto[] }>(`/api/v1/families/${familyId}/tags`),
+
+  getShoppingList: (familyId: string) =>
+    request<{ list: ShoppingListDto; items: ShoppingItemDto[] }>(
+      `/api/v1/families/${familyId}/shopping`,
+    ),
+  addShoppingItem: (
+    familyId: string,
+    payload: {
+      text: string;
+      quantity?: string | null;
+      category?: ShoppingCategory;
+      assignedUserId?: string | null;
+    },
+  ) =>
+    request<{ item: ShoppingItemDto }>(`/api/v1/families/${familyId}/shopping/items`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+  bulkAddShoppingItems: (
+    familyId: string,
+    items: Array<{
+      text: string;
+      quantity?: string | null;
+      category?: ShoppingCategory;
+      assignedUserId?: string | null;
+    }>,
+  ) =>
+    request<{ added: ShoppingItemDto[]; skipped: number }>(
+      `/api/v1/families/${familyId}/shopping/items/bulk`,
+      { method: 'POST', body: JSON.stringify({ items }) },
+    ),
+  updateShoppingItem: (
+    familyId: string,
+    itemId: string,
+    patch: {
+      text?: string;
+      quantity?: string | null;
+      category?: ShoppingCategory;
+      assignedUserId?: string | null;
+      status?: 'open' | 'bought';
+    },
+  ) =>
+    request<{ item: ShoppingItemDto }>(
+      `/api/v1/families/${familyId}/shopping/items/${itemId}`,
+      { method: 'PATCH', body: JSON.stringify(patch) },
+    ),
+  deleteShoppingItem: (familyId: string, itemId: string) =>
+    request<null>(`/api/v1/families/${familyId}/shopping/items/${itemId}`, {
+      method: 'DELETE',
+    }),
+  restoreShoppingItem: (familyId: string, itemId: string) =>
+    request<{ item: ShoppingItemDto }>(
+      `/api/v1/families/${familyId}/shopping/items/${itemId}/restore`,
+      { method: 'POST' },
+    ),
+  archiveBoughtShopping: (familyId: string, olderThanDays = 0) =>
+    request<{ archived: number }>(
+      `/api/v1/families/${familyId}/shopping/archive-bought?olderThanDays=${olderThanDays}`,
+      { method: 'POST' },
+    ),
 
   listMyBadges: (familyId: string) =>
     request<{ badges: BadgeDto[] }>(`/api/v1/families/${familyId}/badges/mine`),

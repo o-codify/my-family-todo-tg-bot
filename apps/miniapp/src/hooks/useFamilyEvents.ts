@@ -16,7 +16,10 @@ import { getInitData } from '../telegram';
  * and close on unmount / id change.
  */
 type Event =
-  | { kind: 'invalidate'; scope: 'occurrences' | 'tasks' | 'members' | 'families' | 'stats' }
+  | {
+      kind: 'invalidate';
+      scope: 'occurrences' | 'tasks' | 'members' | 'families' | 'stats' | 'shopping';
+    }
   | { kind: 'invalidate-all' }
   | { kind: 'hello' };
 
@@ -64,6 +67,9 @@ export function useFamilyEvents(familyId: string | null): void {
             break;
           case 'stats':
             queryClient.invalidateQueries({ queryKey: ['stats', familyId] });
+            break;
+          case 'shopping':
+            queryClient.invalidateQueries({ queryKey: ['shopping', familyId] });
             break;
         }
       }

@@ -14,6 +14,7 @@ import { QueueList } from './QueueList';
 import { Roles } from './Roles';
 import { Search } from './Search';
 import { Shop } from './Shop';
+import { Shopping } from './Shopping';
 import { Stats } from './Stats';
 import { Templates } from './Templates';
 import { TaskSheet } from '../components/TaskSheet';
@@ -36,6 +37,7 @@ type Route =
   | { kind: 'queues' }
   | { kind: 'queue'; taskId: string }
   | { kind: 'shop' }
+  | { kind: 'shopping' }
   | { kind: 'profile' }
   | { kind: 'my-profile' }
   | { kind: 'member'; userId: string }
@@ -56,6 +58,7 @@ const NAV_ROUTE: Record<NavKey, Route> = {
   calendar: { kind: 'calendar' },
   queues: { kind: 'queues' },
   shop: { kind: 'shop' },
+  shopping: { kind: 'shopping' },
   profile: { kind: 'profile' },
   'my-profile': { kind: 'my-profile' },
   inbox: { kind: 'inbox' },
@@ -93,6 +96,8 @@ function serializeRoute(r: Route): string {
       return `#/queue/${r.taskId}`;
     case 'shop':
       return '#/shop';
+    case 'shopping':
+      return '#/shopping';
     case 'profile':
       return '#/profile';
     case 'my-profile':
@@ -140,6 +145,8 @@ function parseRoute(hash: string): Route {
     }
     case 'shop':
       return { kind: 'shop' };
+    case 'shopping':
+      return { kind: 'shopping' };
     case 'transfer': {
       const occurrenceId = rest[0];
       if (occurrenceId) return { kind: 'transfer', occurrenceId };
@@ -189,6 +196,8 @@ function navKeyForRoute(r: Route): NavKey {
       return 'queues';
     case 'shop':
       return 'shop';
+    case 'shopping':
+      return 'shopping';
     case 'inbox':
       return 'inbox';
     case 'search':
@@ -393,6 +402,14 @@ export function FamilyHome({ me, families }: Props) {
       )}
       {route.kind === 'shop' && (
         <Shop
+          me={me}
+          family={activeFamily}
+          onBack={onBackFor}
+          onOpenDrawer={onOpenDrawerFor}
+        />
+      )}
+      {route.kind === 'shopping' && (
+        <Shopping
           me={me}
           family={activeFamily}
           onBack={onBackFor}

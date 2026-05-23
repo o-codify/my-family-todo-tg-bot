@@ -104,6 +104,25 @@ const DICT: Record<string, Record<Locale, string>> = {
   'common.deleted': { ru: 'Удалено', en: 'Deleted' },
   'common.restoreFailed': { ru: 'Не удалось восстановить', en: 'Could not restore' },
   'badges.title': { ru: 'Бейджи', en: 'Badges' },
+  'shopping.title': { ru: 'Список покупок', en: 'Shopping list' },
+  'shopping.empty.title': { ru: 'Список пуст', en: 'Empty list' },
+  'shopping.empty.hint': {
+    ru: 'Добавь первую покупку — поле снизу',
+    en: 'Add your first item — field below',
+  },
+  'shopping.add.placeholder': { ru: 'Что купить?', en: 'What to buy?' },
+  'shopping.section.open': { ru: 'Купить', en: 'To buy' },
+  'shopping.section.bought': { ru: 'Куплено', en: 'Bought' },
+  'shopping.archive': { ru: 'Архивировать купленное', en: 'Archive bought' },
+  'shopping.bought.by': { ru: 'купил', en: 'bought' },
+  'shopping.category.dairy': { ru: 'Молочное', en: 'Dairy' },
+  'shopping.category.produce': { ru: 'Овощи и фрукты', en: 'Produce' },
+  'shopping.category.meat': { ru: 'Мясо', en: 'Meat' },
+  'shopping.category.bakery': { ru: 'Хлеб', en: 'Bakery' },
+  'shopping.category.household': { ru: 'Бытовое', en: 'Household' },
+  'shopping.category.drinks': { ru: 'Напитки', en: 'Drinks' },
+  'shopping.category.frozen': { ru: 'Заморозка', en: 'Frozen' },
+  'shopping.category.other': { ru: 'Другое', en: 'Other' },
   'badges.empty': {
     ru: 'Пока ни одного — продолжай в том же духе',
     en: 'None yet — keep going',
@@ -131,6 +150,7 @@ const DICT: Record<string, Record<Locale, string>> = {
   'nav.search': { ru: 'Поиск', en: 'Search' },
   'nav.inbox': { ru: 'Входящие', en: 'Inbox' },
   'nav.myProfile': { ru: 'Мой профиль', en: 'My profile' },
+  'nav.shopping': { ru: 'Список покупок', en: 'Shopping' },
 
   // ─── calendar ──────────────────────────────────────────────────────
   'calendar.someday': { ru: 'Когда-нибудь', en: 'Someday' },

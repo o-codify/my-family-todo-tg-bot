@@ -10,6 +10,7 @@ export type NavKey =
   | 'calendar'
   | 'queues'
   | 'shop'
+  | 'shopping'
   | 'profile'
   | 'my-profile'
   | 'inbox'
@@ -37,6 +38,7 @@ type Entry = { key: NavKey; icon: IconName; labelKey: string };
 const MAIN: Entry[] = [
   { key: 'calendar', icon: 'cal', labelKey: 'nav.calendar' },
   { key: 'queues', icon: 'repeat', labelKey: 'nav.queues' },
+  { key: 'shopping', icon: 'pkg', labelKey: 'nav.shopping' },
   { key: 'shop', icon: 'star', labelKey: 'nav.shop' },
   { key: 'inbox', icon: 'bell', labelKey: 'nav.inbox' },
   { key: 'search', icon: 'search', labelKey: 'nav.search' },

@@ -11,3 +11,4 @@ export * from './photos';
 export * from './notifications';
 export * from './tags';
 export * from './badges';
+export * from './shopping';
