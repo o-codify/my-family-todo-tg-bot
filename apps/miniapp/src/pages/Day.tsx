@@ -435,12 +435,14 @@ function TaskCard({
   const t = useT();
   const isEn = t.locale === 'en';
   const stripColor = assignee?.color ?? 'var(--softline)';
-  // For done cards: tint the checkbox with the completer's colour so the
-  // grid reads "Anna · Misha · Anna · …" at a glance. Falls back to ink
-  // when we don't know who completed it (e.g. legacy rows without
-  // `completedBy`). Mark colour flips based on bg luma so the glyph
-  // stays readable across the palette.
-  const doneBg = doneCard ? completedBy?.color ?? 'var(--ink)' : null;
+  // Done rows always render with a neutral grey checkbox — user
+  // explicitly asked that completed tasks not be tinted by the
+  // completer's avatar colour. (We used to colour them so the day
+  // list scanned as "Anna · Misha · Anna" but that read as "still
+  // actionable" for not-mine done rows.) `completedBy` is still
+  // available for tooltips / future use if needed.
+  void completedBy;
+  const doneBg = doneCard ? 'var(--softline)' : null;
   const doneFg = doneBg ? pickInkOrPaper(doneBg) : 'var(--paper)';
   // Forecast rows have a synthetic id — they predict future queue
   // rotations and aren't backed by a real occurrence yet. Render as

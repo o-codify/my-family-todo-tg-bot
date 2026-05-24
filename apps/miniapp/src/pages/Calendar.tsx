@@ -1089,12 +1089,13 @@ function DayTaskCard({
   const isEn = t.locale === 'en';
   const assignee = o.assigneeId ? memberById.get(o.assigneeId) ?? null : null;
   const done = o.status === 'done';
-  // For done cards: tint the checkbox with the completer's colour so the
-  // day list reads "Anna · Misha · Anna · …" at a glance. Same logic as
-  // Day.tsx's TaskCard — kept in lockstep so the two surfaces look
-  // identical for the same occurrence.
+  // `completedBy` is still used by the subtitle ("by Anna · +5") — we
+  // just no longer drive the checkbox colour from it. Per user
+  // request, done rows always get a neutral grey checkbox so a done
+  // not-mine task doesn't look "still actionable" via the completer's
+  // brand colour. Day.tsx mirrors this rule.
   const completedBy = done && o.completedBy ? memberById.get(o.completedBy) ?? null : null;
-  const doneBg = done ? completedBy?.color ?? 'var(--ink)' : null;
+  const doneBg = done ? 'var(--softline)' : null;
   const doneFg = doneBg ? pickInkOrPaper(doneBg) : 'var(--paper)';
   const photoBlocked = o.task.photoRequired && !done;
   // Forecast rows are predictions of future queue rotations — there's no
