@@ -10,18 +10,17 @@ type Props = {
 };
 
 /** Verbatim port of Dot (wireframe-kit.jsx lines 23-26), with an
- *  opt-in `done` modifier for the month-grid dimming. */
+ *  opt-in `done` modifier that only dims via opacity — the member
+ *  colour stays so you can still tell whose dot it is at a glance.
+ *  User said "тусклее точки, а не серым": keep colour, fade it. */
 export function Dot({ m, lg = false, done = false }: Props) {
   const cls = `wf-dot wf-mc ${lg ? 'lg' : ''}${done ? ' done' : ''}`;
   return (
     <span
       className={cls}
       style={{
-        // Done dots use the design's softline token so they read as
-        // "subordinate to the day's pending work". The member colour
-        // is irrelevant once a task is closed.
-        background: done ? 'var(--softline)' : m ? m.color : 'var(--softline)',
-        opacity: done ? 0.55 : 1,
+        background: m ? m.color : 'var(--softline)',
+        opacity: done ? 0.35 : 1,
       }}
     />
   );
