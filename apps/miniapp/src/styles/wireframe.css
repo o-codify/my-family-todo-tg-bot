@@ -236,9 +236,22 @@ html, body { margin: 0; padding: 0; background: var(--bg); color: var(--ink); fo
   content: ''; position: absolute; top: 3px; right: 3px;
   width: 5px; height: 5px; border-radius: 999px; background: var(--danger);
 }
-.wf-cal .dots { display: flex; gap: 2px; margin-top: auto; flex-wrap: wrap; }
+.wf-cal .dots {
+  display: flex;
+  gap: 2px;
+  margin-top: auto;
+  flex-wrap: wrap;
+  /* Vertically align dots and "+N" on the same baseline — without
+     this the text glyph hangs above the 6×6 dot row. */
+  align-items: center;
+}
 .wf-cal .dots .wf-dot { width: 6px; height: 6px; }
-.wf-cal .dots .more { font-size: 9px; color: var(--hint); line-height: 1; }
+.wf-cal .dots .more {
+  font-size: 9px;
+  color: var(--hint);
+  line-height: 1;
+  align-self: center;
+}
 
 /* Heat-map variant */
 .wf-cal.heat .cell { background: var(--paper); }

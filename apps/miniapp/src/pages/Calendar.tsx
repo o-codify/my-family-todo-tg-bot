@@ -612,7 +612,13 @@ export function Calendar({
             if (isToday) cls.push('today');
             if (isSel) cls.push('selected');
             if (overdue) cls.push('has-overdue');
-            const shown = occ.slice(0, 3);
+            // Show as many dots as fit (flex-wrap handles the line
+            // breaks in .wf-cal .dots). User asked: "Надо чтобы на дне
+            // отображало максимум точек, сколько влезает, а не в одну
+            // строку". Cap at a safe maximum to avoid huge cells with
+            // a hundred dots on data-rich families; the cell's CSS
+            // overflow clips anything beyond.
+            const shown = occ.slice(0, 12);
             const more = occ.length - shown.length;
             const cellBind = !c.dim ? dragReschedule.bindCell(c.iso) : undefined;
             const isDropTarget =
@@ -666,6 +672,7 @@ export function Calendar({
                     <Dot
                       key={o.id}
                       m={o.assigneeId ? memberById.get(o.assigneeId) ?? null : null}
+                      done={o.status === 'done'}
                     />
                   ))}
                   {more > 0 && <span className="more">+{more}</span>}
@@ -1103,14 +1110,15 @@ function DayTaskCard({
   // Render them dimmed and non-interactive; the user sees the schedule
   // but can only act on the real "today" row.
   const isForecast = o.id.startsWith('queue-forecast:');
-  // Ownership-only checkbox: only the assignee (or anyone, for shared
-  // unassigned rows) gets the interactive checkbox. For done rows, only
-  // the completer can undo inline. Non-owners can still open the
-  // TaskSheet via row tap — they just can't toggle the row directly.
-  // Mirrors the server's 403 'not_your_task' on /complete + /uncomplete.
-  const ownsRow = done
-    ? o.completedBy === meId
-    : o.assigneeId === null || o.assigneeId === meId;
+  // Checkboxes removed by user request — they were "только мешают".
+  // Completion now flows through TaskSheet: tap the row → sheet opens
+  // → press "Выполнить". Keep `meId`/`onToggle` in the prop signature
+  // so callers don't need to change; just mark them unused locally.
+  void meId;
+  void onToggle;
+  void photoBlocked;
+  void doneFg;
+  void doneBg;
   return (
     <div
       className="wf-card"
@@ -1160,46 +1168,6 @@ function DayTaskCard({
         </div>
       )}
       <div className="wf-row wf-gap-10">
-        {isForecast || !ownsRow ? (
-          // Placeholder dot instead of a checkbox:
-          //   - forecasts: future queue projections, no real row yet
-          //   - foreign rows: per ownership-only rule, only the assignee
-          //     (or completer for done) can tap the checkbox here
-          // The row's onOpenTask still works so the user can inspect.
-          <span
-            className={'wf-check' + (done ? ' done' : '')}
-            style={{
-              pointerEvents: 'none',
-              opacity: isForecast ? 0.4 : 0.6,
-              ...(doneBg ? { background: doneBg, color: doneFg, borderColor: doneBg } : null),
-            }}
-            aria-hidden
-          >
-            {done && <Icon name="check" />}
-          </span>
-        ) : (
-          <span
-            className={'wf-check' + (done ? ' done' : '')}
-            onClick={(e) => {
-              e.stopPropagation();
-              if (photoBlocked) {
-                onOpenTask?.(o);
-                return;
-              }
-              onToggle(o);
-            }}
-            style={{
-              cursor: 'pointer',
-              // Override `.wf-check.done` ink-on-paper when we know the
-              // completer — tint to their avatar colour with a contrast-
-              // picked glyph so the day list visually identifies WHO
-              // closed each row.
-              ...(doneBg ? { background: doneBg, color: doneFg, borderColor: doneBg } : null),
-            }}
-          >
-            {done && <Icon name="check" />}
-          </span>
-        )}
         <span
           className="wf-mc"
           style={{

@@ -108,14 +108,10 @@ export function FloatingSection({
               deadlineAt: ft.deadlineAt,
             },
           };
-          // Ownership-only checkbox — same rule as Day/Calendar's
-          // inline checkbox: assignee or unassigned can tap; foreign
-          // rows render dimmed/non-interactive.
-          const ownsRow = ft.assigneeId === null || ft.assigneeId === meId;
-          // Tasks requiring a photo can't be one-tap completed — open
-          // TaskSheet so the user attaches one. Same fallback the
-          // calendar uses.
-          const photoBlocked = ft.photoRequired;
+          // Checkbox removed per user request — completion flows through
+          // TaskSheet (row tap → sheet → Выполнить).
+          void meId;
+          void onComplete;
           return (
             <div
               key={ft.id}
@@ -124,27 +120,6 @@ export function FloatingSection({
               style={{ cursor: 'pointer' }}
             >
               <div className="wf-row wf-gap-10">
-                {ownsRow && onComplete ? (
-                  <span
-                    className="wf-check"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      if (photoBlocked) {
-                        onOpen(synthOcc);
-                        return;
-                      }
-                      onComplete(synthOcc);
-                    }}
-                    style={{ cursor: 'pointer' }}
-                    aria-label="Complete"
-                  />
-                ) : (
-                  <span
-                    className="wf-check"
-                    style={{ pointerEvents: 'none', opacity: 0.6 }}
-                    aria-hidden
-                  />
-                )}
                 <span
                   className="wf-mc"
                   style={{

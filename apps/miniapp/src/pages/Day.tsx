@@ -441,58 +441,29 @@ function TaskCard({
   // list scanned as "Anna · Misha · Anna" but that read as "still
   // actionable" for not-mine done rows.) `completedBy` is still
   // available for tooltips / future use if needed.
-  void completedBy;
-  const doneBg = doneCard ? 'var(--softline)' : null;
-  const doneFg = doneBg ? pickInkOrPaper(doneBg) : 'var(--paper)';
+  // meId / onToggle no longer drive a checkbox (removed by request) —
+  // marking them as intentionally unused at the destructure site
+  // would litter the signature, so the lint noise stays.
+  void meId;
+  void onToggle;
   // Forecast rows have a synthetic id — they predict future queue
   // rotations and aren't backed by a real occurrence yet. Render as
   // read-only with dimmed styling.
   const isForecast = o.id.startsWith('queue-forecast:');
-  // Ownership-only: only the assignee (or anyone, for shared rows) can
-  // toggle pending; only the completer can undo done. See CardProps.meId.
-  const ownsRow = doneCard
-    ? o.completedBy === meId
-    : o.assigneeId === null || o.assigneeId === meId;
+  // Checkboxes used to live on every row; the user removed them as
+  // visual clutter ("Убери вообще чекбоксы с задач, они только
+  // мешают"). Completion now flows through TaskSheet — tap the row
+  // → open sheet → Выполнить. The row's onClick stays.
   return (
     <div
       className="wf-card"
       style={{
         ...(danger ? { borderColor: 'var(--danger)' } : null),
-        ...(isForecast ? { opacity: 0.55, cursor: 'default' } : null),
+        ...(isForecast || doneCard ? { opacity: doneCard ? 0.55 : 0.55, cursor: 'default' } : null),
       }}
       onClick={isForecast ? undefined : onOpen}
     >
-      <div className="wf-row wf-gap-10">
-        {isForecast || !ownsRow ? (
-          <span
-            className={'wf-check' + (doneCard ? ' done' : '')}
-            style={{
-              pointerEvents: 'none',
-              opacity: isForecast ? 0.4 : 0.6,
-              ...(doneBg ? { background: doneBg, color: doneFg, borderColor: doneBg } : null),
-            }}
-            aria-hidden
-          >
-            {doneCard && <Icon name="check" />}
-          </span>
-        ) : (
-          <span
-            className={'wf-check' + (doneCard ? ' done' : '')}
-            onClick={(e) => {
-              e.stopPropagation();
-              onToggle();
-            }}
-            style={{
-              cursor: 'pointer',
-              // Override `.wf-check.done`'s ink background only when we
-              // have a completer colour to use; the CSS default keeps
-              // applying for the unknown-completer case.
-              ...(doneBg ? { background: doneBg, color: doneFg, borderColor: doneBg } : null),
-            }}
-          >
-            {doneCard && <Icon name="check" />}
-          </span>
-        )}
+      <div className="wf-row wf-gap-10">{/* no checkbox by design */}
         <span
           className="wf-mc"
           style={{
