@@ -31,7 +31,7 @@ type TaskKind = 'oneoff' | 'recurring' | 'floating' | 'queued';
 // Day-of-week pills. Labels come from the dictionary at render time so they
 // follow the active locale; ids match JS getDay() (0 = Sunday).
 const DAY_IDS: number[] = [1, 2, 3, 4, 5, 6, 0];
-const DAY_LABELS_RU = ['пн', 'вт', 'ср', 'чт', 'пт', 'сб', 'вс'];
+const DAY_LABELS_RU = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
 const DAY_LABELS_EN = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
 function memberFromDto(dto: FamilyMemberDto): Member {

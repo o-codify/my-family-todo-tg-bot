@@ -37,21 +37,27 @@ type Props = {
   onBack?: () => void;
 };
 
-const WK_RU = ['пн', 'вт', 'ср', 'чт', 'пт', 'сб', 'вс'];
+// All localised date-label arrays are capitalised + length-matched to
+// their EN counterparts so the layout doesn't wobble per language. User
+// said: "почему на английском с большой буквы, а на русском с маленькой,
+// нужно тоже с большой. и месяц нужно сократить до 3 букв, как и на
+// английском" — RU short months drop the genitive case (no clean
+// 3-letter genitive exists) and use nominative-stem abbreviations.
+const WK_RU = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
 const WK_EN = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 const MONTH_NAMES_RU = [
-  'январь',
-  'февраль',
-  'март',
-  'апрель',
-  'май',
-  'июнь',
-  'июль',
-  'август',
-  'сентябрь',
-  'октябрь',
-  'ноябрь',
-  'декабрь',
+  'Январь',
+  'Февраль',
+  'Март',
+  'Апрель',
+  'Май',
+  'Июнь',
+  'Июль',
+  'Август',
+  'Сентябрь',
+  'Октябрь',
+  'Ноябрь',
+  'Декабрь',
 ];
 const MONTH_NAMES_EN = [
   'January',
@@ -67,19 +73,21 @@ const MONTH_NAMES_EN = [
   'November',
   'December',
 ];
+// 3-letter abbreviations. We used to ship the RU genitive (e.g. "5 мая")
+// but that overflowed in narrow cells. Matching EN's "5 May" treatment.
 const MONTH_GENITIVE_RU = [
-  'января',
-  'февраля',
-  'марта',
-  'апреля',
-  'мая',
-  'июня',
-  'июля',
-  'августа',
-  'сентября',
-  'октября',
-  'ноября',
-  'декабря',
+  'Янв',
+  'Фев',
+  'Мар',
+  'Апр',
+  'Май',
+  'Июн',
+  'Июл',
+  'Авг',
+  'Сен',
+  'Окт',
+  'Ноя',
+  'Дек',
 ];
 const MONTH_GENITIVE_EN = [
   'Jan',
@@ -95,7 +103,7 @@ const MONTH_GENITIVE_EN = [
   'Nov',
   'Dec',
 ];
-const DOW_SHORT_RU = ['вс', 'пн', 'вт', 'ср', 'чт', 'пт', 'сб'];
+const DOW_SHORT_RU = ['Вс', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'];
 const DOW_SHORT_EN = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
 function capitalize(s: string): string {
