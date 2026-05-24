@@ -321,6 +321,26 @@ export async function uncompleteOccurrence(
         );
     }
 
+    // Reverse the points that completeOccurrence awarded. Without this
+    // step the user keeps the points on their balance even though the
+    // task is no longer marked done. User report: "Отменил выполнение
+    // задач, за которые получил баллы, а их обратно не сняло."
+    //
+    // Strategy: delete the ledger rows tagged with this occurrence's id
+    // (reason='task_completed', refId=occurrenceId). The ledger is an
+    // append-only log in spirit, but DELETE here keeps the running sum
+    // correct without needing a new enum value or a compensating row
+    // that complicates the history view. The companion completeOccurrence
+    // path will re-insert if the task gets re-completed.
+    await tx
+      .delete(pointsLedger)
+      .where(
+        and(
+          eq(pointsLedger.reason, 'task_completed'),
+          eq(pointsLedger.refId, occurrenceId),
+        ),
+      );
+
     const [updated] = await tx
       .update(taskOccurrences)
       .set({
