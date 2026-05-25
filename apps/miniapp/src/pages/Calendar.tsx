@@ -536,24 +536,14 @@ export function Calendar({
           >
             <Icon name="chevL" />
           </button>
-          {families.length > 1 && onSwitchFamily ? (
-            <select
-              className="wf-h1"
-              value={family.id}
-              onChange={(e) => onSwitchFamily(e.target.value)}
-              style={{ border: 'none', background: 'transparent', color: 'var(--ink)', fontFamily: 'inherit', padding: 0 }}
-            >
-              {families.map((f) => (
-                <option key={f.id} value={f.id}>
-                  {f.name}
-                </option>
-              ))}
-            </select>
-          ) : (
-            <span className="wf-h1">
-              {capitalize(MONTH_NAMES[view.getMonth()] ?? '')} {view.getFullYear()}
-            </span>
-          )}
+          {/* Header used to swap to a family <select> when the user
+              belonged to multiple families. Per user request: "переклю-
+              чатель семьи нужен только в настройках, и нигде в других
+              местах" — so we always render the plain month-year here.
+              The switcher lives on the Settings page (Profile.tsx). */}
+          <span className="wf-h1">
+            {capitalize(MONTH_NAMES[view.getMonth()] ?? '')} {view.getFullYear()}
+          </span>
           <button
             onClick={() => setView((m) => new Date(m.getFullYear(), m.getMonth() + 1, 1))}
             style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 0, color: 'var(--ink)' }}

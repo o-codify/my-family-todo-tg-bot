@@ -131,41 +131,25 @@ export function NavDrawer({
                 {family.avatarUrl ?? '🏠'}
               </div>
               <div className="wf-col" style={{ minWidth: 0, flex: 1 }}>
-                {families.length > 1 && onSwitchFamily ? (
-                  <select
-                    value={family.id}
-                    onChange={(e) => onSwitchFamily(e.target.value)}
-                    // Switching family shouldn't fall through to "open
-                    // family settings" — both happen on click otherwise.
-                    onClick={(e) => e.stopPropagation()}
-                    className="wf-h3"
-                    style={{
-                      border: 'none',
-                      background: 'transparent',
-                      padding: 0,
-                      color: 'var(--ink)',
-                      fontFamily: 'inherit',
-                      maxWidth: '100%',
-                    }}
-                  >
-                    {families.map((f) => (
-                      <option key={f.id} value={f.id}>
-                        {f.name}
-                      </option>
-                    ))}
-                  </select>
-                ) : (
-                  <span
-                    className="wf-h3"
-                    style={{
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      whiteSpace: 'nowrap',
-                    }}
-                  >
-                    {family.name}
-                  </span>
-                )}
+                {/* Family switcher used to live here for multi-family
+                    accounts. Per user: "переключатель семьи нужен
+                    только в настройках, и нигде в других местах." It
+                    now exists exclusively on the Settings page. */}
+                {(() => {
+                  void families;
+                  void onSwitchFamily;
+                  return null;
+                })()}
+                <span
+                  className="wf-h3"
+                  style={{
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  {family.name}
+                </span>
                 <span
                   className="wf-tiny"
                   style={{
