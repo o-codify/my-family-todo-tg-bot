@@ -140,6 +140,41 @@ describe('ICS feed (integration)', () => {
     expect(ics).not.toContain('STATUS:COMPLETED');
   });
 
+  it('dedupes multiple dateless pending rows for the same task into one event', async () => {
+    // Regression: real prod state had two `pending dateless` rows for
+    // the same floating task (legacy from the completeFloatingTask
+    // assignee-NULL bug). Both anchored to today and the feed showed
+    // "И" twice. The dedupe pass should collapse them to a single
+    // VEVENT.
+    const owner = await makeUser();
+    const { family } = await makeFamily(owner);
+    const [task] = await db
+      .insert(tasks)
+      .values({
+        familyId: family.id,
+        title: 'Dup-Floating',
+        type: 'floating',
+        schedule: { kind: 'floating' },
+        createdBy: owner.id,
+        assigneeId: owner.id,
+        points: 0,
+        photoRequired: false,
+        requiresApproval: false,
+        singleShot: false,
+      })
+      .returning();
+    // Insert TWO dateless pending occurrences, both assigned to owner.
+    await db.insert(taskOccurrences).values([
+      { taskId: task!.id, scheduledDate: null, status: 'pending', assigneeId: owner.id },
+      { taskId: task!.id, scheduledDate: null, status: 'pending', assigneeId: owner.id },
+    ]);
+
+    const ics = await generateFamilyIcs({ familyId: family.id, userId: owner.id });
+    // Exactly one SUMMARY:Dup-Floating line should appear (not two).
+    const matches = ics.match(/SUMMARY:Dup-Floating/g) ?? [];
+    expect(matches.length).toBe(1);
+  });
+
   it('excludes dateless done (floating completion) from the feed', async () => {
     const owner = await makeUser();
     const { family } = await makeFamily(owner);

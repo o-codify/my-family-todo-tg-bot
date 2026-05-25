@@ -165,10 +165,12 @@ export async function generateFamilyIcs(input: {
   const rows = await db
     .select({
       id: taskOccurrences.id,
+      taskId: taskOccurrences.taskId,
       scheduledDate: taskOccurrences.scheduledDate,
       scheduledTime: taskOccurrences.scheduledTime,
       status: taskOccurrences.status,
       assigneeId: taskOccurrences.assigneeId,
+      taskType: tasks.type,
       title: tasks.title,
       description: tasks.description,
     })
@@ -217,13 +219,22 @@ export async function generateFamilyIcs(input: {
       ),
     );
 
+  // Dedupe dateless pendings per task. The DB can hold more than one
+  // such row for a single task (legacy state from the old
+  // completeFloatingTask reopen bug, before its assignee-inherit fix).
+  // Without this every row anchors to today and the feed shows the
+  // same task title N times. Keep the first row per task; the next
+  // ensureQueuedOccurrence / completion cycle will self-heal the
+  // duplicates in the DB.
+  const seenDatelessByTask = new Set<string>();
   const events = rows
     .map((r) => {
-      // Anchor: scheduled date when present, otherwise today (dateless
-      // pending). Done rows are filtered out at the SQL level, so we
-      // don't need a completedAt branch here.
+      const isDateless = !r.scheduledDate;
+      if (isDateless) {
+        if (seenDatelessByTask.has(r.taskId)) return null;
+        seenDatelessByTask.add(r.taskId);
+      }
       const anchor = r.scheduledDate ?? todayIso;
-      if (!anchor) return null;
       const presentation = presentStatus(r.status);
       return formatVEvent({
         uid: `occ:${r.id}@family-todo`,
@@ -288,12 +299,20 @@ export async function generateFamilyIcs(input: {
       queueCurrent.map((q) => [q.taskId, q.description ?? '']),
     );
 
+    // Trim the forecast window so a daily-or-weekly queue task doesn't
+    // emit 60+ events 365 days out. ~60 days forward is plenty for
+    // "see when my next turns are" without overwhelming the calendar.
+    // The 'to' limit on the rows query stays at +365 — that's only an
+    // upper bound for stored occurrences, which are real.
+    const forecastTo = new Date(today.getTime() + 60 * 86_400_000)
+      .toISOString()
+      .slice(0, 10);
     const forecast = forecastQueueOccurrences({
       tasks: queueTasks,
       occurrences: queueCurrent,
       memberIds: memberRows.map((m) => m.userId),
       todayIso,
-      toIso: to,
+      toIso: forecastTo,
     });
 
     for (const f of forecast) {
