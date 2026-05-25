@@ -121,7 +121,20 @@ export function Roles({ me, family, onBack, onOpenDrawer }: Props) {
           onBack={() => setSelectedRoleId(null)}
           right={readOnly ? <Tag>{t('roles.tag.readonly')}</Tag> : undefined}
         />
-        <div className="wf-card subtle">
+        <div
+          className="wf-card subtle"
+          style={{
+            // Center the hint vertically — without explicit alignment
+            // the text sits at the top of the dashed pill because the
+            // card has default padding but no flex centring. User
+            // flagged: "Текст в блоке сверху который с пунктирной
+            // обводкой по вертикали не по центру."
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            minHeight: 36,
+          }}
+        >
           <span className="wf-tiny">
             {readOnly ? t('roles.readOnly') : t('roles.realtime')}
           </span>

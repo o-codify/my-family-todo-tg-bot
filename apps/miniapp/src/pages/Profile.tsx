@@ -167,70 +167,6 @@ export function Profile({
     <WfBody scrollKey="profile">
       <PageHeader title={t('nav.profile')} onBack={onBack} onOpenDrawer={onOpenDrawer} />
 
-      {/* Families list — tap a row to switch the active family. The
-          previous <select> dropdown was replaced with explicit rows
-          per user request ("сделаем список семей отдельным пуктом. И
-          менять активную семью кликом на нужную семью"). The active
-          family gets an ink border + check glyph; others render as
-          plain wf-cards. Rendered even for single-family accounts so
-          the "Add family" button below has visual context. */}
-      <span className="wf-h3" style={{ marginTop: 4 }}>
-        {t.locale === 'en' ? 'Families' : 'Семьи'}
-      </span>
-      <div className="wf-col wf-gap-6">
-        {families.map((f) => {
-          const isActive = f.id === family.id;
-          return (
-            <button
-              key={f.id}
-              type="button"
-              className="wf-card"
-              onClick={() => !isActive && onSwitchFamily(f.id)}
-              style={{
-                cursor: isActive ? 'default' : 'pointer',
-                width: '100%',
-                border: isActive
-                  ? '2px solid var(--ink)'
-                  : '1.5px solid var(--line)',
-                font: 'inherit',
-                textAlign: 'left',
-                background: 'var(--paper)',
-              }}
-            >
-              <div className="wf-spread">
-                <div className="wf-row wf-gap-8">
-                  <div
-                    style={{
-                      width: 32,
-                      height: 32,
-                      borderRadius: 10,
-                      background: 'var(--faint)',
-                      border: '1.5px solid var(--line)',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      fontSize: 18,
-                      flex: 'none',
-                    }}
-                  >
-                    {f.avatarUrl ?? '🏠'}
-                  </div>
-                  <span className="wf-label">{f.name}</span>
-                </div>
-                {isActive && (
-                  <span
-                    aria-label={t.locale === 'en' ? 'Active' : 'Активная'}
-                    style={{ color: 'var(--ink)' }}
-                  >
-                    <Icon name="check" />
-                  </span>
-                )}
-              </div>
-            </button>
-          );
-        })}
-      </div>
-
       {/* ── Family header (FamV1 lines 14-22) ── */}
       <div className="wf-card" style={{ textAlign: 'center', padding: 14 }}>
         <div
@@ -406,41 +342,98 @@ export function Profile({
         />
       )}
 
-      {/* "Add family" — create another or join one by code. Moved here
-          from the NavDrawer per user request: the drawer should host
-          navigation, not setup actions. Card uses a primary fill so
-          it's distinguishable from the family-management list below. */}
-      {onAddFamily && (
-        <button
-          type="button"
-          className="wf-card"
-          onClick={onAddFamily}
-          style={{
-            cursor: 'pointer',
-            width: '100%',
-            border: 'none',
-            font: 'inherit',
-            textAlign: 'left',
-            background: 'var(--faint)',
-            marginTop: 8,
-          }}
-        >
-          <div className="wf-spread">
-            <div className="wf-row wf-gap-8">
-              <Icon name="plus" />
-              <div className="wf-col" style={{ flex: 1 }}>
-                <span className="wf-label">
-                  {t.locale === 'en' ? 'Add family' : 'Добавить семью'}
-                </span>
-                <span className="wf-tiny" style={{ color: 'var(--hint)' }}>
-                  {t.locale === 'en' ? 'create or join by code' : 'создать или войти по коду'}
-                </span>
+      {/* "Семьи" section — list of all my families with the active one
+          marked, immediately followed by the "+ Add family" card so
+          the two read as one block ("here are my families and here's
+          how to add another"). Placed AFTER the active family's
+          members so the page flows: family → members → invite → other
+          families → add. */}
+      <span className="wf-h3" style={{ marginTop: 8 }}>
+        {t.locale === 'en' ? 'Families' : 'Семьи'}
+      </span>
+      <div className="wf-col wf-gap-6">
+        {families.map((f) => {
+          const isActive = f.id === family.id;
+          return (
+            <button
+              key={f.id}
+              type="button"
+              className="wf-card"
+              onClick={() => !isActive && onSwitchFamily(f.id)}
+              style={{
+                cursor: isActive ? 'default' : 'pointer',
+                width: '100%',
+                border: isActive
+                  ? '2px solid var(--ink)'
+                  : '1.5px solid var(--line)',
+                font: 'inherit',
+                textAlign: 'left',
+                background: 'var(--paper)',
+              }}
+            >
+              <div className="wf-spread">
+                <div className="wf-row wf-gap-8">
+                  <div
+                    style={{
+                      width: 32,
+                      height: 32,
+                      borderRadius: 10,
+                      background: 'var(--faint)',
+                      border: '1.5px solid var(--line)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontSize: 18,
+                      flex: 'none',
+                    }}
+                  >
+                    {f.avatarUrl ?? '🏠'}
+                  </div>
+                  <span className="wf-label">{f.name}</span>
+                </div>
+                {isActive && (
+                  <span
+                    aria-label={t.locale === 'en' ? 'Active' : 'Активная'}
+                    style={{ color: 'var(--ink)' }}
+                  >
+                    <Icon name="check" />
+                  </span>
+                )}
               </div>
+            </button>
+          );
+        })}
+        {onAddFamily && (
+          <button
+            type="button"
+            className="wf-card"
+            onClick={onAddFamily}
+            style={{
+              cursor: 'pointer',
+              width: '100%',
+              border: '1.5px dashed var(--line)',
+              font: 'inherit',
+              textAlign: 'left',
+              background: 'var(--faint)',
+            }}
+          >
+            <div className="wf-spread">
+              <div className="wf-row wf-gap-8">
+                <Icon name="plus" />
+                <div className="wf-col" style={{ flex: 1 }}>
+                  <span className="wf-label">
+                    {t.locale === 'en' ? 'Add family' : 'Добавить семью'}
+                  </span>
+                  <span className="wf-tiny" style={{ color: 'var(--hint)' }}>
+                    {t.locale === 'en' ? 'create or join by code' : 'создать или войти по коду'}
+                  </span>
+                </div>
+              </div>
+              <Icon name="chevR" />
             </div>
-            <Icon name="chevR" />
-          </div>
-        </button>
-      )}
+          </button>
+        )}
+      </div>
 
       {/* Family-management navigation. The user wanted the drawer to fit
           without scrolling, so these admin-y destinations moved here —
