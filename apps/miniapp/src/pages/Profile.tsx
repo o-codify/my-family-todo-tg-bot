@@ -193,13 +193,9 @@ export function Profile({
         </div>
       </div>
 
-      {/* ── Invite share (FamV1 lines 45-56) ── */}
-      <InviteCard family={family} />
-
-      {/* One-member edge (FamV2 banner) */}
-      {members.length === 1 && <OneMemberBanner />}
-
-      {/* ── Members list (FamV1 lines 25-42) ── */}
+      {/* ── Members list — invite card lives BELOW it per user request
+          ("кнопка добавления участника тоже должна быть под
+          участниками"). FamV1 lines 25-42. ── */}
       <div className="wf-spread">
         <span className="wf-h3">
           {t.locale === 'en' ? 'Members' : 'Участники'}
@@ -281,6 +277,13 @@ export function Profile({
           );
         })}
       </div>
+
+      {/* Invite share — sits directly under the members list so "add
+          one more" reads as a continuation of the member roster. */}
+      <InviteCard family={family} />
+
+      {/* One-member edge (FamV2 banner) */}
+      {members.length === 1 && <OneMemberBanner />}
 
       {/* Personal settings (color, away/sick, timezone, notifications,
           language) all live on the dedicated "Мой профиль" page —
