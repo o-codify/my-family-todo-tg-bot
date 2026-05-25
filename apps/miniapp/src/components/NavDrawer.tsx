@@ -189,21 +189,13 @@ export function NavDrawer({
               </button>
             </div>
 
-            {onAddFamily && (
-              <button
-                type="button"
-                className="wf-drawer__item"
-                onClick={() => close(onAddFamily)}
-              >
-                <Icon name="plus" />
-                <span style={{ flex: 1, textAlign: 'left' }}>
-                  {isEn ? 'Add family' : 'Добавить семью'}
-                </span>
-                <span className="wf-tiny" style={{ color: 'var(--hint)' }}>
-                  {isEn ? 'create or join' : 'создать или войти'}
-                </span>
-              </button>
-            )}
+            {/* "Add family" entry moved into Settings (Profile.tsx) per
+                user request — drawer should stay short and only host
+                navigation, not setup actions. */}
+            {(() => {
+              void onAddFamily;
+              return null;
+            })()}
 
             <div className="wf-drawer__section">{t('nav.section.main')}</div>
             {MAIN.map((e) => (

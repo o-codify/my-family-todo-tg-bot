@@ -33,6 +33,11 @@ type Props = {
   onOpenTemplates?: () => void;
   onOpenStats?: () => void;
   onOpenHistory?: () => void;
+  /** Opens the Onboarding flow on top of FamilyHome so the user can
+   *  create another family or join one by code. Moved here from the
+   *  NavDrawer because the drawer should host navigation, not setup
+   *  actions. */
+  onAddFamily?: () => void;
   /** Burger button → opens the nav drawer. Top-level page only. */
   onOpenDrawer?: () => void;
   /** Back button (shown instead of the burger when the user reached this
@@ -70,6 +75,7 @@ export function Profile({
   onOpenTemplates,
   onOpenStats,
   onOpenHistory,
+  onAddFamily,
   onOpenDrawer,
   onBack,
 }: Props) {
@@ -161,7 +167,10 @@ export function Profile({
     <WfBody scrollKey="profile">
       <PageHeader title={t('nav.profile')} onBack={onBack} onOpenDrawer={onOpenDrawer} />
 
-      {/* Family selector (if multiple) */}
+      {/* Family selector (if multiple). `outline: none` kills the
+          native browser focus ring (the blue rounded box the user
+          flagged); the WfBody surface around the row gives enough
+          visual hierarchy without it. */}
       {families.length > 1 && (
         <select
           value={family.id}
@@ -173,6 +182,10 @@ export function Profile({
             padding: 0,
             color: 'var(--ink)',
             fontFamily: 'inherit',
+            outline: 'none',
+            boxShadow: 'none',
+            WebkitAppearance: 'none',
+            appearance: 'none',
           }}
         >
           {families.map((f) => (
@@ -356,6 +369,42 @@ export function Profile({
             setRenameOpen(false);
           }}
         />
+      )}
+
+      {/* "Add family" — create another or join one by code. Moved here
+          from the NavDrawer per user request: the drawer should host
+          navigation, not setup actions. Card uses a primary fill so
+          it's distinguishable from the family-management list below. */}
+      {onAddFamily && (
+        <button
+          type="button"
+          className="wf-card"
+          onClick={onAddFamily}
+          style={{
+            cursor: 'pointer',
+            width: '100%',
+            border: 'none',
+            font: 'inherit',
+            textAlign: 'left',
+            background: 'var(--faint)',
+            marginTop: 8,
+          }}
+        >
+          <div className="wf-spread">
+            <div className="wf-row wf-gap-8">
+              <Icon name="plus" />
+              <div className="wf-col" style={{ flex: 1 }}>
+                <span className="wf-label">
+                  {t.locale === 'en' ? 'Add family' : 'Добавить семью'}
+                </span>
+                <span className="wf-tiny" style={{ color: 'var(--hint)' }}>
+                  {t.locale === 'en' ? 'create or join by code' : 'создать или войти по коду'}
+                </span>
+              </div>
+            </div>
+            <Icon name="chevR" />
+          </div>
+        </button>
       )}
 
       {/* Family-management navigation. The user wanted the drawer to fit
