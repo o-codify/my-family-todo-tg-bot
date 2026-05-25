@@ -167,34 +167,69 @@ export function Profile({
     <WfBody scrollKey="profile">
       <PageHeader title={t('nav.profile')} onBack={onBack} onOpenDrawer={onOpenDrawer} />
 
-      {/* Family selector (if multiple). `outline: none` kills the
-          native browser focus ring (the blue rounded box the user
-          flagged); the WfBody surface around the row gives enough
-          visual hierarchy without it. */}
-      {families.length > 1 && (
-        <select
-          value={family.id}
-          onChange={(e) => onSwitchFamily(e.target.value)}
-          className="wf-h2"
-          style={{
-            border: 'none',
-            background: 'transparent',
-            padding: 0,
-            color: 'var(--ink)',
-            fontFamily: 'inherit',
-            outline: 'none',
-            boxShadow: 'none',
-            WebkitAppearance: 'none',
-            appearance: 'none',
-          }}
-        >
-          {families.map((f) => (
-            <option key={f.id} value={f.id}>
-              {f.name}
-            </option>
-          ))}
-        </select>
-      )}
+      {/* Families list — tap a row to switch the active family. The
+          previous <select> dropdown was replaced with explicit rows
+          per user request ("сделаем список семей отдельным пуктом. И
+          менять активную семью кликом на нужную семью"). The active
+          family gets an ink border + check glyph; others render as
+          plain wf-cards. Rendered even for single-family accounts so
+          the "Add family" button below has visual context. */}
+      <span className="wf-h3" style={{ marginTop: 4 }}>
+        {t.locale === 'en' ? 'Families' : 'Семьи'}
+      </span>
+      <div className="wf-col wf-gap-6">
+        {families.map((f) => {
+          const isActive = f.id === family.id;
+          return (
+            <button
+              key={f.id}
+              type="button"
+              className="wf-card"
+              onClick={() => !isActive && onSwitchFamily(f.id)}
+              style={{
+                cursor: isActive ? 'default' : 'pointer',
+                width: '100%',
+                border: isActive
+                  ? '2px solid var(--ink)'
+                  : '1.5px solid var(--line)',
+                font: 'inherit',
+                textAlign: 'left',
+                background: 'var(--paper)',
+              }}
+            >
+              <div className="wf-spread">
+                <div className="wf-row wf-gap-8">
+                  <div
+                    style={{
+                      width: 32,
+                      height: 32,
+                      borderRadius: 10,
+                      background: 'var(--faint)',
+                      border: '1.5px solid var(--line)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontSize: 18,
+                      flex: 'none',
+                    }}
+                  >
+                    {f.avatarUrl ?? '🏠'}
+                  </div>
+                  <span className="wf-label">{f.name}</span>
+                </div>
+                {isActive && (
+                  <span
+                    aria-label={t.locale === 'en' ? 'Active' : 'Активная'}
+                    style={{ color: 'var(--ink)' }}
+                  >
+                    <Icon name="check" />
+                  </span>
+                )}
+              </div>
+            </button>
+          );
+        })}
+      </div>
 
       {/* ── Family header (FamV1 lines 14-22) ── */}
       <div className="wf-card" style={{ textAlign: 'center', padding: 14 }}>
