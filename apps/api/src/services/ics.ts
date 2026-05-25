@@ -1,5 +1,5 @@
 import { customAlphabet } from 'nanoid';
-import { and, eq, gte, isNull, lte, or } from 'drizzle-orm';
+import { and, eq, gte, isNull, lte, ne, or } from 'drizzle-orm';
 import { db } from '../db/client';
 import {
   families,
@@ -122,23 +122,19 @@ export async function resolveToken(token: string): Promise<{
  *     in-app calendar shows to everyone). Other people's personal
  *     assignments are hidden — this is a personal feed.
  *
- * Status handling — all statuses are included, but each is rendered
- * differently so a glance at the calendar shows what state the task
- * is in:
+ * Status handling — DONE rows are excluded entirely per user request
+ * ("во внешний календарь не передавать выполненные задачи"). External
+ * calendars are a forward-looking view of what needs doing; completion
+ * history lives in-app. Remaining statuses:
  *   - pending           → plain title
- *   - done              → "✓ Title" + STATUS:COMPLETED (strike-through
- *                         in capable clients)
  *   - pending_approval  → "⏳ Title" + STATUS:TENTATIVE (greyed out)
  *   - skipped / expired → "⊘ Title" + STATUS:CANCELLED (struck-through)
  *
  * Date handling:
  *   - Dated rows inside ±window appear on their scheduled date.
- *   - Done dateless rows (typical for singleShot floating completions)
- *     are anchored on `completedAt` — without this they'd be invisible.
  *   - Pending dateless rows (the "Когда-нибудь" / queued backlog the
  *     in-app calendar pins to today) are anchored on the current day
- *     as all-day events. Apple/Google don't have a "no date" bucket
- *     so this is the closest analogue.
+ *     as all-day events. Same anchor the miniapp uses.
  *
  * Window: 90 days back, 365 forward. Calendar apps cache aggressively;
  * we err wide so a once-a-day fetch covers the next year.
@@ -164,9 +160,6 @@ export async function generateFamilyIcs(input: {
   const to = new Date(today.getTime() + 365 * 86_400_000)
     .toISOString()
     .slice(0, 10);
-  // For floating completions we anchor on completedAt. Use the same
-  // 90-day lookback so an old completion doesn't pollute the calendar.
-  const completedFrom = new Date(today.getTime() - 90 * 86_400_000);
   const todayIso = today.toISOString().slice(0, 10);
 
   const rows = await db
@@ -175,7 +168,6 @@ export async function generateFamilyIcs(input: {
       scheduledDate: taskOccurrences.scheduledDate,
       scheduledTime: taskOccurrences.scheduledTime,
       status: taskOccurrences.status,
-      completedAt: taskOccurrences.completedAt,
       assigneeId: taskOccurrences.assigneeId,
       title: tasks.title,
       description: tasks.description,
@@ -207,23 +199,19 @@ export async function generateFamilyIcs(input: {
             ),
           ),
         ),
+        // Drop completed occurrences entirely — see file docstring.
+        ne(taskOccurrences.status, 'done'),
         or(
-          // Dated rows inside the visible window — any status.
+          // Dated rows inside the visible window.
           and(
             gte(taskOccurrences.scheduledDate, from),
             lte(taskOccurrences.scheduledDate, to),
           ),
-          // Dateless pending (queued/"Когда-нибудь") — always include.
-          // We pin them to today as all-day below.
+          // Dateless pending (queued / "Когда-нибудь") — always
+          // include; anchored to today as all-day below.
           and(
             isNull(taskOccurrences.scheduledDate),
             eq(taskOccurrences.status, 'pending'),
-          ),
-          // Dateless done (floating completion) inside completion window.
-          and(
-            isNull(taskOccurrences.scheduledDate),
-            eq(taskOccurrences.status, 'done'),
-            gte(taskOccurrences.completedAt, completedFrom),
           ),
         ),
       ),
@@ -231,12 +219,10 @@ export async function generateFamilyIcs(input: {
 
   const events = rows
     .map((r) => {
-      // Pick the anchor: scheduled date wins; otherwise completedAt for
-      // done rows; otherwise today for pending dateless ("Когда-нибудь")
-      // rows so they show up in the user's calendar each day.
-      const anchor =
-        r.scheduledDate ??
-        (r.status === 'done' ? isoDate(r.completedAt) : todayIso);
+      // Anchor: scheduled date when present, otherwise today (dateless
+      // pending). Done rows are filtered out at the SQL level, so we
+      // don't need a completedAt branch here.
+      const anchor = r.scheduledDate ?? todayIso;
       if (!anchor) return null;
       const presentation = presentStatus(r.status);
       return formatVEvent({
@@ -468,21 +454,20 @@ function formatVEvent(input: {
  *  having to inspect each event. */
 function presentStatus(status: string): {
   prefix: string | null;
-  icsStatus: 'COMPLETED' | 'TENTATIVE' | 'CANCELLED' | null;
+  icsStatus: 'TENTATIVE' | 'CANCELLED' | null;
 } {
   switch (status) {
-    case 'done':
-      return { prefix: '✓', icsStatus: 'COMPLETED' };
     case 'pending_approval':
       // Hourglass = "waiting on approval". TENTATIVE makes most
       // clients render the event greyed out.
       return { prefix: '⏳', icsStatus: 'TENTATIVE' };
     case 'skipped':
     case 'expired':
-      // Slashed-zero looks like a "no" badge; CANCELLED gives strike-
-      // through. We still show these so the user can see what got
-      // dropped — matches the in-app calendar's behaviour.
+      // Slashed-zero looks like a "no" badge; CANCELLED gives
+      // strike-through. We still show these so the user can see
+      // what got dropped.
       return { prefix: '⊘', icsStatus: 'CANCELLED' };
+    // 'done' is filtered at the SQL layer — feed is forward-looking.
     case 'pending':
     default:
       return { prefix: null, icsStatus: null };

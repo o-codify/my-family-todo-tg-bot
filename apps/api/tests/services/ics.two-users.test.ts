@@ -214,7 +214,9 @@ describe('ICS feed: two-user personal-scope leak check (integration)', () => {
     // forecast days. Excludes: Bob's personal task, Bob's floating.
     expect(aliceFeed).toContain('SUMMARY:Alice-DishWash');
     expect(aliceFeed).toContain('SUMMARY:Shared-WashCar');
-    expect(aliceFeed).toContain('SUMMARY:✓ Alice-DoneTask');
+    // Done rows are filtered out entirely now — Alice-DoneTask must
+    // NOT appear even though it's hers (it's already completed).
+    expect(aliceFeed).not.toContain('Alice-DoneTask');
     expect(aliceFeed).toContain('🎂 Bob-Birthday');
 
     expect(aliceFeed).not.toContain('Bob-Vacuum');

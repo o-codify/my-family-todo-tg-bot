@@ -111,7 +111,10 @@ describe('ICS feed (integration)', () => {
     expect(ics).toContain(`DTEND;VALUE=DATE:${ny}${nm}${nd}`);
   });
 
-  it('includes done occurrences with ✓ prefix and STATUS:COMPLETED', async () => {
+  it('excludes done occurrences from the feed entirely', async () => {
+    // External calendar is forward-looking; the user explicitly asked
+    // "не передавать выполненные задачи". Done rows must not show up
+    // even with their previous ✓/COMPLETED treatment.
     const owner = await makeUser();
     const { family } = await makeFamily(owner);
     const created = await createTask({
@@ -127,24 +130,19 @@ describe('ICS feed (integration)', () => {
         singleShot: false,
       },
     });
-    // Flip the freshly-created occurrence to 'done'. We bypass
-    // completeOccurrence so this test stays focused on the ICS layer.
     await db
       .update(taskOccurrences)
       .set({ status: 'done', completedAt: new Date(), completedBy: owner.id })
       .where(eq(taskOccurrences.taskId, created.id));
 
     const ics = await generateFamilyIcs({ familyId: family.id, userId: owner.id });
-    expect(ics).toContain('SUMMARY:✓ Wash dishes');
-    expect(ics).toContain('STATUS:COMPLETED');
+    expect(ics).not.toContain('Wash dishes');
+    expect(ics).not.toContain('STATUS:COMPLETED');
   });
 
-  it('includes floating completions anchored on completedAt date', async () => {
+  it('excludes dateless done (floating completion) from the feed', async () => {
     const owner = await makeUser();
     const { family } = await makeFamily(owner);
-    // Insert a task + a dateless occurrence (singleShot-style floating
-    // completion). The createTask path for floating tasks usually leaves
-    // the occurrence dateless; we replicate that shape directly.
     const [task] = await db
       .insert(tasks)
       .values({
@@ -159,22 +157,16 @@ describe('ICS feed (integration)', () => {
         singleShot: true,
       })
       .returning();
-    const today = new Date();
     await db.insert(taskOccurrences).values({
       taskId: task!.id,
       scheduledDate: null,
       status: 'done',
-      completedAt: today,
+      completedAt: new Date(),
       completedBy: owner.id,
     });
 
     const ics = await generateFamilyIcs({ familyId: family.id, userId: owner.id });
-    const y = today.getUTCFullYear();
-    const m = String(today.getUTCMonth() + 1).padStart(2, '0');
-    const d = String(today.getUTCDate()).padStart(2, '0');
-    expect(ics).toContain('SUMMARY:✓ Spontaneous chore');
-    expect(ics).toContain(`DTSTART;VALUE=DATE:${y}${m}${d}`);
-    expect(ics).toContain('STATUS:COMPLETED');
+    expect(ics).not.toContain('Spontaneous chore');
   });
 
   it('filters per-user: my assignments + unassigned, hides others', async () => {
