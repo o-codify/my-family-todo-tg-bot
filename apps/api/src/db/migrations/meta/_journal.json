@@ -169,6 +169,13 @@
       "when": 1779518000000,
       "tag": "0023_dedup_floating_pendings",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1779519000000,
+      "tag": "0024_backfill_queue_cooldown",
+      "breakpoints": true
     }
   ]
 }
