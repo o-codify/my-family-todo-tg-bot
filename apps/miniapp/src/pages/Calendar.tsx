@@ -419,9 +419,7 @@ export function Calendar({
       //   - done                 → the day completedAt landed on
       //   - pending              → today (so the grid cell gets a dot)
       // User: "в календаре не отображает точку на сегодня для задач
-      // без дат, я же просил на сегодня отображать". Previous version
-      // only anchored when assigneeId was set, which missed legacy
-      // floating rows with assigneeId=NULL on the occurrence.
+      // без дат, я же просил на сегодня отображать".
       let key: string;
       if (o.scheduledDate) {
         key = o.scheduledDate;
@@ -435,8 +433,50 @@ export function Calendar({
       if (!map.has(key)) map.set(key, []);
       map.get(key)!.push(o);
     }
+    // Floating tasks that exist as a TASK row but have no occurrence
+    // yet (newly created, never picked from "Когда-нибудь") still need
+    // a today-dot — user just created "Hh" with no date and saw no
+    // dot. Synthesise a placeholder per such task and inject under
+    // today. UID `floating:<taskId>` matches the same shape the
+    // FloatingPicker uses, so downstream code already understands it.
+    const occByTask = new Set(occurrences.map((o) => o.taskId));
+    for (const tk of tasks) {
+      if (tk.type !== 'floating' || tk.archivedAt) continue;
+      if (occByTask.has(tk.id)) continue;
+      const synthOcc: OccurrenceDto = {
+        id: `floating:${tk.id}`,
+        taskId: tk.id,
+        scheduledDate: null,
+        scheduledTime: null,
+        assigneeId: tk.assigneeId,
+        status: 'pending',
+        subtasks: null,
+        completedAt: null,
+        completedBy: null,
+        photoIds: null,
+        pointsAwarded: 0,
+        availableAt: null,
+        approvedAt: null,
+        approvedBy: null,
+        rejectedAt: null,
+        rejectedBy: null,
+        rejectionReason: null,
+        task: {
+          id: tk.id,
+          title: tk.title,
+          type: tk.type,
+          points: tk.points,
+          photoRequired: tk.photoRequired,
+          requiresApproval: tk.requiresApproval,
+          isQuest: tk.isQuest,
+          deadlineAt: tk.deadlineAt,
+        },
+      };
+      if (!map.has(todayIso)) map.set(todayIso, []);
+      map.get(todayIso)!.push(synthOcc);
+    }
     return map;
-  }, [occurrences, todayIso]);
+  }, [occurrences, tasks, todayIso]);
 
   const cells = useMemo(() => makeMonthCells(view), [view]);
   const todayDay = new Date().getDate();
@@ -481,7 +521,17 @@ export function Calendar({
   // Pending tasks sort by scheduledTime (timed first, ascending; time-less
   // after). Same rule as Day.tsx — keeps the two surfaces consistent so a
   // user planning their morning sees the same order in both lists.
-  const selectedPending = [...selectedOccurrences.filter((o) => o.status !== 'done')].sort(
+  const selectedPending = [
+    ...selectedOccurrences.filter(
+      (o) =>
+        o.status !== 'done' &&
+        // Synthetic placeholders we inject into byDate so floating
+        // tasks (no occurrence yet) get a today-dot on the grid.
+        // They already render in the "Когда-нибудь" rollup below;
+        // showing them in the day list too would double them up.
+        !o.id.startsWith('floating:'),
+    ),
+  ].sort(
     (a, b) => {
       const ta = a.scheduledTime ?? null;
       const tb = b.scheduledTime ?? null;
