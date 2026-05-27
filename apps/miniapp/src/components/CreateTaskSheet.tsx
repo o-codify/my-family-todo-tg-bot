@@ -511,18 +511,23 @@ export function CreateTaskSheet({
           </div>
         )}
 
-        {/* Row: Ответственный + Дедлайн. The two boxes share a fixed
-            min-height + center-aligned content so the avatar-bearing
-            assignee row doesn't tower over the bare date input. */}
+        {/* Row: Ответственный + Дедлайн. Both boxes lock to the same
+            explicit height — `minHeight` wasn't enough because the
+            sm avatar (22px) + 8/8 padding + 1.5/1.5 border lands at
+            ~41px while the bare date input lands at ~39px and the
+            two never converged. `height` + `boxSizing: border-box`
+            forces a hard match; vertical padding is removed and flex
+            does the centering so neither shape distorts. */}
         <div className="wf-row wf-gap-8" style={{ marginTop: 10 }}>
           <div className="wf-col wf-gap-2" style={{ flex: 1 }}>
             <span className="wf-tiny">{t('create.field.assignee')}</span>
             <div
               className="wf-box"
               style={{
-                padding: '8px 10px',
+                padding: '0 10px',
                 cursor: 'pointer',
-                minHeight: 40,
+                height: 44,
+                boxSizing: 'border-box',
                 display: 'flex',
                 alignItems: 'center',
               }}
@@ -550,8 +555,9 @@ export function CreateTaskSheet({
             <div
               className="wf-box"
               style={{
-                padding: '8px 10px',
-                minHeight: 40,
+                padding: '0 10px',
+                height: 44,
+                boxSizing: 'border-box',
                 display: 'flex',
                 alignItems: 'center',
               }}
@@ -571,6 +577,8 @@ export function CreateTaskSheet({
                   outline: 'none',
                   color: deadlineAt ? 'var(--ink)' : 'var(--hint)',
                   font: 'inherit',
+                  padding: 0,
+                  lineHeight: 1.2,
                 }}
               />
             </div>
@@ -658,16 +666,17 @@ export function CreateTaskSheet({
           </button>
         </div>
 
-        {/* Row: Награда + Фото. Same min-height + centered alignment
-            as the Assignee/Deadline row so the two cards line up. */}
+        {/* Row: Награда + Фото. Same fixed-height treatment as the
+            Assignee/Deadline row above — see comment there. */}
         <div className="wf-row wf-gap-8" style={{ marginTop: 10 }}>
           <div className="wf-col wf-gap-2" style={{ flex: 1 }}>
             <span className="wf-tiny">{t('create.field.reward')}</span>
             <div
               className="wf-box"
               style={{
-                padding: '8px 10px',
-                minHeight: 40,
+                padding: '0 10px',
+                height: 44,
+                boxSizing: 'border-box',
                 display: 'flex',
                 alignItems: 'center',
               }}
@@ -701,9 +710,10 @@ export function CreateTaskSheet({
             <div
               className="wf-box wf-spread"
               style={{
-                padding: '8px 10px',
+                padding: '0 10px',
                 cursor: 'pointer',
-                minHeight: 40,
+                height: 44,
+                boxSizing: 'border-box',
                 alignItems: 'center',
               }}
               onClick={() => setPhotoRequired(!photoRequired)}
