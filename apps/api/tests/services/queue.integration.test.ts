@@ -92,6 +92,60 @@ describe('queued tasks (integration)', () => {
     expect([a.id, b.id]).toContain(secondAssignee);
   });
 
+  it('spawned next pending honours cooldownDays via availableAt', async () => {
+    // Regression: completing a queue task with cooldownDays=6 used to
+    // leave the next pending with availableAt=null, which made it
+    // anchor to today on the calendar grid right after the user
+    // finished the task. Now ensureQueuedOccurrence stamps
+    // `availableAt = now + cooldownDays * 86_400_000`.
+    const a = await makeUser();
+    const b = await makeUser();
+    const { family } = await makeFamily(a);
+    await addMember(family, b, 'Adult');
+    const task = await createTask({
+      familyId: family.id,
+      createdBy: a.id,
+      data: {
+        title: 'Cooldown trash',
+        type: 'queued',
+        schedule: { kind: 'queued' },
+        queueUserIds: [a.id, b.id],
+        cooldownDays: 6,
+        points: 0,
+        photoRequired: false,
+        singleShot: false,
+      },
+    });
+    const taskFull = (await getTaskInFamily(task.id, family.id))!;
+    const firstOcc = (
+      await db
+        .select()
+        .from(taskOccurrences)
+        .where(and(eq(taskOccurrences.taskId, task.id), eq(taskOccurrences.status, 'pending')))
+    )[0]!;
+    const completeStart = Date.now();
+    await completeOccurrence({
+      occurrence: { ...firstOcc, task: taskFull },
+      userId: firstOcc.assigneeId!,
+      data: {},
+    });
+    const completeEnd = Date.now();
+
+    const next = (
+      await db
+        .select()
+        .from(taskOccurrences)
+        .where(and(eq(taskOccurrences.taskId, task.id), eq(taskOccurrences.status, 'pending')))
+    )[0]!;
+    expect(next.availableAt).not.toBeNull();
+    const availableAtMs = next.availableAt!.getTime();
+    // Must land ~6 days from now. Allow generous window for test wall-clock drift.
+    const expectMin = completeStart + 6 * 86_400_000 - 1000;
+    const expectMax = completeEnd + 6 * 86_400_000 + 1000;
+    expect(availableAtMs).toBeGreaterThanOrEqual(expectMin);
+    expect(availableAtMs).toBeLessThanOrEqual(expectMax);
+  });
+
   it('complete → uncomplete leaves exactly one pending (no duplicates)', async () => {
     // Regression test for "click checkbox → uncomplete → multiple pending
     // Мусор rows pile up" report. completeOccurrence spawns the next

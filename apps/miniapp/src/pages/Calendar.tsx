@@ -414,18 +414,25 @@ export function Calendar({
 
   const byDate = useMemo(() => {
     const map = new Map<string, OccurrenceDto[]>();
+    const nowMs = Date.now();
     for (const o of occurrences) {
       // Anchor logic for null-date rows:
-      //   - done                 → the day completedAt landed on
-      //   - pending              → today (so the grid cell gets a dot)
-      // User: "в календаре не отображает точку на сегодня для задач
-      // без дат, я же просил на сегодня отображать".
+      //   - done                                  → completedAt day
+      //   - pending on cooldown (availableAt > now) → skip the
+      //     today-anchor; the queue forecast / next-availability
+      //     surfaces the row on the right future day. Without this,
+      //     completing a queue task with cooldown=6 puts the next
+      //     pending right back on today.
+      //   - pending otherwise                     → today
       let key: string;
       if (o.scheduledDate) {
         key = o.scheduledDate;
       } else if (o.status === 'done' && o.completedAt) {
         key = o.completedAt.slice(0, 10);
       } else if (o.status === 'pending') {
+        if (o.availableAt && new Date(o.availableAt).getTime() > nowMs) {
+          continue;
+        }
         key = todayIso;
       } else {
         key = '__floating__';

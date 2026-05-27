@@ -114,10 +114,21 @@ export async function ensureQueuedOccurrence(
     return { occurrenceId: existing[0].id, assigneeId: decision.userId };
   }
 
+  // Honour cooldown on the freshly-spawned row so the calendar grid
+  // doesn't slap the next "Мусор" turn onto today right after a
+  // completion. Without this, completing a queue task with
+  // cooldownDays=6 immediately puts the next pending on today's
+  // anchor (byDate keys null-date pendings to today), and the user
+  // sees the task they JUST finished pinned back on today.
+  const availableAt =
+    task.cooldownDays && task.cooldownDays > 0
+      ? new Date(Date.now() + task.cooldownDays * 86_400_000)
+      : null;
   const insertRow: NewTaskOccurrenceRow = {
     taskId: task.id,
     assigneeId: decision.userId,
     status: 'pending',
+    availableAt,
   };
   const [created] = await conn.insert(taskOccurrences).values(insertRow).returning();
   return { occurrenceId: created!.id, assigneeId: decision.userId };
