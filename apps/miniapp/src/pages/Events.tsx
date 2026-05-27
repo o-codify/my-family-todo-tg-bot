@@ -425,15 +425,14 @@ function EventEditor({
   const pending = createMut.isPending || updateMut.isPending;
 
   return (
-    <BottomSheet onClose={onClose}>
+    <BottomSheet
+      onClose={onClose}
+      title={existing ? t('events.field.title') : t('events.add')}
+      closeAriaLabel={t('common.close')}
+    >
       {({ close }) => (
         <>
-          
           <div className="wf-col" style={{ gap: 10 }}>
-            <span className="wf-h3">
-              {existing ? t('events.field.title') : t('events.add')}
-            </span>
-
           <Field label={t('events.field.type')}>
             <select
               value={type}

@@ -362,13 +362,14 @@ function Composer({
   const [type, setType] = useState<PermissionRequestType>('other');
   const [text, setText] = useState('');
   return (
-    <BottomSheet onClose={onClose}>
+    <BottomSheet
+      onClose={onClose}
+      title={t('permReq.create')}
+      closeAriaLabel={t('common.close')}
+    >
       {({ close }) => (
         <>
-          
           <div className="wf-col" style={{ gap: 10 }}>
-            <span className="wf-h3">{t('permReq.create')}</span>
-
           <div className="wf-col" style={{ gap: 4 }}>
             <span className="wf-tiny">{t('permReq.field.type')}</span>
             <div className="wf-row wf-gap-6" style={{ flexWrap: 'wrap' }}>

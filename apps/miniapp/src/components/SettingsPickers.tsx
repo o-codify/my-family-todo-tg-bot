@@ -38,33 +38,9 @@ export function SettingsSheet({
   footer?: (api: { close: (after?: () => void) => void }) => ReactNode;
 }) {
   return (
-    <BottomSheet onClose={onClose} zIndex={12}>
+    <BottomSheet onClose={onClose} zIndex={12} title={title} subtitle={hint}>
       {({ close }) => (
         <>
-          
-          <div className="wf-row wf-gap-8" style={{ marginBottom: 8 }}>
-            <span className="wf-h2" style={{ flex: 1 }}>
-              {title}
-            </span>
-            <button
-              onClick={() => close()}
-              aria-label="Close"
-              style={{
-                background: 'transparent',
-                border: 'none',
-                cursor: 'pointer',
-                padding: 0,
-                color: 'var(--ink)',
-              }}
-            >
-              <Icon name="x" />
-            </button>
-          </div>
-          {hint && (
-            <span className="wf-hint" style={{ display: 'block', marginBottom: 8 }}>
-              {hint}
-            </span>
-          )}
           {children({ close })}
           {footer && <div style={{ marginTop: 12 }}>{footer({ close })}</div>}
         </>

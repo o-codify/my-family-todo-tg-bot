@@ -448,29 +448,15 @@ function TimezonePicker({
   }, [query, zones]);
 
   return (
-    <BottomSheet onClose={onClose} zIndex={12}>
+    <BottomSheet
+      onClose={onClose}
+      zIndex={12}
+      title={t('profile.timezone')}
+      closeAriaLabel={t('common.close')}
+    >
       {({ close }) => (
         <>
-          
-          <div className="wf-row wf-gap-8" style={{ marginBottom: 8 }}>
-            <span className="wf-h2" style={{ flex: 1 }}>
-              {t('profile.timezone')}
-            </span>
-            <button
-              onClick={() => close()}
-              aria-label={t('common.close')}
-              style={{
-                background: 'transparent',
-                border: 'none',
-                cursor: 'pointer',
-                padding: 0,
-                color: 'var(--ink)',
-              }}
-            >
-              <Icon name="x" />
-            </button>
-          </div>
-          <div className="wf-box" style={{ padding: '8px 10px', marginBottom: 8 }}>
+          <div className="wf-box" style={{ padding: '8px 10px', marginBottom: 8, marginTop: 4 }}>
             <div className="wf-row wf-gap-6">
               <Icon name="search" />
               <input

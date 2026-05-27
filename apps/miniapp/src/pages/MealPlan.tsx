@@ -407,15 +407,14 @@ function MealEntryEditor({
   const pending = createMut.isPending || updateMut.isPending;
 
   return (
-    <BottomSheet onClose={onClose}>
+    <BottomSheet
+      onClose={onClose}
+      title={`${SLOT_EMOJI[slot]} ${t(`mealPlan.slot.${slot}`)} · ${date}`}
+      closeAriaLabel={t('common.close')}
+    >
       {({ close }) => (
         <>
-          
           <div className="wf-col" style={{ gap: 10 }}>
-            <span className="wf-h3">
-              {SLOT_EMOJI[slot]} {t(`mealPlan.slot.${slot}`)} · {date}
-            </span>
-
             <div className="wf-col" style={{ gap: 4 }}>
               <span className="wf-tiny">{t('mealPlan.field.title')}</span>
               <input

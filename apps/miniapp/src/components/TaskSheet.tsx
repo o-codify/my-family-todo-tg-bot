@@ -238,36 +238,30 @@ export function TaskSheet({ me, family, occurrence, onClose, onEdit, onTransfer 
     !done && !o.id.startsWith('floating:') && subtasks.length > 0;
 
   return (
-    <BottomSheet onClose={onClose} zIndex={10}>
+    <BottomSheet
+      onClose={onClose}
+      zIndex={10}
+      title={o.task.title}
+      closeAriaLabel={t('common.close')}
+      headerActions={
+        onEdit
+          ? ({ close }) => (
+              <button
+                type="button"
+                onClick={() => close(onEdit)}
+                aria-label={t('common.edit')}
+                style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 0, color: 'var(--ink)', flex: 'none' }}
+              >
+                <Icon name="edit" />
+              </button>
+            )
+          : undefined
+      }
+    >
       {({ close }) => (
       <>
-        
-
-        {/* Header — port of lines 157-160 */}
-        <div className="wf-row wf-gap-8">
-          <span className="wf-h2" style={{ flex: 1 }}>
-            {o.task.title}
-          </span>
-          {onEdit && (
-            <button
-              onClick={() => close(onEdit)}
-              aria-label={t('common.edit')}
-              style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 0, color: 'var(--ink)' }}
-            >
-              <Icon name="edit" />
-            </button>
-          )}
-          <button
-            onClick={() => close()}
-            aria-label={t('common.close')}
-            style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 0, color: 'var(--ink)' }}
-          >
-            <Icon name="x" />
-          </button>
-        </div>
-
         {/* Tags — port of lines 162-168 */}
-        <div className="wf-row wf-gap-6" style={{ marginTop: 6, flexWrap: 'wrap' }}>
+        <div className="wf-row wf-gap-6" style={{ marginTop: 2, flexWrap: 'wrap' }}>
           {assignee && (
             <Tag>
               <Av m={assignee} size="xs" />
@@ -972,32 +966,16 @@ function ReschedulePicker({
   // Don't let users reschedule into the past — at minimum, today.
   const todayIso = new Date().toISOString().slice(0, 10);
   return (
-    <BottomSheet onClose={onClose} zIndex={14}>
+    <BottomSheet
+      onClose={onClose}
+      zIndex={14}
+      title={isEn ? 'Reschedule' : 'Перенести'}
+      subtitle={isEn ? 'Pick a new date for this occurrence.' : 'Выбери новую дату для этого повтора.'}
+      closeAriaLabel={t('common.close')}
+    >
       {({ close }) => (
         <>
-          
-          <div className="wf-row wf-gap-8" style={{ marginBottom: 8 }}>
-            <span className="wf-h2" style={{ flex: 1 }}>
-              {isEn ? 'Reschedule' : 'Перенести'}
-            </span>
-            <button
-              onClick={() => close()}
-              aria-label={t('common.close')}
-              style={{
-                background: 'transparent',
-                border: 'none',
-                cursor: 'pointer',
-                padding: 0,
-                color: 'var(--ink)',
-              }}
-            >
-              <Icon name="x" />
-            </button>
-          </div>
-          <span className="wf-hint" style={{ display: 'block', marginBottom: 8 }}>
-            {isEn ? 'Pick a new date for this occurrence.' : 'Выбери новую дату для этого повтора.'}
-          </span>
-          <div className="wf-box" style={{ padding: '8px 10px', marginBottom: 12 }}>
+          <div className="wf-box" style={{ padding: '8px 10px', marginBottom: 12, marginTop: 8 }}>
             <input
               type="date"
               value={value}

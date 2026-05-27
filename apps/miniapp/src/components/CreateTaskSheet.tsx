@@ -294,28 +294,8 @@ export function CreateTaskSheet({
     <BottomSheet
       onClose={onClose}
       zIndex={10}
-      header={({ close }) => (
-        // Sticky header — drag handle is rendered by BottomSheet
-        // itself, so consumers no longer need their own `.handle`.
-        <div className="wf-spread">
-          <span className="wf-h2">
-            {editingTask ? t('create.title.edit') : t('create.title.new')}
-          </span>
-          <button
-            onClick={() => close()}
-            aria-label={t('common.close')}
-            style={{
-              background: 'transparent',
-              border: 'none',
-              cursor: 'pointer',
-              padding: 0,
-              color: 'var(--ink)',
-            }}
-          >
-            <Icon name="x" />
-          </button>
-        </div>
-      )}
+      title={editingTask ? t('create.title.edit') : t('create.title.new')}
+      closeAriaLabel={t('common.close')}
     >
       {({ close }) => {
         // After-mutation: animate close then run parent's onCreated callback.

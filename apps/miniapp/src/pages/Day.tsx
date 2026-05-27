@@ -641,31 +641,15 @@ function FloatingPicker({
 }) {
   const t = useT();
   return (
-    <BottomSheet onClose={onClose} zIndex={11}>
+    <BottomSheet
+      onClose={onClose}
+      zIndex={11}
+      title={t('day.someday.title')}
+      subtitle={tasks.length === 0 ? t('day.someday.empty') : t('day.someday.hint')}
+      closeAriaLabel={t('common.close')}
+    >
       {({ close }) => (
         <>
-          
-          <div className="wf-row wf-gap-8" style={{ marginBottom: 8 }}>
-            <span className="wf-h2" style={{ flex: 1 }}>
-              {t('day.someday.title')}
-            </span>
-            <button
-              onClick={() => close()}
-              aria-label={t('common.close')}
-              style={{
-                background: 'transparent',
-                border: 'none',
-                cursor: 'pointer',
-                padding: 0,
-                color: 'var(--ink)',
-              }}
-            >
-              <Icon name="x" />
-            </button>
-          </div>
-          <span className="wf-hint">
-            {tasks.length === 0 ? t('day.someday.empty') : t('day.someday.hint')}
-          </span>
           {tasks.map((ft) => {
             const assignee = ft.assigneeId ? memberById.get(ft.assigneeId) ?? null : null;
             return (

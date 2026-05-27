@@ -807,15 +807,13 @@ function ListEditor({
   };
 
   return (
-    <BottomSheet onClose={onClose}>
+    <BottomSheet
+      onClose={onClose}
+      title={existing ? t('shopping.list.edit') : t('shopping.list.create')}
+    >
       {({ close }) => (
         <>
-          
           <div className="wf-col" style={{ gap: 10 }}>
-            <span className="wf-h3">
-              {existing ? t('shopping.list.edit') : t('shopping.list.create')}
-            </span>
-
             <Field label={t('shopping.field.name')}>
               <input
                 value={name}
@@ -924,12 +922,13 @@ function CatalogPicker({
   };
 
   return (
-    <BottomSheet onClose={onClose}>
+    <BottomSheet
+      onClose={onClose}
+      title={t('shopping.catalogPicker.title')}
+    >
       {({ close }) => (
         <>
-          
           <div className="wf-col" style={{ gap: 10 }}>
-            <span className="wf-h3">{t('shopping.catalogPicker.title')}</span>
             <input
               value={q}
               onChange={(e) => setQ(e.target.value)}
@@ -1052,12 +1051,13 @@ function MoveToPicker({
     );
   }
   return (
-    <BottomSheet onClose={onClose}>
+    <BottomSheet
+      onClose={onClose}
+      title={t('shopping.moveTo.title')}
+    >
       {({ close }) => (
         <>
-          
           <div className="wf-col" style={{ gap: 6 }}>
-            <span className="wf-h3">{t('shopping.moveTo.title')}</span>
             {allLists.length === 0 && (
               <span className="wf-hint" style={{ padding: 4 }}>
                 {t('shopping.moveTo.noOthers')}

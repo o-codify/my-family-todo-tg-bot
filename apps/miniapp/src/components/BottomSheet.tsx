@@ -1,25 +1,44 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
+import { Icon } from '../design';
 
-type CloseFn = (after?: () => void) => void;
+export type SheetCloseFn = (after?: () => void) => void;
 
 type Props = {
   /** Final cleanup — runs after the slide-out animation completes. */
   onClose: () => void;
   zIndex?: number;
-  /** Optional sticky header — pinned above the scrollable body. Use
-   *  for the sheet's title + close button so they don't scroll away.
-   *  The drag handle is rendered automatically above this slot. */
-  header?: (api: { close: CloseFn }) => ReactNode;
+  /** Sticky title rendered in the pinned header row. Required so every
+   *  sheet across the app gets the same affordance: drag handle + title
+   *  + close (✕). */
+  title: ReactNode;
+  /** Optional small text shown right under the title — also sticky.
+   *  Use sparingly; for longer explanations put a `wf-hint` inside the
+   *  body instead. */
+  subtitle?: ReactNode;
+  /** Optional extra header buttons rendered to the LEFT of the built-in
+   *  close button (e.g. a pencil-edit shortcut on TaskSheet). */
+  headerActions?: (api: { close: SheetCloseFn }) => ReactNode;
+  /** Aria-label for the close button. Falls back to "Close" — set this
+   *  to the localized string when you want the screen reader to read it
+   *  in the user's language. */
+  closeAriaLabel?: string;
   /** Render-prop: receives a `close()` helper that plays the exit animation
    *  before invoking the supplied callback (or the parent's `onClose` if no
    *  callback is passed). Use this in place of the old direct `onClose()`
    *  calls so the sheet animates out instead of vanishing. */
-  children: (api: { close: CloseFn }) => ReactNode;
+  children: (api: { close: SheetCloseFn }) => ReactNode;
 };
 
 /**
- * Animated bottom sheet shell.
+ * Animated bottom sheet shell — the single component every sheet in the
+ * app should use.
+ *
+ * Layout (top → bottom, always identical):
+ *   1. Drag handle (sticky)
+ *   2. Title row: title text + optional `headerActions` + built-in ✕ (sticky)
+ *   3. Optional subtitle (sticky)
+ *   4. Scrollable body (children)
  *
  * Mount triggers a slide-up + backdrop-fade-in (CSS keyframes).
  * `close()` flips the `is-closing` class so the inverse animation plays,
@@ -33,12 +52,20 @@ type Props = {
  */
 const ANIM_MS = 240;
 
-export function BottomSheet({ onClose, zIndex = 10, header, children }: Props) {
+export function BottomSheet({
+  onClose,
+  zIndex = 10,
+  title,
+  subtitle,
+  headerActions,
+  closeAriaLabel,
+  children,
+}: Props) {
   const [closing, setClosing] = useState(false);
   const closedRef = useRef(false);
   const timerRef = useRef<number | null>(null);
 
-  const close = useCallback<CloseFn>(
+  const close = useCallback<SheetCloseFn>(
     (after) => {
       if (closedRef.current) return;
       closedRef.current = true;
@@ -70,12 +97,13 @@ export function BottomSheet({ onClose, zIndex = 10, header, children }: Props) {
     >
       {/* Two-layer scroll containment:
           - outer `.wf-sheet` is a flex column capped at 90vh with NO
-            scrolling — that anchors the visual top of the sheet so the
-            handle + the consumer's first row (typically a title + close
-            button) stay put as the user scrolls inside;
+            scrolling — that anchors the sticky chrome (handle + title)
+            to the top of the panel;
           - inner `.wf-sheet__scroll` is the actual scroll surface.
-          We keep `wf-sheet` declaring overflow:auto in CSS for legacy
-          consumers, so we explicitly null it out here. */}
+          We strip `.wf-sheet`'s legacy `padding: 12px 14px 20px` here
+          and reapply matching insets on the sticky header + body so
+          they line up exactly the way they did when sheets handled
+          padding themselves. */}
       <div
         className={'wf-sheet wf-sheet--animated' + (closing ? ' is-closing' : '')}
         onClick={(e) => e.stopPropagation()}
@@ -86,40 +114,56 @@ export function BottomSheet({ onClose, zIndex = 10, header, children }: Props) {
           display: 'flex',
           flexDirection: 'column',
           width: '100%',
+          padding: 0,
         }}
       >
-        {/* Drag handle — always at the top of the sheet, never
-            scrolls. Consumers that previously rendered their own
-            `<div className="handle" />` inside the body should drop
-            it. */}
+        {/* Sticky chrome — handle + title row + optional subtitle. Never
+            scrolls, so the affordance stays put no matter how long the
+            body is. */}
         <div
-          className="handle"
-          style={{ flex: 'none', marginTop: 6, marginBottom: 6 }}
-          aria-hidden
-        />
-        {/* Sticky header slot. Lives above the scroll surface so the
-            title + close button stay visible when the body scrolls.
-            Padded to match the sheet's body inset. */}
-        {header && (
-          <div
-            style={{
-              flex: 'none',
-              padding: '0 var(--gap, 12px) 8px',
-            }}
-          >
-            {header({ close })}
+          style={{
+            flex: 'none',
+            padding: '12px 14px 8px',
+          }}
+        >
+          <div className="handle" aria-hidden style={{ marginBottom: 10 }} />
+          <div className="wf-row wf-gap-8">
+            <span className="wf-h2" style={{ flex: 1, minWidth: 0 }}>
+              {title}
+            </span>
+            {headerActions?.({ close })}
+            <button
+              type="button"
+              onClick={() => close()}
+              aria-label={closeAriaLabel ?? 'Close'}
+              style={{
+                background: 'transparent',
+                border: 'none',
+                cursor: 'pointer',
+                padding: 0,
+                color: 'var(--ink)',
+                flex: 'none',
+              }}
+            >
+              <Icon name="x" />
+            </button>
           </div>
-        )}
+          {subtitle != null && (
+            <span
+              className="wf-hint"
+              style={{ display: 'block', marginTop: 6 }}
+            >
+              {subtitle}
+            </span>
+          )}
+        </div>
         <div
           className="wf-sheet__scroll"
           style={{
             flex: 1,
             minHeight: 0,
             overflowY: 'auto',
-            // Match the padding the .wf-sheet selector applied before —
-            // the consumer's spacing was tuned for that. Keeping it on
-            // the inner scroller lets the handle/title hug the top edge.
-            padding: 'inherit',
+            padding: '0 14px 20px',
           }}
         >
           {children({ close })}

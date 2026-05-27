@@ -1089,29 +1089,14 @@ function CreateRewardSheet({
     trimmedName.length > 0 && Number.isFinite(cost) && cost > 0 && !isPending;
 
   return (
-    <BottomSheet onClose={onClose} zIndex={12}>
+    <BottomSheet
+      onClose={onClose}
+      zIndex={12}
+      title={isEn ? 'New reward' : 'Новый приз'}
+      closeAriaLabel={t('common.close')}
+    >
       {({ close }) => (
         <>
-          
-          <div className="wf-row wf-gap-8" style={{ marginBottom: 8 }}>
-            <span className="wf-h2" style={{ flex: 1 }}>
-              {isEn ? 'New reward' : 'Новый приз'}
-            </span>
-            <button
-              onClick={() => close()}
-              aria-label={t('common.close')}
-              style={{
-                background: 'transparent',
-                border: 'none',
-                cursor: 'pointer',
-                padding: 0,
-                color: 'var(--ink)',
-              }}
-            >
-              <Icon name="x" />
-            </button>
-          </div>
-
           {/* Name */}
           <span className="wf-tiny" style={{ display: 'block', marginBottom: 4 }}>
             {isEn ? 'Name' : 'Название'}
