@@ -1,4 +1,4 @@
-import { and, eq, inArray, sql as dsql } from 'drizzle-orm';
+import { and, desc, eq, inArray, sql as dsql } from 'drizzle-orm';
 import { db, type Db } from '../db/client';
 import {
   familyMembers,
@@ -85,7 +85,20 @@ export async function ensureQueuedOccurrence(
   }
 
   const candidates = await loadCandidates(task, conn);
-  const decision = pickNextAssignee(candidates);
+  // Latest completer of THIS task — fed into pickNextAssignee so an
+  // equal-count tie alternates instead of sticking on the last actor.
+  const [lastDone] = await conn
+    .select({ completedBy: taskOccurrences.completedBy })
+    .from(taskOccurrences)
+    .where(
+      and(
+        eq(taskOccurrences.taskId, task.id),
+        eq(taskOccurrences.status, 'done'),
+      ),
+    )
+    .orderBy(desc(taskOccurrences.completedAt))
+    .limit(1);
+  const decision = pickNextAssignee(candidates, lastDone?.completedBy ?? null);
   if (decision.kind === 'nobody_available') return { error: 'nobody_available' };
 
   // The queue invariant is "at most one pending row per task". A bug
