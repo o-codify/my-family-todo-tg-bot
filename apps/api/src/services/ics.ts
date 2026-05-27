@@ -209,11 +209,20 @@ export async function generateFamilyIcs(input: {
             gte(taskOccurrences.scheduledDate, from),
             lte(taskOccurrences.scheduledDate, to),
           ),
-          // Dateless pending (queued / "Когда-нибудь") — always
-          // include; anchored to today as all-day below.
+          // Dateless pending (queued / "Когда-нибудь") — anchored to
+          // today as all-day below. Skip rows whose availableAt is in
+          // the future: those are the cooldown rows seeded by
+          // completeFloatingTask / ensureQueuedOccurrence after a
+          // completion, and the user explicitly said cooldown must
+          // suppress them ("задачи без даты передавались на сегодня
+          // [...] но это если кд позволяет").
           and(
             isNull(taskOccurrences.scheduledDate),
             eq(taskOccurrences.status, 'pending'),
+            or(
+              isNull(taskOccurrences.availableAt),
+              lte(taskOccurrences.availableAt, today),
+            ),
           ),
         ),
       ),
@@ -227,6 +236,9 @@ export async function generateFamilyIcs(input: {
   // ensureQueuedOccurrence / completion cycle will self-heal the
   // duplicates in the DB.
   const seenDatelessByTask = new Set<string>();
+  // Track which task ids have ANY emitted row (dated or dateless) so
+  // the floating-synthesis pass below knows whether it'd duplicate.
+  const tasksWithEmittedRow = new Set<string>();
   const events = rows
     .map((r) => {
       const isDateless = !r.scheduledDate;
@@ -234,6 +246,7 @@ export async function generateFamilyIcs(input: {
         if (seenDatelessByTask.has(r.taskId)) return null;
         seenDatelessByTask.add(r.taskId);
       }
+      tasksWithEmittedRow.add(r.taskId);
       const anchor = r.scheduledDate ?? todayIso;
       const presentation = presentStatus(r.status);
       return formatVEvent({
@@ -248,6 +261,110 @@ export async function generateFamilyIcs(input: {
       });
     })
     .filter((s): s is string => s !== null);
+
+  // Floating-task synthesis. A fresh `floating` task (just created,
+  // never completed) has NO row in `task_occurrences` — the planner
+  // returns [] for floating + queued types. Without this pass the ICS
+  // feed silently drops it, which is what the user just reported:
+  // "Теперь во внешнем календаре нет задачи без даты. Надо чтобы
+  // задачи без даты передавались на сегодня". The in-app calendar
+  // synthesises the same "anchor on today" placeholder via the
+  // `byDate` floating-injection — mirror that here.
+  //
+  // Cooldown gate: if the task has a `cooldownDays` and the latest
+  // done completion falls inside that window, skip it. The user's
+  // follow-up: "Но это если кд позволяет".
+  //
+  // Personal-feed gate: only emit when the task is mine
+  // (`task.assigneeId === userId`) or unassigned. Mirrors the main
+  // query's "mine + shared" rule.
+  const floatingTasks = await db
+    .select({
+      id: tasks.id,
+      title: tasks.title,
+      description: tasks.description,
+      cooldownDays: tasks.cooldownDays,
+      singleShot: tasks.singleShot,
+      assigneeId: tasks.assigneeId,
+    })
+    .from(tasks)
+    .where(
+      and(
+        eq(tasks.familyId, input.familyId),
+        isNull(tasks.archivedAt),
+        eq(tasks.type, 'floating'),
+        or(eq(tasks.assigneeId, input.userId), isNull(tasks.assigneeId)),
+      ),
+    );
+
+  const floatingSyntheticEvents: string[] = [];
+  if (floatingTasks.length > 0) {
+    const floatingIds = floatingTasks.map((t) => t.id);
+    // Two side-channels per task:
+    //   - hasPendingRow: any pending occurrence at all (even one with
+    //     future availableAt — that's the cooldown row that the SQL
+    //     filter intentionally dropped from `events`). Either way the
+    //     existing row owns the today anchor / cooldown state, so we
+    //     shouldn't synthesise a duplicate today VEVENT.
+    //   - lastDoneByTask: latest completedAt — feeds the cooldown
+    //     gate for tasks that have NO pending row (the
+    //     reopen_immediately path that didn't insert one, or a
+    //     historical singleShot done where archive somehow didn't
+    //     fire).
+    const allRows = await db
+      .select({
+        taskId: taskOccurrences.taskId,
+        status: taskOccurrences.status,
+        completedAt: taskOccurrences.completedAt,
+      })
+      .from(taskOccurrences)
+      .where(inArray(taskOccurrences.taskId, floatingIds));
+    const hasPendingRow = new Set<string>();
+    const lastDoneByTask = new Map<string, Date>();
+    for (const r of allRows) {
+      if (r.status === 'pending') {
+        hasPendingRow.add(r.taskId);
+      } else if (r.status === 'done' && r.completedAt) {
+        const prev = lastDoneByTask.get(r.taskId);
+        if (!prev || r.completedAt.getTime() > prev.getTime()) {
+          lastDoneByTask.set(r.taskId, r.completedAt);
+        }
+      }
+    }
+
+    const nowMs = today.getTime();
+    for (const ft of floatingTasks) {
+      // Already emitted from a real row in the main query — leave it
+      // alone, the dedup pass took care of it.
+      if (tasksWithEmittedRow.has(ft.id)) continue;
+      // Existing pending row in the DB (even one that the SQL filter
+      // dropped because availableAt is still in the future). The
+      // existing row is the source of truth for whether the task
+      // shows up — don't second-guess it with synthesis.
+      if (hasPendingRow.has(ft.id)) continue;
+      const last = lastDoneByTask.get(ft.id);
+      // singleShot tasks that have been done are spent — even if the
+      // archive flag somehow didn't get set, we should not resurrect
+      // them in the calendar.
+      if (ft.singleShot && last) continue;
+      // Cooldown gate.
+      if (ft.cooldownDays && ft.cooldownDays > 0 && last) {
+        if (last.getTime() + ft.cooldownDays * 86_400_000 > nowMs) {
+          continue;
+        }
+      }
+      floatingSyntheticEvents.push(
+        formatVEvent({
+          uid: `floating:${ft.id}@family-todo`,
+          title: ft.title,
+          description: ft.description ?? '',
+          date: todayIso,
+          time: null,
+          status: null,
+        }),
+      );
+    }
+  }
 
   // Queue forecast — the miniapp's Calendar projects future rotations of
   // queued tasks client-side because only one real pending occurrence
@@ -458,6 +575,7 @@ export async function generateFamilyIcs(input: {
     'CALSCALE:GREGORIAN',
     'METHOD:PUBLISH',
     ...events,
+    ...floatingSyntheticEvents,
     ...forecastEvents,
     ...eventVEvents,
     'END:VCALENDAR',

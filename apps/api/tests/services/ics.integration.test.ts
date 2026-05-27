@@ -435,6 +435,115 @@ describe('ICS feed (integration)', () => {
     expect(ics).not.toContain('Removed');
   });
 
+  it('synthesises today VEVENT for a floating task with NO occurrence row', async () => {
+    // Bug fix: a freshly-created `floating` task has no row in
+    // task_occurrences because planOccurrencesForWindow returns [] for
+    // floating/queued. Without synthesis the ICS feed silently drops
+    // it. The in-app calendar synthesises a today-anchor placeholder
+    // — ICS must do the same.
+    const owner = await makeUser();
+    const { family } = await makeFamily(owner);
+    await db.insert(tasks).values({
+      familyId: family.id,
+      title: 'Wipe counter',
+      type: 'floating',
+      schedule: { kind: 'floating' },
+      assigneeId: owner.id,
+      createdBy: owner.id,
+      points: 0,
+      photoRequired: false,
+      requiresApproval: false,
+      singleShot: false,
+    });
+
+    const ics = await generateFamilyIcs({ familyId: family.id, userId: owner.id });
+    const today = new Date();
+    const y = today.getUTCFullYear();
+    const m = String(today.getUTCMonth() + 1).padStart(2, '0');
+    const d = String(today.getUTCDate()).padStart(2, '0');
+    expect(ics).toContain('SUMMARY:Wipe counter');
+    expect(ics).toContain(`DTSTART;VALUE=DATE:${y}${m}${d}`);
+  });
+
+  it('floating synthesis: skips a task whose cooldown is still active', async () => {
+    // After completion of a floating task with cooldownDays>0 there's
+    // a pending row seeded with availableAt = completedAt + N days.
+    // While availableAt > now the task is "on cooldown" and must not
+    // appear in the calendar — the user explicitly added the
+    // qualifier "Но это если кд позволяет".
+    const owner = await makeUser();
+    const { family } = await makeFamily(owner);
+    const [task] = await db
+      .insert(tasks)
+      .values({
+        familyId: family.id,
+        title: 'Vacuum',
+        type: 'floating',
+        schedule: { kind: 'floating' },
+        assigneeId: owner.id,
+        createdBy: owner.id,
+        cooldownDays: 6,
+        points: 0,
+        photoRequired: false,
+        requiresApproval: false,
+        singleShot: false,
+      })
+      .returning();
+    // Existing pending row with future availableAt — this is what
+    // completeFloatingTask seeds when wait_then_reopen fires.
+    const future = new Date(Date.now() + 5 * 86_400_000);
+    await db.insert(taskOccurrences).values({
+      taskId: task!.id,
+      scheduledDate: null,
+      status: 'pending',
+      assigneeId: owner.id,
+      availableAt: future,
+    });
+
+    const ics = await generateFamilyIcs({ familyId: family.id, userId: owner.id });
+    expect(ics).not.toContain('SUMMARY:Vacuum');
+  });
+
+  it('floating synthesis: cooldown elapsed → today anchor returns', async () => {
+    // A floating task completed 10 days ago with a 6-day cooldown is
+    // available again — must appear on today.
+    const owner = await makeUser();
+    const { family } = await makeFamily(owner);
+    const [task] = await db
+      .insert(tasks)
+      .values({
+        familyId: family.id,
+        title: 'Mop floor',
+        type: 'floating',
+        schedule: { kind: 'floating' },
+        assigneeId: owner.id,
+        createdBy: owner.id,
+        cooldownDays: 6,
+        points: 0,
+        photoRequired: false,
+        requiresApproval: false,
+        singleShot: false,
+      })
+      .returning();
+    // Old done row 10 days ago — no pending row (the reopen failed or
+    // was archived elsewhere; either way the synthesis must kick in).
+    await db.insert(taskOccurrences).values({
+      taskId: task!.id,
+      scheduledDate: null,
+      status: 'done',
+      completedAt: new Date(Date.now() - 10 * 86_400_000),
+      completedBy: owner.id,
+    });
+
+    const ics = await generateFamilyIcs({ familyId: family.id, userId: owner.id });
+    const today = new Date();
+    const y = today.getUTCFullYear();
+    const m = String(today.getUTCMonth() + 1).padStart(2, '0');
+    const d = String(today.getUTCDate()).padStart(2, '0');
+    expect(ics).toContain('SUMMARY:Mop floor');
+    expect(ics).toContain(`DTSTART;VALUE=DATE:${y}${m}${d}`);
+  });
+
   it('escaping: commas, semicolons, backslashes, newlines in title', async () => {
     const owner = await makeUser();
     const { family } = await makeFamily(owner);
