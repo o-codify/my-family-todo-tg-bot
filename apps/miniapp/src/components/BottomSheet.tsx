@@ -7,6 +7,10 @@ type Props = {
   /** Final cleanup — runs after the slide-out animation completes. */
   onClose: () => void;
   zIndex?: number;
+  /** Optional sticky header — pinned above the scrollable body. Use
+   *  for the sheet's title + close button so they don't scroll away.
+   *  The drag handle is rendered automatically above this slot. */
+  header?: (api: { close: CloseFn }) => ReactNode;
   /** Render-prop: receives a `close()` helper that plays the exit animation
    *  before invoking the supplied callback (or the parent's `onClose` if no
    *  callback is passed). Use this in place of the old direct `onClose()`
@@ -29,7 +33,7 @@ type Props = {
  */
 const ANIM_MS = 240;
 
-export function BottomSheet({ onClose, zIndex = 10, children }: Props) {
+export function BottomSheet({ onClose, zIndex = 10, header, children }: Props) {
   const [closing, setClosing] = useState(false);
   const closedRef = useRef(false);
   const timerRef = useRef<number | null>(null);
@@ -84,6 +88,28 @@ export function BottomSheet({ onClose, zIndex = 10, children }: Props) {
           width: '100%',
         }}
       >
+        {/* Drag handle — always at the top of the sheet, never
+            scrolls. Consumers that previously rendered their own
+            `<div className="handle" />` inside the body should drop
+            it. */}
+        <div
+          className="handle"
+          style={{ flex: 'none', marginTop: 6, marginBottom: 6 }}
+          aria-hidden
+        />
+        {/* Sticky header slot. Lives above the scroll surface so the
+            title + close button stay visible when the body scrolls.
+            Padded to match the sheet's body inset. */}
+        {header && (
+          <div
+            style={{
+              flex: 'none',
+              padding: '0 var(--gap, 12px) 8px',
+            }}
+          >
+            {header({ close })}
+          </div>
+        )}
         <div
           className="wf-sheet__scroll"
           style={{

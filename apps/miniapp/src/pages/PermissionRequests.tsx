@@ -365,7 +365,7 @@ function Composer({
     <BottomSheet onClose={onClose}>
       {({ close }) => (
         <>
-          <div className="handle" />
+          
           <div className="wf-col" style={{ gap: 10 }}>
             <span className="wf-h3">{t('permReq.create')}</span>
 

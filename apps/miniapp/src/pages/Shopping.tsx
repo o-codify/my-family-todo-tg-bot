@@ -810,7 +810,7 @@ function ListEditor({
     <BottomSheet onClose={onClose}>
       {({ close }) => (
         <>
-          <div className="handle" />
+          
           <div className="wf-col" style={{ gap: 10 }}>
             <span className="wf-h3">
               {existing ? t('shopping.list.edit') : t('shopping.list.create')}
@@ -927,7 +927,7 @@ function CatalogPicker({
     <BottomSheet onClose={onClose}>
       {({ close }) => (
         <>
-          <div className="handle" />
+          
           <div className="wf-col" style={{ gap: 10 }}>
             <span className="wf-h3">{t('shopping.catalogPicker.title')}</span>
             <input
@@ -1055,7 +1055,7 @@ function MoveToPicker({
     <BottomSheet onClose={onClose}>
       {({ close }) => (
         <>
-          <div className="handle" />
+          
           <div className="wf-col" style={{ gap: 6 }}>
             <span className="wf-h3">{t('shopping.moveTo.title')}</span>
             {allLists.length === 0 && (

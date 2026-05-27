@@ -241,7 +241,7 @@ export function TaskSheet({ me, family, occurrence, onClose, onEdit, onTransfer 
     <BottomSheet onClose={onClose} zIndex={10}>
       {({ close }) => (
       <>
-        <div className="handle" />
+        
 
         {/* Header — port of lines 157-160 */}
         <div className="wf-row wf-gap-8">
@@ -975,7 +975,7 @@ function ReschedulePicker({
     <BottomSheet onClose={onClose} zIndex={14}>
       {({ close }) => (
         <>
-          <div className="handle" />
+          
           <div className="wf-row wf-gap-8" style={{ marginBottom: 8 }}>
             <span className="wf-h2" style={{ flex: 1 }}>
               {isEn ? 'Reschedule' : 'Перенести'}

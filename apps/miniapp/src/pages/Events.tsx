@@ -428,7 +428,7 @@ function EventEditor({
     <BottomSheet onClose={onClose}>
       {({ close }) => (
         <>
-          <div className="handle" />
+          
           <div className="wf-col" style={{ gap: 10 }}>
             <span className="wf-h3">
               {existing ? t('events.field.title') : t('events.add')}

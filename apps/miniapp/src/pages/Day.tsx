@@ -644,7 +644,7 @@ function FloatingPicker({
     <BottomSheet onClose={onClose} zIndex={11}>
       {({ close }) => (
         <>
-          <div className="handle" />
+          
           <div className="wf-row wf-gap-8" style={{ marginBottom: 8 }}>
             <span className="wf-h2" style={{ flex: 1 }}>
               {t('day.someday.title')}

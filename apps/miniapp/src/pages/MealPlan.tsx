@@ -410,7 +410,7 @@ function MealEntryEditor({
     <BottomSheet onClose={onClose}>
       {({ close }) => (
         <>
-          <div className="handle" />
+          
           <div className="wf-col" style={{ gap: 10 }}>
             <span className="wf-h3">
               {SLOT_EMOJI[slot]} {t(`mealPlan.slot.${slot}`)} · {date}

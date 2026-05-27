@@ -291,28 +291,37 @@ export function CreateTaskSheet({
   };
 
   return (
-    <BottomSheet onClose={onClose} zIndex={10}>
-      {({ close }) => {
-        // After-mutation: animate close then run parent's onCreated callback.
-        const finish = () => close(onCreated);
-        return (
-      <>
-        <div className="handle" />
-
-        {/* Header */}
-        <div className="wf-spread" style={{ marginBottom: 8 }}>
+    <BottomSheet
+      onClose={onClose}
+      zIndex={10}
+      header={({ close }) => (
+        // Sticky header — drag handle is rendered by BottomSheet
+        // itself, so consumers no longer need their own `.handle`.
+        <div className="wf-spread">
           <span className="wf-h2">
             {editingTask ? t('create.title.edit') : t('create.title.new')}
           </span>
           <button
             onClick={() => close()}
             aria-label={t('common.close')}
-            style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 0, color: 'var(--ink)' }}
+            style={{
+              background: 'transparent',
+              border: 'none',
+              cursor: 'pointer',
+              padding: 0,
+              color: 'var(--ink)',
+            }}
           >
             <Icon name="x" />
           </button>
         </div>
-
+      )}
+    >
+      {({ close }) => {
+        // After-mutation: animate close then run parent's onCreated callback.
+        const finish = () => close(onCreated);
+        return (
+      <>
         {/* Что сделать + Добавить в каталог */}
         <div className="wf-col wf-gap-4" style={{ marginBottom: 10 }}>
           <span className="wf-tiny">{t('create.field.title')}</span>
