@@ -143,9 +143,10 @@ export function CreateTaskSheet({
   // the existing template, plain-create starts empty. An empty trailing
   // input always exists so adding feels frictionless (Enter to commit).
   const [subtaskTitles, setSubtaskTitles] = useState<string[]>(initial.subtasks);
-  // Tag attachments — multi-select chips. Tag list fetched lazily; users
-  // can also create a new tag from inside the sheet (small "+" chip).
-  const [tagIds, setTagIds] = useState<string[]>(initial.tagIds);
+  // Tag attachments are no longer exposed in the create sheet UI, but we
+  // still carry the existing list through state so saving an edited task
+  // preserves whatever tags it already had.
+  const [tagIds] = useState<string[]>(initial.tagIds);
 
   const membersQuery = useQuery({
     queryKey: ['members', family.id],
@@ -310,7 +311,6 @@ export function CreateTaskSheet({
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               placeholder={t('create.field.title.placeholder')}
-              autoFocus
               className="wf-label"
               style={{
                 width: '100%',
@@ -511,13 +511,21 @@ export function CreateTaskSheet({
           </div>
         )}
 
-        {/* Row: Ответственный + Дедлайн */}
+        {/* Row: Ответственный + Дедлайн. The two boxes share a fixed
+            min-height + center-aligned content so the avatar-bearing
+            assignee row doesn't tower over the bare date input. */}
         <div className="wf-row wf-gap-8" style={{ marginTop: 10 }}>
           <div className="wf-col wf-gap-2" style={{ flex: 1 }}>
             <span className="wf-tiny">{t('create.field.assignee')}</span>
             <div
               className="wf-box"
-              style={{ padding: '8px 10px', cursor: 'pointer' }}
+              style={{
+                padding: '8px 10px',
+                cursor: 'pointer',
+                minHeight: 40,
+                display: 'flex',
+                alignItems: 'center',
+              }}
               onClick={cycleAssignee}
             >
               {autoAssign ? (
@@ -539,7 +547,15 @@ export function CreateTaskSheet({
           </div>
           <div className="wf-col wf-gap-2" style={{ flex: 1 }}>
             <span className="wf-tiny">{t('create.field.deadline')}</span>
-            <div className="wf-box" style={{ padding: '8px 10px' }}>
+            <div
+              className="wf-box"
+              style={{
+                padding: '8px 10px',
+                minHeight: 40,
+                display: 'flex',
+                alignItems: 'center',
+              }}
+            >
               <input
                 type="date"
                 value={deadlineAt?.slice(0, 10) ?? ''}
@@ -561,12 +577,10 @@ export function CreateTaskSheet({
           </div>
         </div>
 
-        {/* Tags — multi-select chips. Tag list fetched lazily; pressing
-            "+" prompts for a name to spin up a new tag inline. */}
-        <span className="wf-tiny" style={{ marginTop: 10 }}>
-          {t('create.tags.title')}
-        </span>
-        <TagPicker familyId={family.id} value={tagIds} onChange={setTagIds} />
+        {/* Tags UI deliberately removed from the create sheet — the
+            user didn't want them clogging the form. We still preserve
+            existing `tagIds` from edit-mode in state so saving keeps
+            whatever tags the task already had. */}
 
         {/* Subtasks — checklist editor. Empty list = no checklist.
             Each non-empty line becomes a subtask on save. The bottom input
@@ -644,11 +658,20 @@ export function CreateTaskSheet({
           </button>
         </div>
 
-        {/* Row: Награда + Фото */}
+        {/* Row: Награда + Фото. Same min-height + centered alignment
+            as the Assignee/Deadline row so the two cards line up. */}
         <div className="wf-row wf-gap-8" style={{ marginTop: 10 }}>
           <div className="wf-col wf-gap-2" style={{ flex: 1 }}>
             <span className="wf-tiny">{t('create.field.reward')}</span>
-            <div className="wf-box" style={{ padding: '8px 10px' }}>
+            <div
+              className="wf-box"
+              style={{
+                padding: '8px 10px',
+                minHeight: 40,
+                display: 'flex',
+                alignItems: 'center',
+              }}
+            >
               <div className="wf-row wf-gap-6" style={{ alignItems: 'baseline' }}>
                 <span className="wf-label">+</span>
                 <input
@@ -677,7 +700,12 @@ export function CreateTaskSheet({
             <span className="wf-tiny">{t('create.field.photo')}</span>
             <div
               className="wf-box wf-spread"
-              style={{ padding: '6px 10px', cursor: 'pointer' }}
+              style={{
+                padding: '8px 10px',
+                cursor: 'pointer',
+                minHeight: 40,
+                alignItems: 'center',
+              }}
               onClick={() => setPhotoRequired(!photoRequired)}
             >
               <span className="wf-label">
@@ -1049,92 +1077,6 @@ function extractFromTask(t: TaskDto): {
     subtasks: (t.subtasksTemplate ?? []).map((s) => s.title),
     tagIds: t.tagIds ?? [],
   };
-}
-
-/**
- * Inline multi-select for tag attachments. Fetches the family's tag list
- * lazily (TanStack cache) and renders each as a toggle chip; tapping
- * flips its membership in `value`. Pressing the "+ Новый тег" chip
- * prompts for a name and creates a tag on the fly, then auto-selects it.
- * Empty state collapses to just the "+" — discoverable without yelling
- * if the family hasn't created any tags yet.
- */
-function TagPicker({
-  familyId,
-  value,
-  onChange,
-}: {
-  familyId: string;
-  value: string[];
-  onChange: (next: string[]) => void;
-}) {
-  const t = useT();
-  const queryClient = useQueryClient();
-  const tagsQuery = useQuery({
-    queryKey: ['tags', familyId],
-    queryFn: () => api.listTags(familyId),
-  });
-  const createMut = useMutation({
-    mutationFn: (name: string) => api.createTag(familyId, { name }),
-    onSuccess: (res) => {
-      queryClient.invalidateQueries({ queryKey: ['tags', familyId] });
-      onChange([...value, res.tag.id]);
-    },
-  });
-  const tags = tagsQuery.data?.tags ?? [];
-  const toggle = (id: string) =>
-    onChange(value.includes(id) ? value.filter((x) => x !== id) : [...value, id]);
-  return (
-    <div className="wf-row wf-gap-6" style={{ flexWrap: 'wrap', marginTop: 4 }}>
-      {tags.map((tg) => {
-        const active = value.includes(tg.id);
-        return (
-          <button
-            key={tg.id}
-            type="button"
-            onClick={() => toggle(tg.id)}
-            style={{
-              background: active ? tg.color ?? 'var(--ink)' : 'transparent',
-              color: active ? 'var(--paper)' : 'var(--ink)',
-              border: `1.5px solid ${active ? tg.color ?? 'var(--ink)' : 'var(--line)'}`,
-              borderRadius: 999,
-              padding: '4px 10px',
-              fontSize: 12,
-              fontWeight: 600,
-              cursor: 'pointer',
-              font: 'inherit',
-              lineHeight: 1.2,
-            }}
-          >
-            {tg.name}
-          </button>
-        );
-      })}
-      <button
-        type="button"
-        onClick={() => {
-          const name = window.prompt(t('create.tags.namePrompt'));
-          if (!name?.trim()) return;
-          createMut.mutate(name.trim());
-        }}
-        disabled={createMut.isPending}
-        style={{
-          background: 'transparent',
-          color: 'var(--hint)',
-          border: '1.5px dashed var(--softline)',
-          borderRadius: 999,
-          padding: '4px 10px',
-          fontSize: 12,
-          fontWeight: 600,
-          cursor: 'pointer',
-          font: 'inherit',
-          lineHeight: 1.2,
-        }}
-      >
-        + {t('create.tags.add')}
-      </button>
-    </div>
-  );
 }
 
 /**
