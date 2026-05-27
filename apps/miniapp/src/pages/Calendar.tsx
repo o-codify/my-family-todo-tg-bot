@@ -417,16 +417,17 @@ export function Calendar({
     for (const o of occurrences) {
       // Anchor logic for null-date rows:
       //   - done                 → the day completedAt landed on
-      //   - pending + assigned   → today (someone owes this; show it)
-      //   - pending + unassigned → "Когда-нибудь" rollup
-      // This covers both queued (always assigned) and floating tasks that
-      // were explicitly given to someone.
+      //   - pending              → today (so the grid cell gets a dot)
+      // User: "в календаре не отображает точку на сегодня для задач
+      // без дат, я же просил на сегодня отображать". Previous version
+      // only anchored when assigneeId was set, which missed legacy
+      // floating rows with assigneeId=NULL on the occurrence.
       let key: string;
       if (o.scheduledDate) {
         key = o.scheduledDate;
       } else if (o.status === 'done' && o.completedAt) {
         key = o.completedAt.slice(0, 10);
-      } else if (o.status === 'pending' && o.assigneeId) {
+      } else if (o.status === 'pending') {
         key = todayIso;
       } else {
         key = '__floating__';
