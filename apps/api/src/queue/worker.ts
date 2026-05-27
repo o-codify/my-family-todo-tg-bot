@@ -1,7 +1,7 @@
 import { Worker, type Job } from 'bullmq';
-import { eq, isNotNull } from 'drizzle-orm';
+import { and, eq, isNotNull, isNull } from 'drizzle-orm';
 import { db } from '../db/client';
-import { users } from '../db/schema';
+import { tasks, users } from '../db/schema';
 import { logger } from '../logger';
 import { rescheduleDigestForUser, runDigest } from './digest';
 import { runReminder } from './reminder';
@@ -11,6 +11,7 @@ import {
   scheduleGoogleSyncTick,
 } from './google-cron';
 import { isGoogleOauthConfigured } from '../services/google-crypto';
+import { ensureQueuedOccurrence } from '../services/queue-tasks';
 import { NOTIFICATIONS_QUEUE, getConnectionOptions } from './index';
 
 let worker: Worker | null = null;
@@ -102,6 +103,40 @@ export async function hydrateDigestSchedulers(): Promise<void> {
   }
   logger.info({ scheduled, total: rows.length }, 'digest schedulers hydrated');
   void eq; // keep import in case future filters need it
+}
+
+/**
+ * Boot-time: walk every active queued task and call ensureQueuedOccurrence.
+ *
+ * This is the self-heal for the assignee drift the user hit: an earlier
+ * over-broad dedup migration (0023) could remove dateless pendings
+ * regardless of task type, sometimes flipping the rotation pivot. The
+ * fix lives at the data layer: ensureQueuedOccurrence is idempotent
+ * AND re-runs pickNextAssignee (which uses completion counts +
+ * away-mode) to land the current row on the correct user. Calling it
+ * once per queue task at boot normalises everyone's state without any
+ * destructive SQL.
+ */
+export async function hydrateQueueAssignees(): Promise<void> {
+  const queueTasks = await db
+    .select()
+    .from(tasks)
+    .where(
+      and(eq(tasks.type, 'queued'), isNull(tasks.archivedAt)),
+    );
+  let fixed = 0;
+  for (const t of queueTasks) {
+    try {
+      const result = await ensureQueuedOccurrence(t);
+      if ('occurrenceId' in result) fixed++;
+    } catch (err) {
+      logger.warn({ err, taskId: t.id }, 'queue hydrate failed for task');
+    }
+  }
+  logger.info(
+    { fixed, total: queueTasks.length },
+    'queue assignees hydrated',
+  );
 }
 
 /** Boot-time: install the Google Calendar sync cron when configured.
