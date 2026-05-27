@@ -18,6 +18,7 @@
  */
 
 import type { TaskRow, TaskOccurrenceRow } from '../db/schema';
+import { pickNextAssignee } from './queue';
 
 export type QueueForecastRow = {
   /** Stable synthetic id — see file-level docstring. */
@@ -37,12 +38,32 @@ export function forecastQueueOccurrences(input: {
   occurrences: Pick<TaskOccurrenceRow, 'taskId' | 'status' | 'assigneeId' | 'scheduledTime'>[];
   /** Roster fallback when `task.queueUserIds` is null/empty. */
   memberIds: string[];
+  /** Per-task completion counts at "now". Keyed by `${taskId}:${userId}`.
+   *  Needed because the forecast simulates pickNextAssignee step by
+   *  step (balance-aware) instead of doing a dumb modular rotation. */
+  completionsByTaskUser: Map<string, number>;
+  /** Per-task latest done.completedBy, to seed the strict-alternation
+   *  tie-breaker for the first forecast step. */
+  lastCompleterByTask: Map<string, string | null>;
+  /** Per-user joinedAt for the deterministic joinedAt tie-break inside
+   *  pickNextAssignee. Must cover every id referenced from
+   *  `queueUserIds` / `memberIds`. */
+  joinedAtByUser: Map<string, Date>;
   /** YYYY-MM-DD — the day forecasts start counting from. */
   todayIso: string;
   /** YYYY-MM-DD inclusive upper bound. */
   toIso: string;
 }): QueueForecastRow[] {
-  const { tasks, occurrences, memberIds, todayIso, toIso } = input;
+  const {
+    tasks,
+    occurrences,
+    memberIds,
+    completionsByTaskUser,
+    lastCompleterByTask,
+    joinedAtByUser,
+    todayIso,
+    toIso,
+  } = input;
   const out: QueueForecastRow[] = [];
 
   const todayMs = isoToMs(todayIso);
@@ -64,18 +85,34 @@ export function forecastQueueOccurrences(input: {
     );
     if (!current) continue;
 
-    const currentIdx = current.assigneeId ? queue.indexOf(current.assigneeId) : -1;
-    const startIdx = currentIdx;
-
     const stepDays =
       task.cooldownDays && task.cooldownDays > 0 ? task.cooldownDays : 1;
     const stepMs = stepDays * 86_400_000;
 
+    // Per-step state. Mutated as we walk forward.
+    const sim = new Map<string, number>();
+    for (const u of queue) {
+      sim.set(u, completionsByTaskUser.get(`${task.id}:${u}`) ?? 0);
+    }
+    let lastCompleter: string | null =
+      lastCompleterByTask.get(task.id) ?? null;
+
     let cursor = todayMs + stepMs;
-    let rotIdx = startIdx;
     // Defensive cap to avoid infinite loops if step somehow becomes 0.
     for (let i = 0; i < 365 && cursor <= toMs; i++) {
-      rotIdx = (rotIdx + 1) % queue.length;
+      const candidates = queue.map((userId) => ({
+        userId,
+        completions: sim.get(userId) ?? 0,
+        // joinedAt is only used as the deepest tie-breaker; default to
+        // 1970 if a queue member isn't in the family-members table.
+        joinedAt: joinedAtByUser.get(userId) ?? new Date(0),
+        // Away-mode isn't projected — we can't predict who'll be on
+        // holiday weeks from now. Forecast is best-effort.
+        isAway: false,
+      }));
+      const decision = pickNextAssignee(candidates, lastCompleter);
+      if (decision.kind === 'nobody_available') break;
+      const picked = decision.userId;
       const iso = msToIso(cursor);
       out.push({
         id: `queue-forecast:${task.id}:${iso}`,
@@ -83,10 +120,12 @@ export function forecastQueueOccurrences(input: {
         scheduledDate: iso,
         scheduledTime: current.scheduledTime ?? null,
         status: 'pending',
-        assigneeId: queue[rotIdx] ?? null,
+        assigneeId: picked,
         completedAt: null,
         completedBy: null,
       });
+      sim.set(picked, (sim.get(picked) ?? 0) + 1);
+      lastCompleter = picked;
       cursor += stepMs;
     }
   }

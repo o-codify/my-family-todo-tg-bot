@@ -294,16 +294,59 @@ export function Calendar({
   // forecast respects per-task cooldown (or daily if none) and rotates
   // through `queueUserIds` starting after the current real assignee.
   const memberIds = useMemo(() => members.map((m) => m.id), [members]);
+  // Per (task, user) completion counts + per-task last-completer feed
+  // the balance-aware forecast simulator. Derived from the same
+  // rawOccurrences list — no extra fetch.
+  const completionsByTaskUser = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const o of rawOccurrences) {
+      if (o.status !== 'done' || !o.completedBy) continue;
+      const key = `${o.taskId}:${o.completedBy}`;
+      map.set(key, (map.get(key) ?? 0) + 1);
+    }
+    return map;
+  }, [rawOccurrences]);
+  const lastCompleterByTask = useMemo(() => {
+    const map = new Map<string, string | null>();
+    // We need the latest completion per task → scan once tracking max
+    // completedAt per taskId.
+    const latest = new Map<string, string>();
+    for (const o of rawOccurrences) {
+      if (o.status !== 'done' || !o.completedAt) continue;
+      const prev = latest.get(o.taskId);
+      if (!prev || o.completedAt > prev) latest.set(o.taskId, o.completedAt);
+    }
+    for (const o of rawOccurrences) {
+      if (o.status !== 'done') continue;
+      if (latest.get(o.taskId) === o.completedAt) {
+        map.set(o.taskId, o.completedBy ?? null);
+      }
+    }
+    return map;
+  }, [rawOccurrences]);
+  const joinedAtByUser = useMemo(() => new Map<string, Date>(), []);
   const queueForecast = useMemo(
     () =>
       forecastQueueOccurrences({
         tasks,
         occurrences: rawOccurrences,
         memberIds,
+        completionsByTaskUser,
+        lastCompleterByTask,
+        joinedAtByUser,
         todayIso,
         toIso: toIsoStr,
       }),
-    [tasks, rawOccurrences, memberIds, todayIso, toIsoStr],
+    [
+      tasks,
+      rawOccurrences,
+      memberIds,
+      completionsByTaskUser,
+      lastCompleterByTask,
+      joinedAtByUser,
+      todayIso,
+      toIsoStr,
+    ],
   );
   const combinedOccurrences = useMemo(
     () => [...rawOccurrences, ...queueForecast],

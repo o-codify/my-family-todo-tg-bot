@@ -130,10 +130,37 @@ export function Day({ me, family, iso, onBack, onOpenTask, onCreateTask }: Props
   const memberIds = useMemo(() => members.map((m) => m.id), [members]);
   const forecastedQueue = useMemo(() => {
     if (iso <= todayIso) return [];
+    // Build per (task, user) completion counts + last-completer maps
+    // from the same data Calendar uses. Lets the forecast simulate the
+    // real pickNextAssignee instead of dumb round-robin (which gave
+    // "him, me, me" mismatched rotations).
+    const completionsByTaskUser = new Map<string, number>();
+    const latestAtByTask = new Map<string, string>();
+    for (const o of rawOccurrences) {
+      if (o.status !== 'done') continue;
+      if (o.completedBy) {
+        const k = `${o.taskId}:${o.completedBy}`;
+        completionsByTaskUser.set(k, (completionsByTaskUser.get(k) ?? 0) + 1);
+      }
+      if (o.completedAt) {
+        const prev = latestAtByTask.get(o.taskId);
+        if (!prev || o.completedAt > prev) latestAtByTask.set(o.taskId, o.completedAt);
+      }
+    }
+    const lastCompleterByTask = new Map<string, string | null>();
+    for (const o of rawOccurrences) {
+      if (o.status !== 'done') continue;
+      if (o.completedAt && latestAtByTask.get(o.taskId) === o.completedAt) {
+        lastCompleterByTask.set(o.taskId, o.completedBy ?? null);
+      }
+    }
     return forecastQueueOccurrences({
       tasks,
       occurrences: rawOccurrences,
       memberIds,
+      completionsByTaskUser,
+      lastCompleterByTask,
+      joinedAtByUser: new Map(),
       todayIso,
       toIso: iso,
     }).filter((o) => o.scheduledDate === iso);

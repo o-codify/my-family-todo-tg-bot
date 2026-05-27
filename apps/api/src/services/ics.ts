@@ -1,5 +1,5 @@
 import { customAlphabet } from 'nanoid';
-import { and, eq, gte, isNull, lte, ne, or } from 'drizzle-orm';
+import { and, eq, gte, inArray, isNull, lte, ne, or, sql } from 'drizzle-orm';
 import { db } from '../db/client';
 import {
   families,
@@ -269,7 +269,8 @@ export async function generateFamilyIcs(input: {
 
   const forecastEvents: string[] = [];
   if (queueTasks.length > 0) {
-    const [queueCurrent, memberRows] = await Promise.all([
+    const queueTaskIds = queueTasks.map((t) => t.id);
+    const [queueCurrent, memberRows, completionRows, lastDoneRows] = await Promise.all([
       db
         .select({
           taskId: taskOccurrences.taskId,
@@ -289,15 +290,81 @@ export async function generateFamilyIcs(input: {
           ),
         ),
       db
-        .select({ userId: familyMembers.userId })
+        .select({ userId: familyMembers.userId, joinedAt: familyMembers.joinedAt })
         .from(familyMembers)
         .where(eq(familyMembers.familyId, input.familyId)),
+      // Completion counts per (task, user) — feeds the balance-aware
+      // forecast simulator below so the predicted assignees match what
+      // pickNextAssignee will actually do.
+      queueTaskIds.length > 0
+        ? db
+            .select({
+              taskId: taskOccurrences.taskId,
+              userId: taskOccurrences.completedBy,
+              count: sql<number>`count(*)::int`,
+            })
+            .from(taskOccurrences)
+            .where(
+              and(
+                inArray(taskOccurrences.taskId, queueTaskIds),
+                eq(taskOccurrences.status, 'done'),
+              ),
+            )
+            .groupBy(taskOccurrences.taskId, taskOccurrences.completedBy)
+        : Promise.resolve(
+            [] as { taskId: string; userId: string | null; count: number }[],
+          ),
+      // All done rows for the queue tasks; we'll fold them in JS to
+      // get the latest completedBy per task. Avoids raw-SQL array
+      // binding quirks while keeping the result O(n) in completions.
+      queueTaskIds.length > 0
+        ? db
+            .select({
+              taskId: taskOccurrences.taskId,
+              completedBy: taskOccurrences.completedBy,
+              completedAt: taskOccurrences.completedAt,
+            })
+            .from(taskOccurrences)
+            .where(
+              and(
+                inArray(taskOccurrences.taskId, queueTaskIds),
+                eq(taskOccurrences.status, 'done'),
+              ),
+            )
+        : Promise.resolve([] as {
+            taskId: string;
+            completedBy: string | null;
+            completedAt: Date | null;
+          }[]),
     ]);
 
     const titleByTask = new Map(queueCurrent.map((q) => [q.taskId, q.title]));
     const descByTask = new Map(
       queueCurrent.map((q) => [q.taskId, q.description ?? '']),
     );
+
+    const completionsByTaskUser = new Map<string, number>();
+    for (const r of completionRows) {
+      if (!r.userId) continue;
+      completionsByTaskUser.set(`${r.taskId}:${r.userId}`, Number(r.count));
+    }
+    // Fold all-done-rows into per-task latest completedBy. O(n) pass.
+    const lastCompleterByTask = new Map<string, string | null>();
+    const latestAt = new Map<string, number>();
+    for (const r of lastDoneRows as {
+      taskId: string;
+      completedBy: string | null;
+      completedAt: Date | null;
+    }[]) {
+      if (!r.completedAt) continue;
+      const ts = r.completedAt.getTime();
+      const prev = latestAt.get(r.taskId) ?? -Infinity;
+      if (ts > prev) {
+        latestAt.set(r.taskId, ts);
+        lastCompleterByTask.set(r.taskId, r.completedBy);
+      }
+    }
+    const joinedAtByUser = new Map(memberRows.map((m) => [m.userId, m.joinedAt]));
 
     // Trim the forecast window so a daily-or-weekly queue task doesn't
     // emit 60+ events 365 days out. ~60 days forward is plenty for
@@ -311,6 +378,9 @@ export async function generateFamilyIcs(input: {
       tasks: queueTasks,
       occurrences: queueCurrent,
       memberIds: memberRows.map((m) => m.userId),
+      completionsByTaskUser,
+      lastCompleterByTask,
+      joinedAtByUser,
       todayIso,
       toIso: forecastTo,
     });
