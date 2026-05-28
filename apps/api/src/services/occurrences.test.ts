@@ -12,6 +12,7 @@ function makeTask(overrides: Partial<TaskRow>): TaskRow {
     schedule: { kind: 'oneoff', date: '2026-06-01' },
     assigneeId: null,
     queueUserIds: null,
+    participantIds: null,
     deadlineAt: null,
     points: 0,
     photoRequired: false,

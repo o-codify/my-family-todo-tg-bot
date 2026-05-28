@@ -195,6 +195,9 @@ export type OccurrenceDto = {
     photoRequired: boolean;
     requiresApproval: boolean;
     isQuest: boolean;
+    /** Additional participants on a shared task (besides the assignee). They
+     *  also see the task and earn its points. Null for solo tasks. */
+    participantIds: string[] | null;
     deadlineAt: string | null;
   };
 };
@@ -208,6 +211,9 @@ export type TaskDto = {
   schedule: unknown;
   assigneeId: string | null;
   queueUserIds: string[] | null;
+  /** Additional participants on a shared oneoff/recurring task (besides the
+   *  responsible assignee). Null for solo tasks. */
+  participantIds: string[] | null;
   deadlineAt: string | null;
   points: number;
   photoRequired: boolean;
@@ -388,6 +394,10 @@ export type CreateTaskPayload = {
   /** Members who participate in a queued task's rotation. `null` (default)
    *  means "all family members". Ignored for non-queued task types. */
   queueUserIds?: string[] | null;
+  /** Additional participants on a shared oneoff/recurring task (besides the
+   *  assignee). They see the task and earn its points. Ignored for
+   *  queued/floating. The assignee must not be included. */
+  participantIds?: string[] | null;
   points?: number;
   photoRequired?: boolean;
   /** When true, child-role completions land in 'pending_approval'. */

@@ -364,6 +364,7 @@ export function Day({ me, family, iso, onBack, onOpenTask, onCreateTask }: Props
                 photoRequired: task.photoRequired,
                 requiresApproval: task.requiresApproval,
                 isQuest: task.isQuest,
+                participantIds: null,
                 deadlineAt: task.deadlineAt,
               },
             };
@@ -580,12 +581,20 @@ function filterOccurrences(
   // someone else's task (or where the task was later transferred) stay
   // visible under their filter. Same rule used on Calendar.
   if (filter === mineLabel) {
-    return list.filter((o) => o.assigneeId === meId || o.completedBy === meId);
+    return list.filter(
+      (o) =>
+        o.assigneeId === meId ||
+        o.completedBy === meId ||
+        (o.task.participantIds?.includes(meId) ?? false),
+    );
   }
   const member = members.find((m) => m.name === filter);
   if (member) {
     return list.filter(
-      (o) => o.assigneeId === member.id || o.completedBy === member.id,
+      (o) =>
+        o.assigneeId === member.id ||
+        o.completedBy === member.id ||
+        (o.task.participantIds?.includes(member.id) ?? false),
     );
   }
   return list;

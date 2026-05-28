@@ -105,6 +105,7 @@ export function FloatingSection({
               photoRequired: ft.photoRequired,
               requiresApproval: ft.requiresApproval,
               isQuest: ft.isQuest,
+              participantIds: null,
               deadlineAt: ft.deadlineAt,
             },
           };

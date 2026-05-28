@@ -414,12 +414,20 @@ export function Calendar({
     // read as a bug: "I completed it, but it's not in my list?" Matching
     // either side keeps the user's own work visible across the lifecycle.
     if (filter === MINE_LBL) {
-      list = list.filter((o) => o.assigneeId === me.id || o.completedBy === me.id);
+      list = list.filter(
+        (o) =>
+          o.assigneeId === me.id ||
+          o.completedBy === me.id ||
+          (o.task?.participantIds?.includes(me.id) ?? false),
+      );
     } else if (filter !== ALL_LBL) {
       const named = members.find((m) => m.name === filter);
       if (named) {
         list = list.filter(
-          (o) => o.assigneeId === named.id || o.completedBy === named.id,
+          (o) =>
+            o.assigneeId === named.id ||
+            o.completedBy === named.id ||
+            (o.task?.participantIds?.includes(named.id) ?? false),
         );
       }
     }
@@ -550,6 +558,7 @@ export function Calendar({
           photoRequired: tk.photoRequired,
           requiresApproval: tk.requiresApproval,
           isQuest: tk.isQuest,
+          participantIds: null,
           deadlineAt: tk.deadlineAt,
         },
       };

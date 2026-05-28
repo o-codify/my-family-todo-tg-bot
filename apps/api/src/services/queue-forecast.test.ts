@@ -21,6 +21,7 @@ function makeTask(over: Partial<TaskRow> = {}): TaskRow {
     schedule: { kind: 'queued' },
     assigneeId: null,
     queueUserIds: ['user-a', 'user-b'],
+    participantIds: null,
     deadlineAt: null,
     points: 0,
     photoRequired: false,

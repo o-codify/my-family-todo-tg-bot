@@ -61,6 +61,11 @@ export const tasks = pgTable(
     schedule: jsonb('schedule').$type<TaskSchedule>().notNull(),
     assigneeId: uuid('assignee_id').references(() => users.id, { onDelete: 'set null' }),
     queueUserIds: uuid('queue_user_ids').array(),
+    // Additional participants on a "shared" task (oneoff/recurring). The
+    // assignee stays the single responsible who closes it; these members
+    // also see the task and earn the points on completion. Does NOT include
+    // the assignee — they're implicitly a participant. Null/empty = solo task.
+    participantIds: uuid('participant_ids').array(),
     deadlineAt: timestamp('deadline_at', { withTimezone: true }),
     points: integer('points').notNull().default(0),
     photoRequired: boolean('photo_required').notNull().default(false),

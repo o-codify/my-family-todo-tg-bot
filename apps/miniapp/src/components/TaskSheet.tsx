@@ -268,6 +268,18 @@ export function TaskSheet({ me, family, occurrence, onClose, onEdit, onTransfer 
               &nbsp;{assignee.name}
             </Tag>
           )}
+          {/* Participants on a shared task — shown alongside the responsible.
+              They also see the task and earn its points. */}
+          {(o.task.participantIds ?? []).map((pid) => {
+            const p = members.find((m) => m.id === pid);
+            if (!p) return null;
+            return (
+              <Tag key={pid}>
+                <Av m={p} size="xs" />
+                &nbsp;{p.name}
+              </Tag>
+            );
+          })}
           {o.task.type === 'recurring' && (
             <Tag>
               <Icon name="repeat" />

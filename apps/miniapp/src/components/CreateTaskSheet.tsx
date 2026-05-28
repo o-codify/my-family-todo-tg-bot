@@ -105,6 +105,7 @@ export function CreateTaskSheet({
         deadlineAt: null as string | null,
         assigneeId: me.id as string | null,
         queueUserIds: null as string[] | null,
+        participantIds: [] as string[],
         noDate: false,
         singleShot: false,
         subtasks: [] as string[],
@@ -132,6 +133,9 @@ export function CreateTaskSheet({
   // queueUserIds: explicit roster for `queued` tasks. `null` means "all
   // family members" (server default). Editing flips to an explicit list.
   const [queueUserIds, setQueueUserIds] = useState<string[] | null>(initial.queueUserIds);
+  // Additional participants on a shared oneoff/recurring task. The assignee
+  // is the responsible (implicit participant) and is excluded from this list.
+  const [participantIds, setParticipantIds] = useState<string[]>(initial.participantIds);
   const [addToCatalog, setAddToCatalog] = useState(false);
   const [saveAsTemplate, setSaveAsTemplate] = useState(false);
   // "Разовая без даты" — when set on a oneoff task, payload becomes
@@ -171,6 +175,7 @@ export function CreateTaskSheet({
         assigneeId,
         autoAssign,
         queueUserIds,
+        participantIds,
         points,
         photoRequired,
         requiresApproval,
@@ -698,6 +703,86 @@ export function CreateTaskSheet({
           </div>
         </div>
 
+        {/* Participants — additional members on a shared oneoff/recurring
+            task. The assignee (responsible) is implicit and excluded from
+            the list; everyone ticked here also sees the task and earns its
+            points when the responsible marks it done. */}
+        {((kind === 'oneoff' && !noDate) || kind === 'recurring') &&
+          (() => {
+            const candidates = members.filter(
+              (m) => autoAssign || m.id !== assigneeId,
+            );
+            if (candidates.length === 0) return null;
+            const selected = new Set(participantIds.filter((id) => id !== assigneeId));
+            const toggle = (id: string) => {
+              setParticipantIds((prev) => {
+                const next = prev.filter((x) => x !== assigneeId);
+                const i = next.indexOf(id);
+                if (i >= 0) next.splice(i, 1);
+                else next.push(id);
+                return [...next];
+              });
+            };
+            return (
+              <div className="wf-col wf-gap-4" style={{ marginTop: 10 }}>
+                <div className="wf-spread">
+                  <span className="wf-tiny">
+                    {t.locale === 'en' ? 'Participants' : 'Участники'}
+                  </span>
+                  <span className="wf-hint" style={{ fontSize: 11 }}>
+                    {selected.size > 0
+                      ? `${selected.size}/${candidates.length}`
+                      : t.locale === 'en'
+                        ? 'solo'
+                        : 'один'}
+                  </span>
+                </div>
+                <span className="wf-hint" style={{ fontSize: 11 }}>
+                  {t.locale === 'en'
+                    ? 'Shared task — everyone ticked earns the points; the responsible closes it.'
+                    : 'Общая задача — баллы получат все отмеченные; закрывает ответственный.'}
+                </span>
+                <div className="wf-col wf-gap-2">
+                  {candidates.map((m) => {
+                    const on = selected.has(m.id);
+                    return (
+                      <div
+                        key={m.id}
+                        className="wf-row wf-gap-6"
+                        onClick={() => toggle(m.id)}
+                        style={{
+                          padding: '4px 4px',
+                          cursor: 'pointer',
+                          borderRadius: 6,
+                          opacity: on ? 1 : 0.7,
+                        }}
+                      >
+                        <span
+                          className={on ? 'wf-check done' : 'wf-check'}
+                          style={{ pointerEvents: 'none' }}
+                        >
+                          {on && <Icon name="check" />}
+                        </span>
+                        <Av m={m} size="sm" />
+                        <span
+                          className="wf-label"
+                          style={{
+                            flex: 1,
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap',
+                          }}
+                        >
+                          {m.name}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })()}
+
         {/* Tags UI deliberately removed from the create sheet — the
             user didn't want them clogging the form. We still preserve
             existing `tagIds` from edit-mode in state so saving keeps
@@ -1038,6 +1123,7 @@ function buildPayload(input: {
   assigneeId: string | null;
   autoAssign: boolean;
   queueUserIds: string[] | null;
+  participantIds: string[];
   points: number;
   photoRequired: boolean;
   requiresApproval: boolean;
@@ -1048,6 +1134,11 @@ function buildPayload(input: {
   subtasks: Array<{ title: string }>;
   tagIds: string[];
 }): CreateTaskPayload {
+  // Participants only apply to shared oneoff/recurring tasks. A "разовая без
+  // даты" (oneoff + noDate) becomes a floating task server-side, which has no
+  // participant concept — so drop them in that case too.
+  const sharedKind =
+    (input.kind === 'oneoff' && !input.noDate) || input.kind === 'recurring';
   const base = {
     title: input.title,
     // When auto-assign is on, send `assigneeId: null` so the server's
@@ -1057,6 +1148,10 @@ function buildPayload(input: {
     // Only send queueUserIds for queued tasks. Other types ignore it
     // server-side, but it's cleaner to omit.
     queueUserIds: input.kind === 'queued' ? input.queueUserIds : undefined,
+    // Send the array (even empty) for shared kinds so edit-mode clearing
+    // persists; undefined for queued/floating leaves it untouched / cleared
+    // by the server's type-change handling.
+    participantIds: sharedKind ? input.participantIds : undefined,
     points: input.points,
     photoRequired: input.photoRequired,
     requiresApproval: input.requiresApproval,
@@ -1156,6 +1251,7 @@ function extractFromTask(t: TaskDto): {
   deadlineAt: string | null;
   assigneeId: string | null;
   queueUserIds: string[] | null;
+  participantIds: string[];
   noDate: boolean;
   singleShot: boolean;
   subtasks: string[];
@@ -1195,6 +1291,7 @@ function extractFromTask(t: TaskDto): {
     deadlineAt: t.deadlineAt,
     assigneeId: t.assigneeId,
     queueUserIds: t.queueUserIds,
+    participantIds: t.participantIds ?? [],
     noDate: false,
     singleShot: t.singleShot,
     subtasks: (t.subtasksTemplate ?? []).map((s) => s.title),

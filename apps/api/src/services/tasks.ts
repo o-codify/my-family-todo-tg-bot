@@ -12,6 +12,23 @@ import { clearFutureOccurrences, inputToSubtaskTemplate, syncOccurrencesForTask 
 import { ensureQueuedOccurrence } from './queue-tasks';
 import { setTaskTags } from './tags';
 
+/**
+ * Normalize the participant list for a shared task. Participants are only
+ * meaningful for oneoff/recurring tasks; the assignee is the responsible and
+ * is implicitly a participant, so we strip them out of the explicit list.
+ * Returns null (= solo task) for unsupported types or an empty result.
+ */
+function normalizeParticipants(
+  type: TaskRow['type'],
+  assigneeId: string | null,
+  participantIds: string[] | null | undefined,
+): string[] | null {
+  if (type !== 'oneoff' && type !== 'recurring') return null;
+  if (!participantIds || participantIds.length === 0) return null;
+  const cleaned = [...new Set(participantIds)].filter((id) => id && id !== assigneeId);
+  return cleaned.length > 0 ? cleaned : null;
+}
+
 export async function listFamilyTasks(familyId: string): Promise<TaskRow[]> {
   return db
     .select()
@@ -54,6 +71,7 @@ export async function createTask(input: {
         schedule: data.schedule,
         assigneeId,
         queueUserIds: data.queueUserIds ?? null,
+        participantIds: normalizeParticipants(data.type, assigneeId, data.participantIds),
         deadlineAt: data.deadlineAt ? new Date(data.deadlineAt) : null,
         points: data.points,
         photoRequired: data.photoRequired,
@@ -105,6 +123,22 @@ export async function updateTask(input: {
   if (data.schedule !== undefined) next.schedule = data.schedule;
   if (data.assigneeId !== undefined) next.assigneeId = data.assigneeId ?? null;
   if (data.queueUserIds !== undefined) next.queueUserIds = data.queueUserIds ?? null;
+
+  // Participants depend on the effective type + assignee, both of which can
+  // change in the same patch. Recompute when the list is supplied, when the
+  // type switches away from a participant-capable one, or when the assignee
+  // changes (a new assignee must be stripped from an existing list).
+  const effType = data.type ?? task.type;
+  const effAssignee =
+    data.assigneeId !== undefined ? (data.assigneeId ?? null) : task.assigneeId;
+  if (data.participantIds !== undefined) {
+    next.participantIds = normalizeParticipants(effType, effAssignee, data.participantIds);
+  } else if (
+    (data.type !== undefined && effType !== 'oneoff' && effType !== 'recurring') ||
+    (data.assigneeId !== undefined && (task.participantIds?.length ?? 0) > 0)
+  ) {
+    next.participantIds = normalizeParticipants(effType, effAssignee, task.participantIds);
+  }
   if (data.deadlineAt !== undefined) {
     next.deadlineAt = data.deadlineAt ? new Date(data.deadlineAt) : null;
   }
@@ -238,6 +272,7 @@ export function serializeTask(row: TaskRow, tagIds: string[] = []) {
     schedule: row.schedule,
     assigneeId: row.assigneeId,
     queueUserIds: row.queueUserIds,
+    participantIds: row.participantIds,
     deadlineAt: row.deadlineAt?.toISOString() ?? null,
     points: row.points,
     photoRequired: row.photoRequired,

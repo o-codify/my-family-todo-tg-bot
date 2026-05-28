@@ -194,6 +194,20 @@ async function shouldGateByApproval(input: {
   return !perms.includes('task.approve');
 }
 
+/**
+ * Who earns points for a completion. For a shared task (has participantIds)
+ * the points go to the responsible assignee plus every listed participant —
+ * full points each. For a solo task it's just the completer. All ledger rows
+ * are tagged with the occurrence id so uncomplete reverses them together.
+ */
+function pointsRecipients(task: TaskRow, completerId: string): string[] {
+  if (task.participantIds && task.participantIds.length > 0) {
+    const base = task.assigneeId ?? completerId;
+    return [...new Set([base, ...task.participantIds])];
+  }
+  return [completerId];
+}
+
 export async function completeOccurrence(input: {
   occurrence: OccurrenceWithTask;
   userId: string;
@@ -266,14 +280,17 @@ export async function completeOccurrence(input: {
     throw new OccurrenceActionError('already_done');
   }
 
-  // Award points for the completion.
+  // Award points for the completion — to every participant on a shared task,
+  // to just the completer otherwise. Full points each.
   if (occurrence.task.points > 0) {
-    await awardPointsForCompletion({
-      familyId: occurrence.task.familyId,
-      userId,
-      points: occurrence.task.points,
-      completionId: updated!.id,
-    });
+    for (const recipientId of pointsRecipients(occurrence.task, userId)) {
+      await awardPointsForCompletion({
+        familyId: occurrence.task.familyId,
+        userId: recipientId,
+        points: occurrence.task.points,
+        completionId: updated!.id,
+      });
+    }
   }
 
   // For queued tasks: spawn the next round with the next assignee.
@@ -652,6 +669,7 @@ export function serializeOccurrence(row: OccurrenceWithTask) {
       photoRequired: row.task.photoRequired,
       requiresApproval: row.task.requiresApproval,
       isQuest: row.task.isQuest,
+      participantIds: row.task.participantIds,
       deadlineAt: row.task.deadlineAt?.toISOString() ?? null,
     },
   };
@@ -698,12 +716,14 @@ export async function approveOccurrence(input: {
     .returning();
 
   if (task.points > 0) {
-    await awardPointsForCompletion({
-      familyId: task.familyId,
-      userId: completerId,
-      points: task.points,
-      completionId: updated!.id,
-    });
+    for (const recipientId of pointsRecipients(task, completerId)) {
+      await awardPointsForCompletion({
+        familyId: task.familyId,
+        userId: recipientId,
+        points: task.points,
+        completionId: updated!.id,
+      });
+    }
   }
   if (task.type === 'queued') {
     await ensureQueuedOccurrence(task);

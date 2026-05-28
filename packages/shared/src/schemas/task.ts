@@ -41,6 +41,11 @@ export const createTaskSchema = z.object({
    *  least-loaded family member as the assignee at creation time. */
   autoAssign: z.boolean().optional(),
   queueUserIds: z.array(z.string().uuid()).nullable().optional(),
+  /** Additional participants on a shared oneoff/recurring task. The assignee
+   *  (responsible) is implicit and must NOT be included here. Everyone listed
+   *  also sees the task and earns its points when the responsible completes it.
+   *  Ignored for queued/floating tasks. */
+  participantIds: z.array(z.string().uuid()).max(20).nullable().optional(),
   deadlineAt: z.string().datetime().nullable().optional(),
   points: z.number().int().nonnegative().max(10_000).default(0),
   photoRequired: z.boolean().default(false),
