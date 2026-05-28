@@ -535,7 +535,12 @@ function subText(
   isEn: boolean,
 ): string {
   const parts: string[] = [];
-  if (assignee) parts.push(assignee.name);
+  if (assignee) {
+    // Shared task: append "+N" so the row reads as a group chore, not one
+    // person's personal task. N = participant count (responsible excluded).
+    const extra = o.task.participantIds?.length ?? 0;
+    parts.push(extra > 0 ? `${assignee.name} +${extra}` : assignee.name);
+  }
   if (danger && o.scheduledTime) {
     parts.push(`${isEn ? 'yesterday,' : 'вчера,'} ${o.scheduledTime.slice(0, 5)}`);
   } else if (o.scheduledTime) {
@@ -550,22 +555,37 @@ function tagsFor(
   danger: boolean | undefined,
   isEn: boolean,
 ): JSX.Element | null {
-  if (danger) return <Tag variant="danger">{isEn ? '−1 d' : '−1 д'}</Tag>;
-  if (o.task.type === 'recurring') {
-    return (
-      <Tag>
+  const tags: JSX.Element[] = [];
+  // Shared-task marker — a group icon so a common chore is distinguishable
+  // from a personal one at a glance in the list.
+  if ((o.task.participantIds?.length ?? 0) > 0) {
+    tags.push(
+      <Tag key="shared">
+        <Icon name="users" />
+      </Tag>,
+    );
+  }
+  if (danger) {
+    tags.push(
+      <Tag key="danger" variant="danger">
+        {isEn ? '−1 d' : '−1 д'}
+      </Tag>,
+    );
+  } else if (o.task.type === 'recurring') {
+    tags.push(
+      <Tag key="recurring">
         <Icon name="repeat" /> {isEn ? 'recurring' : 'повтор'}
-      </Tag>
+      </Tag>,
     );
-  }
-  if (o.task.photoRequired) {
-    return (
-      <Tag>
+  } else if (o.task.photoRequired) {
+    tags.push(
+      <Tag key="photo">
         <Icon name="cam" />
-      </Tag>
+      </Tag>,
     );
   }
-  return null;
+  if (tags.length === 0) return null;
+  return <span className="wf-row wf-gap-4">{tags}</span>;
 }
 
 function filterOccurrences(

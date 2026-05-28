@@ -823,6 +823,7 @@ export function Calendar({
                       key={o.id}
                       m={o.assigneeId ? memberById.get(o.assigneeId) ?? null : null}
                       done={o.status === 'done'}
+                      shared={(o.task?.participantIds?.length ?? 0) > 0}
                     />
                   ))}
                   {more > 0 && <span className="more">+{more}</span>}
@@ -1369,7 +1370,11 @@ function makeMonthCells(month: Date): Cell[] {
 
 function taskSub(o: OccurrenceDto, assignee: Member | null, isEn: boolean): string {
   const parts: string[] = [];
-  if (assignee) parts.push(assignee.name);
+  if (assignee) {
+    // Shared task → "Ринат +2" so it doesn't read as a personal task.
+    const extra = o.task?.participantIds?.length ?? 0;
+    parts.push(extra > 0 ? `${assignee.name} +${extra}` : assignee.name);
+  }
   if (o.task.type === 'recurring') parts.push(isEn ? 'recurring' : 'повтор');
   else if (o.scheduledTime) parts.push(`${isEn ? 'by' : 'до'} ${o.scheduledTime.slice(0, 5)}`);
   if (o.task.points > 0) parts.push(`+${o.task.points}`);
@@ -1383,10 +1388,28 @@ function tagForOccurrence(
   todayIso: string,
   isEn: boolean,
 ): JSX.Element | null {
-  if (done) return null;
+  const shared = (o.task?.participantIds?.length ?? 0) > 0;
+  // Group marker prepended to whatever status tag the row already shows, so
+  // a shared chore reads as common rather than one person's task.
+  const sharedTag = shared ? (
+    <Tag key="shared">
+      <Icon name="users" />
+    </Tag>
+  ) : null;
+  const wrap = (tag: JSX.Element | null): JSX.Element | null => {
+    if (!sharedTag) return tag;
+    if (!tag) return <span className="wf-row wf-gap-4">{sharedTag}</span>;
+    return (
+      <span className="wf-row wf-gap-4">
+        {sharedTag}
+        {tag}
+      </span>
+    );
+  };
+  if (done) return wrap(null);
   // Past day with pending occurrence → red countdown chip
   if (selectedIso < todayIso) {
-    return <Tag variant="danger">{isEn ? 'overdue' : 'просрочено'}</Tag>;
+    return wrap(<Tag variant="danger">{isEn ? 'overdue' : 'просрочено'}</Tag>);
   }
   // Today with a scheduled time within 3h → warn ⏰
   if (selectedIso === todayIso && o.scheduledTime) {
@@ -1397,19 +1420,19 @@ function tagForOccurrence(
       const diffH = (due.getTime() - Date.now()) / 3_600_000;
       if (diffH >= 0 && diffH <= 3) {
         const h = Math.max(0, Math.ceil(diffH));
-        return <Tag variant="warn">⏰ {h} {isEn ? 'h' : 'ч'}</Tag>;
+        return wrap(<Tag variant="warn">⏰ {h} {isEn ? 'h' : 'ч'}</Tag>);
       }
     }
   }
   if (o.task.photoRequired) {
-    return (
+    return wrap(
       <Tag>
         <Icon name="cam" />
-      </Tag>
+      </Tag>,
     );
   }
-  if (o.task.type === 'recurring') return <Tag>{isEn ? 'Recurring' : 'Повтор'}</Tag>;
-  return null;
+  if (o.task.type === 'recurring') return wrap(<Tag>{isEn ? 'Recurring' : 'Повтор'}</Tag>);
+  return wrap(null);
 }
 
 function pluralTaskI18n(n: number, isEn: boolean): string {
