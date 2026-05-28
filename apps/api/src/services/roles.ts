@@ -30,12 +30,19 @@ export async function setMemberRole(input: {
   familyId: string;
   userId: string;
   roleId: string;
-}): Promise<boolean> {
+}): Promise<{ ok: boolean; reason?: 'not_found' | 'owner_role_forbidden' }> {
   // Verify role belongs to this family
   const role = await db.query.roles.findFirst({
     where: and(eq(roles.id, input.roleId), eq(roles.familyId, input.familyId)),
   });
-  if (!role) return false;
+  if (!role) return { ok: false, reason: 'not_found' };
+  // The Owner role is immutable AND non-assignable: handing it out via
+  // role.assign would let any role.manage holder grant themselves owner
+  // permissions. Ownership changes go through the dedicated transfer-owner
+  // flow, not here.
+  if (role.name.toLowerCase() === 'owner') {
+    return { ok: false, reason: 'owner_role_forbidden' };
+  }
   const result = await db
     .update(familyMembers)
     .set({ roleId: input.roleId })
@@ -46,5 +53,5 @@ export async function setMemberRole(input: {
       ),
     )
     .returning({ userId: familyMembers.userId });
-  return result.length > 0;
+  return { ok: result.length > 0, reason: result.length > 0 ? undefined : 'not_found' };
 }

@@ -217,7 +217,8 @@ occurrencesRouter.post('/:occurrenceId/reject', async (c) => {
   let reason: string | null = null;
   try {
     const body = (await c.req.json()) as { reason?: string };
-    if (typeof body?.reason === 'string') reason = body.reason;
+    // Cap length so a giant payload can't be persisted into the column.
+    if (typeof body?.reason === 'string') reason = body.reason.slice(0, 500);
   } catch {
     // Empty body is fine.
   }

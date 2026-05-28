@@ -218,7 +218,8 @@ shoppingRouter.post('/:listId/archive-bought', async (c) => {
   const familyId = c.get('familyId');
   const url = new URL(c.req.url);
   const daysParam = url.searchParams.get('olderThanDays');
-  const days = daysParam ? Math.max(0, parseInt(daysParam, 10)) : 0;
+  const parsedDays = daysParam ? parseInt(daysParam, 10) : 0;
+  const days = Number.isFinite(parsedDays) ? Math.max(0, parsedDays) : 0;
   const archived = await archiveBought({
     familyId,
     listId: c.req.param('listId'),

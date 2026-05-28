@@ -1,13 +1,28 @@
-import { and, desc, eq, lt, or } from 'drizzle-orm';
+import { and, desc, eq, inArray, lt, or } from 'drizzle-orm';
 import { db } from '../db/client';
 import {
+  familyMembers,
   taskOccurrences,
+  tasks,
   transferRequests,
   type TransferRequestRow,
   type TransferReward,
 } from '../db/schema';
 
 const THREE_HOURS_MS = 3 * 60 * 60 * 1000;
+
+async function occurrenceIdsInFamily(
+  occurrenceIds: string[],
+  familyId: string,
+): Promise<Set<string>> {
+  if (occurrenceIds.length === 0) return new Set();
+  const rows = await db
+    .select({ id: taskOccurrences.id })
+    .from(taskOccurrences)
+    .innerJoin(tasks, eq(taskOccurrences.taskId, tasks.id))
+    .where(and(inArray(taskOccurrences.id, occurrenceIds), eq(tasks.familyId, familyId)));
+  return new Set(rows.map((r) => r.id));
+}
 
 export async function createTransfer(input: {
   familyId: string;
@@ -21,12 +36,41 @@ export async function createTransfer(input: {
 }): Promise<
   | { kind: 'created'; row: TransferRequestRow }
   | { kind: 'occurrence_not_found' }
+  | { kind: 'not_assignee' }
+  | { kind: 'recipient_not_member' }
+  | { kind: 'invalid_swap' }
   | { kind: 'already_pending' }
 > {
-  const occ = await db.query.taskOccurrences.findFirst({
-    where: eq(taskOccurrences.id, input.occurrenceId),
-  });
+  // Scope the occurrence to the caller's family — without the familyId
+  // join, any member could transfer an occurrence belonging to another
+  // family by guessing its id (IDOR).
+  const occRows = await db
+    .select({ occurrence: taskOccurrences })
+    .from(taskOccurrences)
+    .innerJoin(tasks, eq(taskOccurrences.taskId, tasks.id))
+    .where(and(eq(taskOccurrences.id, input.occurrenceId), eq(tasks.familyId, input.familyId)))
+    .limit(1);
+  const occ = occRows[0]?.occurrence;
   if (!occ) return { kind: 'occurrence_not_found' };
+
+  // You can only transfer a task that's currently assigned to you.
+  if (occ.assigneeId !== input.fromUserId) return { kind: 'not_assignee' };
+
+  // The recipient must be a member of the same family.
+  const recipient = await db.query.familyMembers.findFirst({
+    where: and(
+      eq(familyMembers.familyId, input.familyId),
+      eq(familyMembers.userId, input.toUserId),
+    ),
+  });
+  if (!recipient) return { kind: 'recipient_not_member' };
+
+  // Swap occurrences must all live in this family (they get reassigned to
+  // fromUserId on accept) — otherwise a swap list could reach across families.
+  if (input.swapOccurrenceIds && input.swapOccurrenceIds.length > 0) {
+    const valid = await occurrenceIdsInFamily(input.swapOccurrenceIds, input.familyId);
+    if (valid.size !== input.swapOccurrenceIds.length) return { kind: 'invalid_swap' };
+  }
 
   // Check no pending transfer already exists for this occurrence
   const existing = await db.query.transferRequests.findFirst({

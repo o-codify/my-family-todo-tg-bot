@@ -62,6 +62,9 @@ transfersRouter.post('/', zValidator('json', createTransferSchema), async (c) =>
     rewards: body.rewards,
   });
   if (result.kind === 'occurrence_not_found') return c.json({ error: 'occurrence_not_found' }, 404);
+  if (result.kind === 'not_assignee') return c.json({ error: 'not_assignee' }, 403);
+  if (result.kind === 'recipient_not_member') return c.json({ error: 'recipient_not_member' }, 400);
+  if (result.kind === 'invalid_swap') return c.json({ error: 'invalid_swap' }, 400);
   if (result.kind === 'already_pending') return c.json({ error: 'already_pending' }, 409);
   return c.json({ transfer: serializeTransfer(result.row) }, 201);
 });

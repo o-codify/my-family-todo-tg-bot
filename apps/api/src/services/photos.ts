@@ -1,4 +1,4 @@
-import { and, desc, eq, sql } from 'drizzle-orm';
+import { and, desc, eq, lt } from 'drizzle-orm';
 import { db } from '../db/client';
 import {
   taskPhotos,
@@ -230,11 +230,21 @@ export async function listPhotosForFamily(input: {
   limit?: number;
   beforeIso?: string;
 }): Promise<TaskPhotoRow[]> {
-  const limit = Math.min(Math.max(input.limit ?? 60, 1), 200);
+  // Guard against NaN (e.g. Number("abc")) — Math.min/max propagate NaN,
+  // which would reach .limit() and break the query.
+  const requested = Number(input.limit);
+  const limit = Number.isFinite(requested) ? Math.min(Math.max(requested, 1), 200) : 60;
   const conds = [eq(tasks.familyId, input.familyId)];
   if (input.userId) conds.push(eq(taskPhotos.userId, input.userId));
   if (input.beforeIso) {
-    conds.push(sql`${taskPhotos.createdAt} < ${new Date(input.beforeIso)}`);
+    // Ignore an unparseable cursor rather than feed an Invalid Date to SQL.
+    const before = new Date(input.beforeIso);
+    if (!Number.isNaN(before.getTime())) {
+      // Use the drizzle operator (not a raw sql template) so the column's
+      // timestamp mapper serializes the Date — passing a raw Date into the
+      // postgres-js driver throws ("expected string/Buffer, got Date").
+      conds.push(lt(taskPhotos.createdAt, before));
+    }
   }
   const rows = await db
     .select({ photo: taskPhotos })

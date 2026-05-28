@@ -201,6 +201,14 @@ export async function completeOccurrence(input: {
 }): Promise<TaskOccurrenceRow> {
   const { occurrence, userId, data } = input;
 
+  // Guard against re-completing an occurrence that's already been submitted.
+  // Without this, a double POST /complete re-runs the points insert (the
+  // ledger has no unique constraint on refId) and awards points twice.
+  // A 'rejected' attempt flips back to 'pending', so retries still flow.
+  if (occurrence.status === 'done' || occurrence.status === 'pending_approval') {
+    throw new OccurrenceActionError('already_done');
+  }
+
   if (occurrence.task.photoRequired && (!data.photoIds || data.photoIds.length === 0)) {
     throw new OccurrenceActionError('photo_required');
   }
@@ -239,6 +247,9 @@ export async function completeOccurrence(input: {
     return updated!;
   }
 
+  // Conditional on status to close the concurrent-complete race: if a
+  // parallel request already flipped this row to 'done', the WHERE matches
+  // nothing and we bail before awarding points a second time.
   const [updated] = await db
     .update(taskOccurrences)
     .set({
@@ -249,8 +260,11 @@ export async function completeOccurrence(input: {
       pointsAwarded: occurrence.task.points,
       subtasks: subtasksState,
     })
-    .where(eq(taskOccurrences.id, occurrence.id))
+    .where(and(eq(taskOccurrences.id, occurrence.id), ne(taskOccurrences.status, 'done')))
     .returning();
+  if (!updated) {
+    throw new OccurrenceActionError('already_done');
+  }
 
   // Award points for the completion.
   if (occurrence.task.points > 0) {
@@ -807,6 +821,15 @@ export async function bulkCompleteOccurrences(input: {
     const occ = await getOccurrenceInFamily(id, input.familyId);
     if (!occ) {
       out.push({ occurrenceId: id, status: 'error', error: 'not_found' });
+      continue;
+    }
+    // Same ownership rule as the single /complete route: you can only close
+    // your own task or an unassigned shared one. Calling completeOccurrence
+    // directly would otherwise let anyone complete (and self-award points
+    // for) another member's task via the bulk endpoint.
+    const canAct = occ.assigneeId === null || occ.assigneeId === input.userId;
+    if (!canAct) {
+      out.push({ occurrenceId: id, status: 'error', error: 'not_your_task' });
       continue;
     }
     try {

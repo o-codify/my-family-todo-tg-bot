@@ -69,9 +69,15 @@ rewardsRouter.post('/:rewardId/redeem', requirePermission('reward.claim'), async
 
 rewardsRouter.get('/redemptions', async (c) => {
   const familyId = c.get('familyId');
+  const me = c.get('user');
   const status = c.req.query('status') as 'pending' | 'granted' | 'rejected' | undefined;
-  const user = c.req.query('userId') ?? undefined;
-  const list = await listRedemptions({ familyId, userId: user, status });
+  const requested = c.req.query('userId') ?? undefined;
+  // Only reward.grant holders (the ones who approve redemptions) may view
+  // another member's history. Everyone else is scoped to their own, so
+  // ?userId can't be used to enumerate other members' redemptions.
+  const canViewOthers = c.get('permissions').includes('reward.grant');
+  const userId = canViewOthers ? requested : me.id;
+  const list = await listRedemptions({ familyId, userId, status });
   return c.json({ redemptions: list.map(serializeRedemption) });
 });
 

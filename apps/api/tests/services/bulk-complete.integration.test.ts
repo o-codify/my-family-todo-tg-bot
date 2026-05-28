@@ -83,6 +83,48 @@ describe('bulk-complete occurrences (integration)', () => {
     expect(ledger[0]?.delta).toBe(2);
   });
 
+  it("refuses to complete another member's assigned task", async () => {
+    const owner = await makeUser();
+    const other = await makeUser({ firstName: 'Other' });
+    const { family } = await makeFamily(owner);
+    const { addMember } = await import('../db-helpers');
+    await addMember(family, other, 'Adult');
+
+    const t = await createTask({
+      familyId: family.id,
+      createdBy: owner.id,
+      data: {
+        title: "Owner's task",
+        type: 'oneoff',
+        schedule: { kind: 'oneoff', date: isoTomorrow(1) },
+        assigneeId: owner.id,
+        points: 4,
+        photoRequired: false,
+        requiresApproval: false,
+        singleShot: false,
+      },
+    });
+    const occ = (
+      await db.select().from(taskOccurrences).where(eq(taskOccurrences.taskId, t.id))
+    )[0]!;
+
+    // `other` tries to bulk-complete owner's task.
+    const results = await bulkCompleteOccurrences({
+      familyId: family.id,
+      userId: other.id,
+      occurrenceIds: [occ.id],
+    });
+    expect(results[0]?.status).toBe('error');
+    expect(results[0]?.error).toBe('not_your_task');
+
+    // No points were awarded to the impersonator.
+    const ledger = await db
+      .select()
+      .from(pointsLedger)
+      .where(eq(pointsLedger.userId, other.id));
+    expect(ledger).toHaveLength(0);
+  });
+
   it('respects the approval gate — gated rows return pending_approval', async () => {
     const owner = await makeUser();
     const kid = await makeUser({ firstName: 'Kid' });

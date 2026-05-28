@@ -49,8 +49,13 @@ rolesRouter.post(
   async (c) => {
     const familyId = c.get('familyId');
     const body = c.req.valid('json');
-    const ok = await setMemberRole({ familyId, userId: body.userId, roleId: body.roleId });
-    if (!ok) return c.json({ error: 'not_found' }, 404);
+    const result = await setMemberRole({ familyId, userId: body.userId, roleId: body.roleId });
+    if (!result.ok) {
+      if (result.reason === 'owner_role_forbidden') {
+        return c.json({ error: 'owner_role_forbidden' }, 403);
+      }
+      return c.json({ error: 'not_found' }, 404);
+    }
     return c.body(null, 204);
   },
 );
