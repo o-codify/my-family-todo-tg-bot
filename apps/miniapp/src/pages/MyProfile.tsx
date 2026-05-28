@@ -57,6 +57,25 @@ export function MyProfile({ me, family, onBack, onOpenDrawer }: Props) {
   const myMember = membersQuery.data?.members.find((m) => m.id === me.id);
   const isOwner = myMember?.role.name === 'Owner';
 
+  // Display-name override: the family owner (intrinsic ownership) may rename
+  // any member including themselves. The override lives on family_members and
+  // comes from listMembers — `me` (from /me) only ever carries the Telegram
+  // name — so the identity card reads the resolved name from `myMember`.
+  const canEditName = family.ownerId === me.id;
+  const myDisplayName = myMember?.displayName ?? null;
+  const shownFirstName = myMember?.firstName ?? me.firstName;
+  const shownLastName = myMember ? myMember.lastName : me.lastName;
+  const [editingName, setEditingName] = useState(false);
+  const [nameInput, setNameInput] = useState('');
+  const setNameMut = useMutation({
+    mutationFn: (displayName: string | null) =>
+      api.setMemberName(family.id, me.id, displayName),
+    onSuccess: () => {
+      setEditingName(false);
+      void queryClient.invalidateQueries({ queryKey: ['members', family.id] });
+    },
+  });
+
   const isAway = me.awayUntil != null && new Date(me.awayUntil) > new Date();
   const awayReason = (me.awayReason ?? null) as 'vacation' | 'sick' | null;
   const isVacation = isAway && (awayReason === null || awayReason === 'vacation');
@@ -122,20 +141,86 @@ export function MyProfile({ me, family, onBack, onOpenDrawer }: Props) {
         <Av
           m={{
             id: me.id,
-            name: me.firstName,
-            letter: me.firstName.slice(0, 1).toUpperCase(),
+            name: shownFirstName,
+            letter: shownFirstName.slice(0, 1).toUpperCase(),
             color: me.color,
             role: isOwner ? 'Owner' : 'Adult',
           }}
           size="xl"
         />
         <div className="wf-h3" style={{ marginTop: 6, overflowWrap: 'anywhere' }}>
-          {me.firstName}
-          {me.lastName && ` ${me.lastName}`}
+          {shownFirstName}
+          {shownLastName && ` ${shownLastName}`}
         </div>
         <span className="wf-hint" style={{ overflowWrap: 'anywhere' }}>
           {me.username ? `@${me.username}` : t.locale === 'en' ? 'from TG' : 'из TG'}
         </span>
+
+        {/* Owner-only: set or clear your own family-scoped display name. */}
+        {canEditName && !editingName && (
+          <button
+            type="button"
+            className="wf-btn"
+            onClick={() => {
+              setNameInput(myDisplayName ?? '');
+              setEditingName(true);
+            }}
+            style={{ marginTop: 8, fontSize: 12, padding: '4px 10px', cursor: 'pointer' }}
+          >
+            {t.locale === 'en' ? '✏️ Set name' : '✏️ Изменить имя'}
+          </button>
+        )}
+        {canEditName && editingName && (
+          <div className="wf-col wf-gap-6" style={{ marginTop: 8, textAlign: 'left' }}>
+            <input
+              value={nameInput}
+              onChange={(e) => setNameInput(e.target.value)}
+              maxLength={60}
+              placeholder={t.locale === 'en' ? 'Name in this family' : 'Имя в этой семье'}
+              autoFocus
+              className="wf-box wf-label"
+              style={{
+                padding: '8px 10px',
+                border: '1px solid var(--line)',
+                background: 'transparent',
+                outline: 'none',
+                color: 'var(--ink)',
+                font: 'inherit',
+              }}
+            />
+            <div className="wf-row wf-gap-6">
+              <button
+                type="button"
+                className="wf-btn primary"
+                onClick={() => setNameMut.mutate(nameInput.trim() || null)}
+                disabled={setNameMut.isPending}
+                style={{ flex: 1, fontSize: 12, padding: '6px 10px', border: 'none', cursor: 'pointer' }}
+              >
+                {t('common.save')}
+              </button>
+              {myDisplayName && (
+                <button
+                  type="button"
+                  className="wf-btn"
+                  onClick={() => setNameMut.mutate(null)}
+                  disabled={setNameMut.isPending}
+                  style={{ fontSize: 12, padding: '6px 10px', cursor: 'pointer', color: '#d33' }}
+                >
+                  {t.locale === 'en' ? 'Reset' : 'Сбросить'}
+                </button>
+              )}
+              <button
+                type="button"
+                className="wf-btn"
+                onClick={() => setEditingName(false)}
+                disabled={setNameMut.isPending}
+                style={{ fontSize: 12, padding: '6px 10px', cursor: 'pointer' }}
+              >
+                {t('common.cancel')}
+              </button>
+            </div>
+          </div>
+        )}
         {myStreak && myStreak.current > 0 && (
           <div
             className="wf-row wf-gap-6"
