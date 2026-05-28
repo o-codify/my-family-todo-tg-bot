@@ -1,5 +1,5 @@
-import { useMemo } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useMemo, useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, type FamilySummary, type MeResponse, type PhotoDto } from '../api';
 import { Av, Icon, Tag, WfBody } from '../design';
 import { BadgeGrid } from '../components/BadgeGrid';
@@ -24,13 +24,28 @@ type Props = {
  * decides).
  */
 export function MemberProfile({ me, family, userId, onBack }: Props) {
-  void me;
   const t = useT();
   const isEn = t.locale === 'en';
+  const queryClient = useQueryClient();
+
+  // Only the family owner (intrinsic ownership, not the Owner *role*) may
+  // set member names — mirrors the rename/delete-family permission model.
+  const isOwner = family.ownerId === me.id;
+  const [editingName, setEditingName] = useState(false);
+  const [nameInput, setNameInput] = useState('');
 
   const membersQuery = useQuery({
     queryKey: ['members', family.id],
     queryFn: () => api.listMembers(family.id),
+  });
+
+  const setNameMut = useMutation({
+    mutationFn: (displayName: string | null) =>
+      api.setMemberName(family.id, userId, displayName),
+    onSuccess: () => {
+      setEditingName(false);
+      void queryClient.invalidateQueries({ queryKey: ['members', family.id] });
+    },
   });
   // Pull stats from the existing endpoint so we don't refetch a custom
   // bag of numbers — just project the member's row out of the family
@@ -94,6 +109,78 @@ export function MemberProfile({ me, family, userId, onBack }: Props) {
               {dto.firstName}
               {dto.lastName && ` ${dto.lastName}`}
             </div>
+
+            {/* Owner-only: set or clear a family-scoped display name. The
+                custom name then replaces the Telegram name everywhere. */}
+            {isOwner && !editingName && (
+              <button
+                type="button"
+                className="wf-btn"
+                onClick={() => {
+                  setNameInput(dto.displayName ?? '');
+                  setEditingName(true);
+                }}
+                style={{ marginTop: 8, fontSize: 12, padding: '4px 10px', cursor: 'pointer' }}
+              >
+                {isEn ? '✏️ Set name' : '✏️ Изменить имя'}
+              </button>
+            )}
+            {isOwner && editingName && (
+              <div className="wf-col wf-gap-6" style={{ marginTop: 8 }}>
+                <input
+                  value={nameInput}
+                  onChange={(e) => setNameInput(e.target.value)}
+                  maxLength={60}
+                  placeholder={isEn ? 'Name in this family' : 'Имя в этой семье'}
+                  autoFocus
+                  className="wf-box wf-label"
+                  style={{
+                    padding: '8px 10px',
+                    border: '1px solid var(--line)',
+                    background: 'transparent',
+                    outline: 'none',
+                    color: 'var(--ink)',
+                    font: 'inherit',
+                  }}
+                />
+                <div className="wf-row wf-gap-6">
+                  <button
+                    type="button"
+                    className="wf-btn primary"
+                    onClick={() => setNameMut.mutate(nameInput.trim() || null)}
+                    disabled={setNameMut.isPending}
+                    style={{ flex: 1, fontSize: 12, padding: '6px 10px', border: 'none', cursor: 'pointer' }}
+                  >
+                    {t('common.save')}
+                  </button>
+                  {dto.displayName && (
+                    <button
+                      type="button"
+                      className="wf-btn"
+                      onClick={() => setNameMut.mutate(null)}
+                      disabled={setNameMut.isPending}
+                      style={{ fontSize: 12, padding: '6px 10px', cursor: 'pointer', color: '#d33' }}
+                    >
+                      {isEn ? 'Reset' : 'Сбросить'}
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    className="wf-btn"
+                    onClick={() => setEditingName(false)}
+                    disabled={setNameMut.isPending}
+                    style={{ fontSize: 12, padding: '6px 10px', cursor: 'pointer' }}
+                  >
+                    {t('common.cancel')}
+                  </button>
+                </div>
+                {dto.displayName && (
+                  <span className="wf-tiny" style={{ color: 'var(--hint)' }}>
+                    {isEn ? 'Telegram name is hidden while a custom name is set.' : 'Пока задано своё имя, имя из Telegram скрыто.'}
+                  </span>
+                )}
+              </div>
+            )}
             {/* Role + away/sick tags. Centered row so it sits under the
                 name like a badge bar. */}
             <div

@@ -153,6 +153,10 @@ export type FamilyMemberDto = {
   id: string;
   firstName: string;
   lastName: string | null;
+  /** Owner-set family-scoped name override, or null when using the Telegram
+   *  name. `firstName` already reflects this; kept separate so the owner's
+   *  edit UI can distinguish "custom" from "Telegram" and clear it. */
+  displayName: string | null;
   avatarUrl: string | null;
   color: string;
   awayUntil: string | null;
@@ -456,6 +460,13 @@ export const api = {
   kickMember: (familyId: string, userId: string) =>
     request<null>(`/api/v1/families/${familyId}/members/${userId}`, {
       method: 'DELETE',
+    }),
+  /** Owner-only — set or clear a member's family-scoped display name.
+   *  Pass null (or empty) to revert to the member's Telegram name. */
+  setMemberName: (familyId: string, userId: string, displayName: string | null) =>
+    request<null>(`/api/v1/families/${familyId}/members/${userId}/name`, {
+      method: 'PATCH',
+      body: JSON.stringify({ displayName }),
     }),
   /** Owner-only — hand the family's ownership over to another existing
    *  member. The caller is automatically demoted to Adult. */

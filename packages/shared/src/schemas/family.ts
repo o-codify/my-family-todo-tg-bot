@@ -38,6 +38,15 @@ export const updateFamilySchema = z.object({
 
 export type UpdateFamilyInput = z.infer<typeof updateFamilySchema>;
 
+/** Body for `PATCH /api/v1/families/:familyId/members/:userId/name` — the
+ *  family owner sets or clears a member's display name. Null/empty clears
+ *  the override (falls back to the Telegram name). */
+export const setMemberNameSchema = z.object({
+  displayName: z.string().trim().max(60).nullable(),
+});
+
+export type SetMemberNameInput = z.infer<typeof setMemberNameSchema>;
+
 export const roleSchema = z.object({
   id: z.string().uuid(),
   familyId: z.string().uuid(),

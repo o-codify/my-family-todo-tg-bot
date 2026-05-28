@@ -349,6 +349,7 @@ export async function listFamilyMembers(familyId: string) {
   const rows = await db
     .select({
       userId: familyMembers.userId,
+      displayName: familyMembers.displayName,
       joinedAt: familyMembers.joinedAt,
       role: roles,
       user: users,
@@ -358,10 +359,16 @@ export async function listFamilyMembers(familyId: string) {
     .innerJoin(users, eq(familyMembers.userId, users.id))
     .where(eq(familyMembers.familyId, familyId));
 
-  return rows.map(({ user, role, joinedAt }) => ({
+  return rows.map(({ user, role, joinedAt, displayName }) => ({
     id: user.id,
-    firstName: user.firstName,
-    lastName: user.lastName,
+    // The owner-set name (when present) replaces the Telegram name family-wide.
+    // `lastName` is suppressed under an override — the custom name is a single
+    // free-form field, not a first/last pair.
+    firstName: displayName ?? user.firstName,
+    lastName: displayName ? null : user.lastName,
+    // Raw override so the owner's edit UI can tell "custom" from "Telegram"
+    // and prefill / clear accordingly.
+    displayName: displayName ?? null,
     avatarUrl: user.avatarUrl,
     color: user.color,
     awayUntil: user.awayUntil?.toISOString() ?? null,
@@ -369,6 +376,32 @@ export async function listFamilyMembers(familyId: string) {
     joinedAt: joinedAt.toISOString(),
     role: serializeRole(role),
   }));
+}
+
+/**
+ * Owner-only (route enforces): set or clear a family-scoped display-name
+ * override for a member. Pass a trimmed non-empty string to set, or null /
+ * empty to clear (falls back to the Telegram name). The target must be a
+ * member of the family. Returns false if they aren't.
+ */
+export async function setMemberName(input: {
+  familyId: string;
+  userId: string;
+  displayName: string | null;
+}): Promise<boolean> {
+  const trimmed = input.displayName?.trim();
+  const next = trimmed && trimmed.length > 0 ? trimmed : null;
+  const result = await db
+    .update(familyMembers)
+    .set({ displayName: next })
+    .where(
+      and(
+        eq(familyMembers.familyId, input.familyId),
+        eq(familyMembers.userId, input.userId),
+      ),
+    )
+    .returning({ userId: familyMembers.userId });
+  return result.length > 0;
 }
 
 export async function listMyFamilies(userId: string) {

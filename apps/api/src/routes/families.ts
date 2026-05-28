@@ -4,6 +4,7 @@ import { Hono } from 'hono';
 import {
   createFamilySchema,
   joinFamilySchema,
+  setMemberNameSchema,
   updateFamilySchema,
 } from '@family-todo/shared';
 import { db } from '../db/client';
@@ -22,6 +23,7 @@ import {
   rotateInviteCode,
   serializeFamily,
   serializeRole,
+  setMemberName,
   transferOwnership,
   updateFamily,
 } from '../services/families';
@@ -61,6 +63,35 @@ familiesRouter.get('/:familyId/members', requireFamily as never, async (c) => {
   const members = await listFamilyMembers(familyId);
   return c.json({ members });
 });
+
+/**
+ * PATCH /api/v1/families/:familyId/members/:userId/name — family owner sets
+ * or clears a member's display name (family-scoped override). Owner-only:
+ * gated on `family.ownerId`, same intrinsic-ownership model as rename/delete.
+ */
+familiesRouter.patch(
+  '/:familyId/members/:userId/name',
+  requireFamily,
+  zValidator('json', setMemberNameSchema),
+  async (c) => {
+    const user = c.get('user');
+    const familyId = c.req.param('familyId');
+    const targetUserId = c.req.param('userId');
+    const family = await db.query.families.findFirst({ where: eq(families.id, familyId) });
+    if (!family) return c.json({ error: 'family_not_found' }, 404);
+    if (family.ownerId !== user.id) {
+      return c.json({ error: 'forbidden', reason: 'owner_only' }, 403);
+    }
+    const ok = await setMemberName({
+      familyId,
+      userId: targetUserId,
+      displayName: c.req.valid('json').displayName,
+    });
+    if (!ok) return c.json({ error: 'not_member' }, 404);
+    void publishFamilyEvent(familyId, { kind: 'invalidate', scope: 'members' });
+    return c.body(null, 204);
+  },
+);
 
 /**
  * PATCH /api/v1/families/:familyId — rename / change avatar (owner only),
@@ -161,6 +192,11 @@ familiesRouter.post('/:familyId/transfer-owner', async (c) => {
   const body = (await c.req.json().catch(() => null)) as { toUserId?: unknown } | null;
   const toUserId = typeof body?.toUserId === 'string' ? body.toUserId : null;
   if (!toUserId) return c.json({ error: 'to_user_id_required' }, 400);
+  // Validate uuid shape — a malformed value would otherwise hit the uuid
+  // column query and surface as a 500 (Postgres 22P02) instead of a 400.
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(toUserId)) {
+    return c.json({ error: 'to_user_id_required' }, 400);
+  }
 
   const result = await transferOwnership({
     familyId,

@@ -1,4 +1,4 @@
-import { index, pgTable, primaryKey, timestamp, uuid } from 'drizzle-orm/pg-core';
+import { index, pgTable, primaryKey, text, timestamp, uuid } from 'drizzle-orm/pg-core';
 import { families } from './families';
 import { roles } from './roles';
 import { users } from './users';
@@ -15,6 +15,11 @@ export const familyMembers = pgTable(
     roleId: uuid('role_id')
       .notNull()
       .references(() => roles.id, { onDelete: 'restrict' }),
+    // Family-scoped name override set by the family owner. The user's global
+    // `firstName`/`lastName` re-sync from Telegram on every auth, so a custom
+    // name can't live on `users` — it would be clobbered. Null = fall back to
+    // the Telegram name.
+    displayName: text('display_name'),
     joinedAt: timestamp('joined_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => ({
