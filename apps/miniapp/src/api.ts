@@ -157,6 +157,8 @@ export type FamilyMemberDto = {
    *  name. `firstName` already reflects this; kept separate so the owner's
    *  edit UI can distinguish "custom" from "Telegram" and clear it. */
   displayName: string | null;
+  /** Telegram @username (without the @), or null if the member has none. */
+  username: string | null;
   avatarUrl: string | null;
   color: string;
   awayUntil: string | null;

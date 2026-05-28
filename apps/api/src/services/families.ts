@@ -369,6 +369,9 @@ export async function listFamilyMembers(familyId: string) {
     // Raw override so the owner's edit UI can tell "custom" from "Telegram"
     // and prefill / clear accordingly.
     displayName: displayName ?? null,
+    // Telegram handle — independent of the display-name override; the member
+    // profile shows it under the name like the own-profile screen does.
+    username: user.username,
     avatarUrl: user.avatarUrl,
     color: user.color,
     awayUntil: user.awayUntil?.toISOString() ?? null,

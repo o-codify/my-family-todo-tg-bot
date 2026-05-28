@@ -109,6 +109,12 @@ export function MemberProfile({ me, family, userId, onBack }: Props) {
               {dto.firstName}
               {dto.lastName && ` ${dto.lastName}`}
             </div>
+            <span
+              className="wf-hint"
+              style={{ display: 'block', overflowWrap: 'anywhere' }}
+            >
+              {dto.username ? `@${dto.username}` : isEn ? 'from TG' : 'из TG'}
+            </span>
 
             {/* Owner-only: set or clear a family-scoped display name. The
                 custom name then replaces the Telegram name everywhere. */}

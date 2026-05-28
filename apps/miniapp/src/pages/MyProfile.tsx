@@ -152,7 +152,7 @@ export function MyProfile({ me, family, onBack, onOpenDrawer }: Props) {
           {shownFirstName}
           {shownLastName && ` ${shownLastName}`}
         </div>
-        <span className="wf-hint" style={{ overflowWrap: 'anywhere' }}>
+        <span className="wf-hint" style={{ display: 'block', overflowWrap: 'anywhere' }}>
           {me.username ? `@${me.username}` : t.locale === 'en' ? 'from TG' : 'из TG'}
         </span>
 
