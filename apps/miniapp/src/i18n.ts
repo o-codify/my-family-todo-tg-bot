@@ -421,6 +421,7 @@ const DICT: Record<string, Record<Locale, string>> = {
   'create.field.cooldown': { ru: 'Кулдаун', en: 'Cooldown' },
   'create.cooldown.off': { ru: 'Выкл', en: 'Off' },
   'create.cooldown.day': { ru: '1 день', en: '1 day' },
+  'create.cooldown.2days': { ru: '2 дня', en: '2 days' },
   'create.cooldown.3days': { ru: '3 дня', en: '3 days' },
   'create.cooldown.week': { ru: 'неделя', en: '1 week' },
   'create.cooldown.2weeks': { ru: '2 недели', en: '2 weeks' },

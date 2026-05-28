@@ -83,6 +83,7 @@ export function CreateTaskSheet({
   const COOLDOWN_OPTIONS: Array<{ value: number | null; label: string }> = [
     { value: null, label: t('create.cooldown.off') },
     { value: 1, label: t('create.cooldown.day') },
+    { value: 2, label: t('create.cooldown.2days') },
     { value: 3, label: t('create.cooldown.3days') },
     { value: 7, label: t('create.cooldown.week') },
     { value: 14, label: t('create.cooldown.2weeks') },

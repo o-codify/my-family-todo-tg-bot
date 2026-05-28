@@ -493,10 +493,37 @@ export function Calendar({
     // dot. Synthesise a placeholder per such task and inject under
     // today. UID `floating:<taskId>` matches the same shape the
     // FloatingPicker uses, so downstream code already understands it.
+    //
+    // Apply the same assignee / tag / photo filters we applied to
+    // `occurrences` above — otherwise a floating task assigned to me
+    // leaks through as a calendar dot when the filter is set to
+    // another member (the day list reads from the filtered
+    // occurrences and correctly hides the task, but the dot count
+    // pulls from this synthesised set and shows it anyway).
     const occByTask = new Set(occurrences.map((o) => o.taskId));
+    const namedFilterMember =
+      filter !== ALL_LBL && filter !== MINE_LBL
+        ? members.find((m) => m.name === filter)
+        : null;
+    const wantedTagIds = filterTagIds.length > 0 ? new Set(filterTagIds) : null;
     for (const tk of tasks) {
       if (tk.type !== 'floating' || tk.archivedAt) continue;
       if (occByTask.has(tk.id)) continue;
+      // Assignee filter mirror.
+      if (filter === MINE_LBL) {
+        if (tk.assigneeId !== me.id) continue;
+      } else if (namedFilterMember) {
+        if (tk.assigneeId !== namedFilterMember.id) continue;
+      }
+      // Photo filter excludes synthesised rows entirely — they have
+      // no completion and therefore no photoIds.
+      if (onlyWithPhoto) continue;
+      // Tag filter: drop tasks that don't carry any of the wanted
+      // tag ids. Same rule the occurrences filter uses.
+      if (wantedTagIds) {
+        const ids = tk.tagIds ?? [];
+        if (!ids.some((id) => wantedTagIds.has(id))) continue;
+      }
       const synthOcc: OccurrenceDto = {
         id: `floating:${tk.id}`,
         taskId: tk.id,
@@ -530,7 +557,18 @@ export function Calendar({
       map.get(todayIso)!.push(synthOcc);
     }
     return map;
-  }, [occurrences, tasks, todayIso]);
+  }, [
+    occurrences,
+    tasks,
+    todayIso,
+    filter,
+    members,
+    me.id,
+    ALL_LBL,
+    MINE_LBL,
+    onlyWithPhoto,
+    filterTagIds,
+  ]);
 
   const cells = useMemo(() => makeMonthCells(view), [view]);
   const todayDay = new Date().getDate();
