@@ -79,6 +79,21 @@ export function forecastQueueOccurrences(input: {
     }
     let lastCompleter: string | null =
       lastCompleterByTask.get(task.id) ?? null;
+    // Treat the current pending row as already-completed-by-its-
+    // assignee for forecasting purposes — the forecast covers the
+    // turns AFTER the current one. Without this nudge, on a fresh
+    // queue with zero completions the FIRST forecast step picks the
+    // same user the current pending is on (because tie-break sees
+    // everyone at zero), instead of properly alternating.
+    if (current.assigneeId) {
+      sim.set(current.assigneeId, (sim.get(current.assigneeId) ?? 0) + 1);
+      lastCompleter = current.assigneeId;
+    }
+    // Explicit roster from the task drives the tie-break order — when
+    // `queueUserIds` is null we fall back to memberIds (already used
+    // as `queue` above) and the joinedAt secondary kicks in. Mirrors
+    // the server's pickNextAssignee signature.
+    const queueOrder = task.queueUserIds ?? null;
 
     // Anchor the forecast on the current pending's actual turn, not
     // on today. If the current row is on cooldown (availableAt in
@@ -94,7 +109,7 @@ export function forecastQueueOccurrences(input: {
     const anchorMs = Math.max(availableMs, todayMs);
     let cursor = anchorMs + stepMs;
     for (let i = 0; i < 365 && cursor <= toMs; i++) {
-      const picked = pickNext(queue, sim, lastCompleter, joinedAtByUser);
+      const picked = pickNext(queue, sim, lastCompleter, joinedAtByUser, queueOrder);
       if (!picked) break;
       const iso = msToIso(cursor);
       out.push({
@@ -130,6 +145,7 @@ function pickNext(
   completions: Map<string, number>,
   lastCompleter: string | null,
   joinedAt: Map<string, Date>,
+  queueOrder: readonly string[] | null,
 ): string | null {
   if (queue.length === 0) return null;
   const min = Math.min(...queue.map((u) => completions.get(u) ?? 0));
@@ -138,7 +154,16 @@ function pickNext(
     lastCompleter && atMin.length > 1
       ? atMin.filter((u) => u !== lastCompleter)
       : atMin;
+  // Build an order-index map. Users absent from queueOrder sort to
+  // the back (Infinity) where the joinedAt tie-break still works.
+  const orderIndex = new Map<string, number>();
+  if (queueOrder) {
+    queueOrder.forEach((uid, i) => orderIndex.set(uid, i));
+  }
   const sorted = [...eligible].sort((a, b) => {
+    const ia = orderIndex.get(a) ?? Infinity;
+    const ib = orderIndex.get(b) ?? Infinity;
+    if (ia !== ib) return ia - ib;
     const ja = joinedAt.get(a)?.getTime() ?? 0;
     const jb = joinedAt.get(b)?.getTime() ?? 0;
     return ja - jb;

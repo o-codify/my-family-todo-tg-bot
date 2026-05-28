@@ -99,6 +99,17 @@ export function forecastQueueOccurrences(input: {
     }
     let lastCompleter: string | null =
       lastCompleterByTask.get(task.id) ?? null;
+    // Treat the CURRENT pending row as already-completed-by-its-
+    // assignee for forecasting purposes. The forecast walks the
+    // turns AFTER the current one, so the current assignee should
+    // count as the most recent completer (drives the alternation
+    // tie-break) and their effective completion count goes up by 1
+    // (so a "queue is even" rotation correctly picks the OTHER
+    // person on the very first forecast step).
+    if (current.assigneeId) {
+      sim.set(current.assigneeId, (sim.get(current.assigneeId) ?? 0) + 1);
+      lastCompleter = current.assigneeId;
+    }
 
     // Anchor on the current pending's turn (its availableAt, if in
     // the future) instead of "today". The cooldown row IS the next
@@ -120,7 +131,11 @@ export function forecastQueueOccurrences(input: {
         // holiday weeks from now. Forecast is best-effort.
         isAway: false,
       }));
-      const decision = pickNextAssignee(candidates, lastCompleter);
+      const decision = pickNextAssignee(
+        candidates,
+        lastCompleter,
+        task.queueUserIds ?? null,
+      );
       if (decision.kind === 'nobody_available') break;
       const picked = decision.userId;
       const iso = msToIso(cursor);

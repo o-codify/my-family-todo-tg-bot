@@ -112,6 +112,51 @@ describe('pickNextAssignee', () => {
     expect(sequence).toEqual(['a', 'b', 'a', 'b']);
   });
 
+  it('respects explicit queueOrder when counts are tied', () => {
+    // Two users at the same completion count, joinedAt would normally
+    // pick `early`. With an explicit queueOrder placing `late` first
+    // we should pick `late` instead — the user-defined order wins as
+    // the deepest tie-break.
+    const result = pickNextAssignee(
+      [
+        cand({ userId: 'late', completions: 0, joinedAt: new Date('2026-03-01') }),
+        cand({ userId: 'early', completions: 0, joinedAt: new Date('2026-01-01') }),
+      ],
+      null,
+      ['late', 'early'],
+    );
+    expect(result).toEqual({ kind: 'assigned', userId: 'late' });
+  });
+
+  it('queueOrder tie-break still respects balance + alternation rules', () => {
+    // Three users, two of them tied at min=0 (a, b). queueOrder
+    // [c, b, a] would prefer b over a (c is at min+1 and excluded by
+    // balance). lastCompleter=b → alternation excludes b → pick a.
+    const result = pickNextAssignee(
+      [
+        cand({ userId: 'a', completions: 0, joinedAt: new Date('2026-01-01') }),
+        cand({ userId: 'b', completions: 0, joinedAt: new Date('2026-02-01') }),
+        cand({ userId: 'c', completions: 1, joinedAt: new Date('2026-03-01') }),
+      ],
+      'b',
+      ['c', 'b', 'a'],
+    );
+    expect(result).toEqual({ kind: 'assigned', userId: 'a' });
+  });
+
+  it('users absent from queueOrder fall back to joinedAt ordering', () => {
+    const result = pickNextAssignee(
+      [
+        cand({ userId: 'missing', completions: 0, joinedAt: new Date('2026-01-01') }),
+        cand({ userId: 'also-missing', completions: 0, joinedAt: new Date('2026-02-01') }),
+      ],
+      null,
+      // explicit list referencing only an unrelated user
+      ['someone-else'],
+    );
+    expect(result).toEqual({ kind: 'assigned', userId: 'missing' });
+  });
+
   it('catches up an imbalanced queue', () => {
     // user a is behind; should be picked next several times until balanced
     let counts = { a: 0, b: 5, c: 5 };

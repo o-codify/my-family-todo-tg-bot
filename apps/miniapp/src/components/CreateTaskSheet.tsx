@@ -444,54 +444,122 @@ export function CreateTaskSheet({
           </div>
         )}
 
-        {/* Queue roster — multi-select for queued tasks. null means "all
-            members" (server default); flipping any checkbox opts into an
-            explicit list. Owner of the queue isn't auto-selected — the
-            user picks who shares the chore. */}
-        {kind === 'queued' && members.length > 0 && (
-          <div className="wf-col wf-gap-4" style={{ marginTop: 10 }}>
-            <div className="wf-spread">
-              <span className="wf-tiny">
-                {t.locale === 'en' ? 'Queue members' : 'Участники очереди'}
-              </span>
+        {/* Queue roster — ordered multi-select. The list is shown in
+            queue order (selected members first, with ↑/↓ reorder
+            controls; unselected below). The order is what
+            pickNextAssignee uses as the deepest tie-break when all
+            members have equal completion counts — i.e. the
+            "default rotation order" the user can now set. null still
+            means "all family members in roster order" (server
+            default). */}
+        {kind === 'queued' && members.length > 0 && (() => {
+          const explicit = queueUserIds;
+          const orderedIds = explicit ?? members.map((m) => m.id);
+          const ordered = orderedIds
+            .map((id) => members.find((m) => m.id === id))
+            .filter((m): m is (typeof members)[number] => !!m);
+          const orderedIdSet = new Set(orderedIds);
+          const remaining = members.filter((m) => !orderedIdSet.has(m.id));
+
+          const setExplicit = (next: string[]) => {
+            // Empty roster falls back to null (server's "all members"
+            // default) so the task isn't broken.
+            setQueueUserIds(next.length === 0 ? null : next);
+          };
+          const move = (idx: number, delta: number) => {
+            const base = explicit ? [...explicit] : members.map((m) => m.id);
+            const newIdx = idx + delta;
+            if (newIdx < 0 || newIdx >= base.length) return;
+            const [moved] = base.splice(idx, 1);
+            base.splice(newIdx, 0, moved!);
+            setExplicit(base);
+          };
+          const toggle = (id: string) => {
+            const base = explicit ? [...explicit] : members.map((m) => m.id);
+            const i = base.indexOf(id);
+            if (i >= 0) base.splice(i, 1);
+            else base.push(id);
+            setExplicit(base);
+          };
+
+          const reorderBtnStyle: React.CSSProperties = {
+            background: 'transparent',
+            border: '1.5px solid var(--line)',
+            borderRadius: 6,
+            width: 22,
+            height: 22,
+            cursor: 'pointer',
+            color: 'var(--ink)',
+            font: 'inherit',
+            fontSize: 12,
+            lineHeight: 1,
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: 0,
+            flex: 'none',
+          };
+          const reorderBtnDisabledStyle: React.CSSProperties = {
+            ...reorderBtnStyle,
+            opacity: 0.35,
+            cursor: 'not-allowed',
+            borderStyle: 'dashed',
+          };
+
+          return (
+            <div className="wf-col wf-gap-4" style={{ marginTop: 10 }}>
+              <div className="wf-spread">
+                <span className="wf-tiny">
+                  {t.locale === 'en' ? 'Queue members' : 'Участники очереди'}
+                </span>
+                <span className="wf-hint" style={{ fontSize: 11 }}>
+                  {explicit === null
+                    ? t.locale === 'en'
+                      ? 'all'
+                      : 'все'
+                    : `${explicit.length}/${members.length}`}
+                </span>
+              </div>
               <span className="wf-hint" style={{ fontSize: 11 }}>
-                {queueUserIds === null
-                  ? t.locale === 'en'
-                    ? 'all'
-                    : 'все'
-                  : `${queueUserIds.length}/${members.length}`}
+                {t.locale === 'en'
+                  ? 'Order = rotation when everyone is even.'
+                  : 'Порядок = очерёдность при равных счётах.'}
               </span>
-            </div>
-            <div className="wf-col wf-gap-2">
-              {members.map((m) => {
-                const explicit = queueUserIds;
-                const selected = explicit === null ? true : explicit.includes(m.id);
-                return (
+              <div className="wf-col wf-gap-2">
+                {ordered.map((m, idx) => (
                   <div
                     key={m.id}
-                    className="wf-row wf-gap-8"
-                    onClick={() => {
-                      // Switch from implicit "all" to explicit list on
-                      // first interaction, then toggle the clicked member.
-                      const base = explicit === null ? members.map((mm) => mm.id) : [...explicit];
-                      const idx = base.indexOf(m.id);
-                      if (idx >= 0) base.splice(idx, 1);
-                      else base.push(m.id);
-                      // If the user ended up unchecking everyone, fall back to
-                      // null (server default = all) so the task isn't broken.
-                      setQueueUserIds(base.length === 0 ? null : base);
-                    }}
-                    style={{
-                      padding: '6px 4px',
-                      cursor: 'pointer',
-                      borderRadius: 6,
-                    }}
+                    className="wf-row wf-gap-6"
+                    style={{ padding: '4px 4px', borderRadius: 6 }}
                   >
-                    <span
-                      className={'wf-check' + (selected ? ' done' : '')}
-                      style={{ pointerEvents: 'none' }}
+                    <button
+                      type="button"
+                      onClick={() => move(idx, -1)}
+                      disabled={idx === 0}
+                      aria-label="up"
+                      style={idx === 0 ? reorderBtnDisabledStyle : reorderBtnStyle}
                     >
-                      {selected && <Icon name="check" />}
+                      ↑
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => move(idx, 1)}
+                      disabled={idx === ordered.length - 1}
+                      aria-label="down"
+                      style={
+                        idx === ordered.length - 1
+                          ? reorderBtnDisabledStyle
+                          : reorderBtnStyle
+                      }
+                    >
+                      ↓
+                    </button>
+                    <span
+                      className="wf-check done"
+                      onClick={() => toggle(m.id)}
+                      style={{ cursor: 'pointer' }}
+                    >
+                      <Icon name="check" />
                     </span>
                     <Av m={m} size="sm" />
                     <span
@@ -506,11 +574,55 @@ export function CreateTaskSheet({
                       {m.name}
                     </span>
                   </div>
-                );
-              })}
+                ))}
+                {remaining.length > 0 && (
+                  <>
+                    <span
+                      className="wf-tiny"
+                      style={{ color: 'var(--hint)', marginTop: 4 }}
+                    >
+                      {t.locale === 'en' ? 'Not in queue' : 'Вне очереди'}
+                    </span>
+                    {remaining.map((m) => (
+                      <div
+                        key={m.id}
+                        className="wf-row wf-gap-6"
+                        onClick={() => toggle(m.id)}
+                        style={{
+                          padding: '4px 4px',
+                          cursor: 'pointer',
+                          borderRadius: 6,
+                          opacity: 0.7,
+                        }}
+                      >
+                        {/* Spacers — keep the avatar column lined up
+                            with the ordered rows above. */}
+                        <span style={{ width: 22, flex: 'none' }} />
+                        <span style={{ width: 22, flex: 'none' }} />
+                        <span
+                          className="wf-check"
+                          style={{ pointerEvents: 'none' }}
+                        />
+                        <Av m={m} size="sm" />
+                        <span
+                          className="wf-label"
+                          style={{
+                            flex: 1,
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap',
+                          }}
+                        >
+                          {m.name}
+                        </span>
+                      </div>
+                    ))}
+                  </>
+                )}
+              </div>
             </div>
-          </div>
-        )}
+          );
+        })()}
 
         {/* Row: Ответственный + Дедлайн. Both boxes lock to the same
             explicit height — `minHeight` wasn't enough because the

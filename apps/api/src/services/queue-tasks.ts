@@ -107,7 +107,11 @@ export async function ensureQueuedOccurrence(
     )
     .orderBy(desc(taskOccurrences.completedAt))
     .limit(1);
-  const decision = pickNextAssignee(candidates, lastDone?.completedBy ?? null);
+  const decision = pickNextAssignee(
+    candidates,
+    lastDone?.completedBy ?? null,
+    task.queueUserIds ?? null,
+  );
   if (decision.kind === 'nobody_available') return { error: 'nobody_available' };
 
   // The queue invariant is "at most one pending row per task". A bug
