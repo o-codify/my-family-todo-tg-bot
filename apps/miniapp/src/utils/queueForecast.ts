@@ -80,7 +80,19 @@ export function forecastQueueOccurrences(input: {
     let lastCompleter: string | null =
       lastCompleterByTask.get(task.id) ?? null;
 
-    let cursor = todayMs + stepMs;
+    // Anchor the forecast on the current pending's actual turn, not
+    // on today. If the current row is on cooldown (availableAt in
+    // the future), that's when it'll fire — byDate displays the dot
+    // on that day. The NEXT rotation belongs `step` days after.
+    // Without this, completing the chore yesterday would push the
+    // next dot to today + step instead of yesterday + step, which is
+    // the "счёт с сегодня, а не с последнего выполнения" regression
+    // the user reported.
+    const availableMs = current.availableAt
+      ? new Date(current.availableAt).getTime()
+      : todayMs;
+    const anchorMs = Math.max(availableMs, todayMs);
+    let cursor = anchorMs + stepMs;
     for (let i = 0; i < 365 && cursor <= toMs; i++) {
       const picked = pickNext(queue, sim, lastCompleter, joinedAtByUser);
       if (!picked) break;

@@ -170,6 +170,7 @@ export async function generateFamilyIcs(input: {
       scheduledTime: taskOccurrences.scheduledTime,
       status: taskOccurrences.status,
       assigneeId: taskOccurrences.assigneeId,
+      availableAt: taskOccurrences.availableAt,
       taskType: tasks.type,
       title: tasks.title,
       description: tasks.description,
@@ -209,20 +210,17 @@ export async function generateFamilyIcs(input: {
             gte(taskOccurrences.scheduledDate, from),
             lte(taskOccurrences.scheduledDate, to),
           ),
-          // Dateless pending (queued / "Когда-нибудь") — anchored to
-          // today as all-day below. Skip rows whose availableAt is in
-          // the future: those are the cooldown rows seeded by
-          // completeFloatingTask / ensureQueuedOccurrence after a
-          // completion, and the user explicitly said cooldown must
-          // suppress them ("задачи без даты передавались на сегодня
-          // [...] но это если кд позволяет").
+          // Dateless pending (queued / "Когда-нибудь"). We pull
+          // these in regardless of availableAt — the anchor logic
+          // below maps them to today (or to availableAt's day when
+          // it's in the future, i.e. the cooldown row's actual
+          // next-turn date). The earlier shape that hard-dropped
+          // future-availableAt rows here pushed the cooldown's
+          // forecast onto today + step, breaking "счёт с последнего
+          // выполнения".
           and(
             isNull(taskOccurrences.scheduledDate),
             eq(taskOccurrences.status, 'pending'),
-            or(
-              isNull(taskOccurrences.availableAt),
-              lte(taskOccurrences.availableAt, today),
-            ),
           ),
         ),
       ),
@@ -247,7 +245,16 @@ export async function generateFamilyIcs(input: {
         seenDatelessByTask.add(r.taskId);
       }
       tasksWithEmittedRow.add(r.taskId);
-      const anchor = r.scheduledDate ?? todayIso;
+      // Anchor:
+      //   - scheduledDate when present;
+      //   - else, if there's a future availableAt (cooldown row),
+      //     anchor on that day — that's when the task is actually
+      //     due (= completion + cooldownDays);
+      //   - else today.
+      let anchor = r.scheduledDate ?? todayIso;
+      if (!r.scheduledDate && r.availableAt && r.availableAt.getTime() > today.getTime()) {
+        anchor = r.availableAt.toISOString().slice(0, 10);
+      }
       const presentation = presentStatus(r.status);
       return formatVEvent({
         uid: `occ:${r.id}@family-todo`,
@@ -394,6 +401,7 @@ export async function generateFamilyIcs(input: {
           status: taskOccurrences.status,
           assigneeId: taskOccurrences.assigneeId,
           scheduledTime: taskOccurrences.scheduledTime,
+          availableAt: taskOccurrences.availableAt,
           title: tasks.title,
           description: tasks.description,
         })

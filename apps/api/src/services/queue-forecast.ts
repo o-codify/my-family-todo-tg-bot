@@ -35,7 +35,10 @@ export type QueueForecastRow = {
 
 export function forecastQueueOccurrences(input: {
   tasks: TaskRow[];
-  occurrences: Pick<TaskOccurrenceRow, 'taskId' | 'status' | 'assigneeId' | 'scheduledTime'>[];
+  occurrences: Pick<
+    TaskOccurrenceRow,
+    'taskId' | 'status' | 'assigneeId' | 'scheduledTime' | 'availableAt'
+  >[];
   /** Roster fallback when `task.queueUserIds` is null/empty. */
   memberIds: string[];
   /** Per-task completion counts at "now". Keyed by `${taskId}:${userId}`.
@@ -97,7 +100,14 @@ export function forecastQueueOccurrences(input: {
     let lastCompleter: string | null =
       lastCompleterByTask.get(task.id) ?? null;
 
-    let cursor = todayMs + stepMs;
+    // Anchor on the current pending's turn (its availableAt, if in
+    // the future) instead of "today". The cooldown row IS the next
+    // turn — pushing the forecast off today would double-count it.
+    const availableMs = current.availableAt
+      ? current.availableAt.getTime()
+      : todayMs;
+    const anchorMs = Math.max(availableMs, todayMs);
+    let cursor = anchorMs + stepMs;
     // Defensive cap to avoid infinite loops if step somehow becomes 0.
     for (let i = 0; i < 365 && cursor <= toMs; i++) {
       const candidates = queue.map((userId) => ({

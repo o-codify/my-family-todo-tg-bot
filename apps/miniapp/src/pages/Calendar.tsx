@@ -461,11 +461,14 @@ export function Calendar({
     for (const o of occurrences) {
       // Anchor logic for null-date rows:
       //   - done                                  → completedAt day
-      //   - pending on cooldown (availableAt > now) → skip the
-      //     today-anchor; the queue forecast / next-availability
-      //     surfaces the row on the right future day. Without this,
-      //     completing a queue task with cooldown=6 puts the next
-      //     pending right back on today.
+      //   - pending on cooldown (availableAt > now) → availableAt day.
+      //     This is the next moment the task is actually due: it
+      //     equals completedAt + cooldownDays for queue/floating rows
+      //     seeded by completeOccurrence. Earlier we skipped these
+      //     rows outright, but that meant the forecast cursor (which
+      //     starts at today + step) effectively re-anchored the
+      //     cooldown on today, breaking "счёт от последнего
+      //     выполнения, не от сегодня".
       //   - pending otherwise                     → today
       let key: string;
       if (o.scheduledDate) {
@@ -474,9 +477,10 @@ export function Calendar({
         key = o.completedAt.slice(0, 10);
       } else if (o.status === 'pending') {
         if (o.availableAt && new Date(o.availableAt).getTime() > nowMs) {
-          continue;
+          key = o.availableAt.slice(0, 10);
+        } else {
+          key = todayIso;
         }
-        key = todayIso;
       } else {
         key = '__floating__';
       }

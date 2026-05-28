@@ -465,12 +465,14 @@ describe('ICS feed (integration)', () => {
     expect(ics).toContain(`DTSTART;VALUE=DATE:${y}${m}${d}`);
   });
 
-  it('floating synthesis: skips a task whose cooldown is still active', async () => {
+  it('floating cooldown row anchors on its availableAt date, not today', async () => {
     // After completion of a floating task with cooldownDays>0 there's
     // a pending row seeded with availableAt = completedAt + N days.
-    // While availableAt > now the task is "on cooldown" and must not
-    // appear in the calendar — the user explicitly added the
-    // qualifier "Но это если кд позволяет".
+    // The row is shown on its availableAt date (the next due day) —
+    // not on today (would defeat cooldown) and not skipped entirely
+    // (the user wants to see WHEN the task is next due). This matches
+    // the queue-cooldown shape and the user's follow-up "счёт с
+    // последнего выполнения, не с сегодня".
     const owner = await makeUser();
     const { family } = await makeFamily(owner);
     const [task] = await db
@@ -489,8 +491,6 @@ describe('ICS feed (integration)', () => {
         singleShot: false,
       })
       .returning();
-    // Existing pending row with future availableAt — this is what
-    // completeFloatingTask seeds when wait_then_reopen fires.
     const future = new Date(Date.now() + 5 * 86_400_000);
     await db.insert(taskOccurrences).values({
       taskId: task!.id,
@@ -501,7 +501,18 @@ describe('ICS feed (integration)', () => {
     });
 
     const ics = await generateFamilyIcs({ familyId: family.id, userId: owner.id });
-    expect(ics).not.toContain('SUMMARY:Vacuum');
+    // Task appears, anchored on availableAt's day.
+    expect(ics).toContain('SUMMARY:Vacuum');
+    const y = future.getUTCFullYear();
+    const m = String(future.getUTCMonth() + 1).padStart(2, '0');
+    const d = String(future.getUTCDate()).padStart(2, '0');
+    expect(ics).toContain(`DTSTART;VALUE=DATE:${y}${m}${d}`);
+    // And NOT on today.
+    const today = new Date();
+    const ty = today.getUTCFullYear();
+    const tm = String(today.getUTCMonth() + 1).padStart(2, '0');
+    const td = String(today.getUTCDate()).padStart(2, '0');
+    expect(ics).not.toContain(`DTSTART;VALUE=DATE:${ty}${tm}${td}\r\nDTEND;VALUE=DATE:${ty}${tm}${td}`);
   });
 
   it('floating synthesis: cooldown elapsed → today anchor returns', async () => {

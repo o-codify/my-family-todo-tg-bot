@@ -85,10 +85,19 @@ export async function ensureQueuedOccurrence(
   }
 
   const candidates = await loadCandidates(task, conn);
-  // Latest completer of THIS task — fed into pickNextAssignee so an
-  // equal-count tie alternates instead of sticking on the last actor.
+  // Latest done occurrence — both its `completedBy` (so pickNextAssignee
+  // can break a balance tie via strict alternation) and its
+  // `completedAt` (so we can anchor the next cooldown to the actual
+  // completion moment, not "now"). Without the timestamp anchor, the
+  // ensure-spawned row's availableAt drifts forward every time
+  // ensureQueuedOccurrence reruns after a delay (e.g. boot hydrate),
+  // which the user reported as "кд считается с сегодняшнего дня, а не
+  // с последнего выполнения".
   const [lastDone] = await conn
-    .select({ completedBy: taskOccurrences.completedBy })
+    .select({
+      completedBy: taskOccurrences.completedBy,
+      completedAt: taskOccurrences.completedAt,
+    })
     .from(taskOccurrences)
     .where(
       and(
@@ -129,13 +138,20 @@ export async function ensureQueuedOccurrence(
 
   // Honour cooldown on the freshly-spawned row so the calendar grid
   // doesn't slap the next "Мусор" turn onto today right after a
-  // completion. Without this, completing a queue task with
-  // cooldownDays=6 immediately puts the next pending on today's
-  // anchor (byDate keys null-date pendings to today), and the user
-  // sees the task they JUST finished pinned back on today.
+  // completion.
+  //
+  // Anchor on the LATEST done.completedAt rather than `Date.now()`:
+  //   - in the normal completeOccurrence flow they're basically the
+  //     same instant, but
+  //   - boot-time hydrate and other delayed retriggers run hours or
+  //     days later, and `Date.now() + cooldownDays` would push the
+  //     next turn forward by that gap — the regression the user just
+  //     reported as "счёт с сегодняшнего дня".
+  //   - a brand-new task with no completions yet has no anchor at
+  //     all; leave availableAt null so the first turn is immediate.
   const availableAt =
-    task.cooldownDays && task.cooldownDays > 0
-      ? new Date(Date.now() + task.cooldownDays * 86_400_000)
+    task.cooldownDays && task.cooldownDays > 0 && lastDone?.completedAt
+      ? new Date(lastDone.completedAt.getTime() + task.cooldownDays * 86_400_000)
       : null;
   const insertRow: NewTaskOccurrenceRow = {
     taskId: task.id,
