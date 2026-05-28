@@ -201,6 +201,9 @@ export async function generateFamilyIcs(input: {
               isNull(tasks.assigneeId),
             ),
           ),
+          // 4. Shared task: I'm a participant (the occurrence assignee is
+          //    the responsible, not me, so the clauses above miss it).
+          sql`${tasks.participantIds} @> ARRAY[${input.userId}]::uuid[]`,
         ),
         // Drop completed occurrences entirely — see file docstring.
         ne(taskOccurrences.status, 'done'),

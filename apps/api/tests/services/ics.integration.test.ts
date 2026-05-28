@@ -274,6 +274,41 @@ describe('ICS feed (integration)', () => {
     expect(ics).not.toContain('SUMMARY:Theirs');
   });
 
+  it('includes a shared task in a participant feed, hides it from non-participants', async () => {
+    const owner = await makeUser();
+    const helper = await makeUser();
+    const outsider = await makeUser();
+    const { family } = await makeFamily(owner);
+    const { addMember } = await import('../db-helpers');
+    await addMember(family, helper, 'Adult');
+    await addMember(family, outsider, 'Adult');
+
+    // Shared task: responsible = owner, participant = helper. The
+    // occurrence's assignee is the owner, so helper only matches via the
+    // task's participant_ids.
+    await createTask({
+      familyId: family.id,
+      createdBy: owner.id,
+      data: {
+        title: 'Family cleanup',
+        type: 'oneoff',
+        schedule: { kind: 'oneoff', date: isoTomorrow() },
+        assigneeId: owner.id,
+        participantIds: [helper.id],
+        points: 0,
+        photoRequired: false,
+        requiresApproval: false,
+        singleShot: false,
+      },
+    });
+
+    const helperIcs = await generateFamilyIcs({ familyId: family.id, userId: helper.id });
+    expect(helperIcs).toContain('SUMMARY:Family cleanup');
+
+    const outsiderIcs = await generateFamilyIcs({ familyId: family.id, userId: outsider.id });
+    expect(outsiderIcs).not.toContain('SUMMARY:Family cleanup');
+  });
+
   it('anchors dateless pending ("Когда-нибудь") on today as all-day', async () => {
     const owner = await makeUser();
     const { family } = await makeFamily(owner);

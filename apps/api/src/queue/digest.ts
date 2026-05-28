@@ -1,4 +1,4 @@
-import { and, desc, eq, gte, isNull, lt, lte, or } from 'drizzle-orm';
+import { and, desc, eq, gte, isNull, lt, lte, or, sql } from 'drizzle-orm';
 import { db } from '../db/client';
 import {
   familyEvents,
@@ -148,6 +148,8 @@ export async function runDigest(input: { userId: string }): Promise<void> {
         or(
           eq(taskOccurrences.assigneeId, user.id),
           isNull(taskOccurrences.assigneeId),
+          // Shared task I participate in (assignee is the responsible).
+          sql`${tasks.participantIds} @> ARRAY[${user.id}]::uuid[]`,
         ),
         or(
           and(
@@ -217,6 +219,7 @@ export async function runDigest(input: { userId: string }): Promise<void> {
         or(
           eq(taskOccurrences.assigneeId, user.id),
           isNull(taskOccurrences.assigneeId),
+          sql`${tasks.participantIds} @> ARRAY[${user.id}]::uuid[]`,
         ),
       ),
     )

@@ -6,6 +6,7 @@ import {
   tasks,
   users,
   type TaskOccurrenceRow,
+  type TaskRow,
 } from '../db/schema';
 import { logger } from '../logger';
 import { getNotificationsQueue } from './index';
@@ -31,12 +32,15 @@ import { sendBotMessage } from './tg-send';
  *   - ensureQueuedOccurrence → schedule the new one
  */
 
-/** Per-interval BullMQ jobId. Each interval gets its own job so multi-
- *  threshold reminders ("за день, утром, за час") schedule and cancel
- *  independently. Adding the minute count makes the id unique inside a
- *  single occurrence's reminder set. */
-function jobIdForOccurrence(occurrenceId: string, minutes: number): string {
-  return `reminder:${occurrenceId}:${minutes}`;
+/** Per-(occurrence, recipient, interval) BullMQ jobId. A shared task fans
+ *  out one reminder per recipient (responsible + participants), so the id
+ *  carries the user too — otherwise two recipients of the same occurrence +
+ *  interval would collide on a single job. */
+function jobIdForOccurrence(occurrenceId: string, userId: string, minutes: number): string {
+  // BullMQ (>=5.x) rejects custom job ids containing ':' (it reserves the
+  // colon as a Redis key separator), so we join with '_'. UUIDs contain
+  // hyphens but never underscores, so the parts stay unambiguous.
+  return `reminder_${occurrenceId}_${userId}_${minutes}`;
 }
 
 /** Resolve the user's reminder intervals. New shape (`reminderIntervalsMinutes`)
@@ -107,61 +111,80 @@ export async function scheduleReminderForOccurrence(
   return scheduleReminderFromRow(occ);
 }
 
+/** Recipients of an occurrence's reminder: the responsible assignee plus
+ *  every participant of a shared task. Participants get the same reminder —
+ *  they just can't close it (the action buttons are withheld). Deduped, in
+ *  case the assignee also appears in participantIds. Exported for unit tests. */
+export function reminderRecipientIds(
+  occ: Pick<TaskOccurrenceRow, 'assigneeId'>,
+  task: Pick<TaskRow, 'participantIds'>,
+): string[] {
+  const ids = [occ.assigneeId, ...(task.participantIds ?? [])].filter(
+    (x): x is string => !!x,
+  );
+  return [...new Set(ids)];
+}
+
 async function scheduleReminderFromRow(occ: TaskOccurrenceRow): Promise<Date | null> {
   // Cancel any previous jobs for this occurrence — caller might be
-  // rescheduling/reassigning. Safe no-op if absent. We cancel by prefix
-  // since multi-interval setup may have left multiple job ids behind.
+  // rescheduling/reassigning. Safe no-op if absent.
   await cancelReminderForOccurrence(occ.id);
 
   if (occ.status !== 'pending') return null;
   if (!occ.scheduledDate || !occ.scheduledTime) return null;
   if (!occ.assigneeId) return null;
 
-  const user = await db.query.users.findFirst({ where: eq(users.id, occ.assigneeId) });
-  if (!user) return null;
-  const intervals = resolveIntervals(user.notificationSettings);
-  if (intervals.length === 0) return null;
-
   const task = await db.query.tasks.findFirst({ where: eq(tasks.id, occ.taskId) });
   if (!task || task.archivedAt) return null;
 
-  let occursAt: Date;
-  try {
-    occursAt = zonedDateTimeToUtc(occ.scheduledDate, occ.scheduledTime, user.timezone);
-  } catch (err) {
-    logger.warn({ err, occurrenceId: occ.id }, 'reminder schedule: bad date/time');
-    return null;
-  }
+  const recipientIds = reminderRecipientIds(occ, task);
+  if (recipientIds.length === 0) return null;
+  const recipients = await db.select().from(users).where(inArray(users.id, recipientIds));
 
   const queue = getNotificationsQueue();
-  // Schedule one job per interval. Earliest fire time is the one we
-  // return for caller logging; others queue alongside it. We dedupe by
-  // (occurrenceId, minutes) at send-time too — see runReminder.
+  // One job per (recipient, interval). Each recipient uses their OWN
+  // timezone + reminder intervals. Only the responsible gets the action
+  // buttons (canClose) — participants can see the task but not close it.
   let earliest: Date | null = null;
-  for (const before of intervals) {
-    const fireAt = new Date(occursAt.getTime() - before * 60_000);
-    const delay = fireAt.getTime() - Date.now();
-    if (delay <= 0) continue;
-    await queue.add(
-      'reminder',
-      {
-        occurrenceId: occ.id,
-        userId: user.id,
-        taskTitle: task.title,
-        minutesBefore: before,
-      },
-      {
-        delay,
-        jobId: jobIdForOccurrence(occ.id, before),
-      },
-    );
-    if (!earliest || fireAt < earliest) earliest = fireAt;
+  for (const user of recipients) {
+    const intervals = resolveIntervals(user.notificationSettings);
+    if (intervals.length === 0) continue;
+
+    let occursAt: Date;
+    try {
+      occursAt = zonedDateTimeToUtc(occ.scheduledDate, occ.scheduledTime, user.timezone);
+    } catch (err) {
+      logger.warn({ err, occurrenceId: occ.id, userId: user.id }, 'reminder schedule: bad date/time');
+      continue;
+    }
+
+    const canClose = user.id === occ.assigneeId;
+    for (const before of intervals) {
+      const fireAt = new Date(occursAt.getTime() - before * 60_000);
+      const delay = fireAt.getTime() - Date.now();
+      if (delay <= 0) continue;
+      await queue.add(
+        'reminder',
+        {
+          occurrenceId: occ.id,
+          userId: user.id,
+          taskTitle: task.title,
+          minutesBefore: before,
+          canClose,
+        },
+        {
+          delay,
+          jobId: jobIdForOccurrence(occ.id, user.id, before),
+        },
+      );
+      if (!earliest || fireAt < earliest) earliest = fireAt;
+    }
   }
   if (!earliest) {
     logger.debug({ occurrenceId: occ.id }, 'reminder skipped: all fire times in the past');
     return null;
   }
-  logger.debug({ occurrenceId: occ.id, earliest, intervals }, 'reminders scheduled');
+  logger.debug({ occurrenceId: occ.id, earliest, recipients: recipientIds.length }, 'reminders scheduled');
   return earliest;
 }
 
@@ -177,12 +200,26 @@ const COMMON_INTERVAL_MINUTES = [0, 5, 10, 15, 30, 60, 120, 240, 480, 1440];
 
 export async function cancelReminderForOccurrence(occurrenceId: string): Promise<void> {
   const queue = getNotificationsQueue();
-  for (const minutes of COMMON_INTERVAL_MINUTES) {
-    try {
-      const job = await queue.getJob(jobIdForOccurrence(occurrenceId, minutes));
-      if (job) await job.remove();
-    } catch (err) {
-      logger.debug({ err, occurrenceId, minutes }, 'cancel reminder: lookup/remove failed');
+  // Reminders fan out per recipient (responsible + participants), so we
+  // resolve the current recipient set to know which per-user job ids to
+  // probe. If the occurrence/task is already gone there's nothing to cancel.
+  const occ = await db.query.taskOccurrences.findFirst({
+    where: eq(taskOccurrences.id, occurrenceId),
+  });
+  const recipientIds = new Set<string>();
+  if (occ?.assigneeId) recipientIds.add(occ.assigneeId);
+  if (occ) {
+    const task = await db.query.tasks.findFirst({ where: eq(tasks.id, occ.taskId) });
+    for (const p of task?.participantIds ?? []) recipientIds.add(p);
+  }
+  for (const userId of recipientIds) {
+    for (const minutes of COMMON_INTERVAL_MINUTES) {
+      try {
+        const job = await queue.getJob(jobIdForOccurrence(occurrenceId, userId, minutes));
+        if (job) await job.remove();
+      } catch (err) {
+        logger.debug({ err, occurrenceId, userId, minutes }, 'cancel reminder: lookup/remove failed');
+      }
     }
   }
 }
@@ -224,13 +261,16 @@ export async function runReminder(input: {
    *  enqueued before multi-interval shipped may not carry it; fall back
    *  to the user's legacy `defaultReminderBeforeMinutes` for those. */
   minutesBefore?: number;
+  /** Whether this recipient may close the task. True for the responsible
+   *  assignee, false for participants. Older jobs omit it → default true
+   *  (they were always assignee-only). Controls the action buttons. */
+  canClose?: boolean;
 }): Promise<void> {
-  // Per-interval dedupe — a 60-min job and a 15-min job for the same
-  // occurrence have different dedupe keys, so both can fire. Same
-  // interval reaching the worker twice (BullMQ retry, double-add) still
-  // dedupes correctly.
+  // Per-(user, interval) dedupe — a shared task reminds multiple recipients
+  // for the same occurrence+interval, and the notifications_log unique index
+  // is on dedupeKey alone, so the recipient must be part of the key.
   const intervalKey = input.minutesBefore != null ? `:${input.minutesBefore}` : '';
-  const dedupeKey = `reminder:${input.occurrenceId}${intervalKey}`;
+  const dedupeKey = `reminder:${input.occurrenceId}:${input.userId}${intervalKey}`;
 
   // Re-check the occurrence is still pending — cancellation isn't guaranteed
   // to race-stop a job that's already moved into the worker.
@@ -267,24 +307,30 @@ export async function runReminder(input: {
   const text = isEn
     ? `⏰ Reminder${when}: ${input.taskTitle} — ${lead}`
     : `⏰ Напоминание${when}: ${input.taskTitle} — ${lead}`;
-  // Inline keyboard — three quick actions on every reminder so the user
-  // can dispatch from Telegram itself without opening the miniapp.
+  // Action buttons (Done / Tomorrow) only go to the responsible — they're
+  // the one who can close or reschedule. Participants get the same reminder
+  // text but no buttons (the callbacks would 403 for them anyway).
   // callback_data limit is 64 bytes; `<action>:<uuid>` is 7 + 36 = 43.
+  const canClose = input.canClose !== false;
   await sendBotMessage({
     chatId: Number(user.telegramId),
     text,
-    inlineKeyboard: [
-      [
-        {
-          text: isEn ? '✓ Done' : '✓ Готово',
-          callback_data: `occ-done:${input.occurrenceId}`,
-        },
-        {
-          text: isEn ? '⏰ Tomorrow' : '⏰ Завтра',
-          callback_data: `occ-tomorrow:${input.occurrenceId}`,
-        },
-      ],
-    ],
+    ...(canClose
+      ? {
+          inlineKeyboard: [
+            [
+              {
+                text: isEn ? '✓ Done' : '✓ Готово',
+                callback_data: `occ-done:${input.occurrenceId}`,
+              },
+              {
+                text: isEn ? '⏰ Tomorrow' : '⏰ Завтра',
+                callback_data: `occ-tomorrow:${input.occurrenceId}`,
+              },
+            ],
+          ],
+        }
+      : {}),
   });
 }
 

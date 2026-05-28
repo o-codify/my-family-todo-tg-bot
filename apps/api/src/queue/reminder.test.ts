@@ -1,5 +1,31 @@
 import { describe, expect, it } from 'vitest';
-import { resolveIntervals, zonedDateTimeToUtc } from './reminder';
+import { reminderRecipientIds, resolveIntervals, zonedDateTimeToUtc } from './reminder';
+
+describe('reminderRecipientIds', () => {
+  it('solo task → just the assignee', () => {
+    expect(
+      reminderRecipientIds({ assigneeId: 'u-a' }, { participantIds: null }),
+    ).toEqual(['u-a']);
+  });
+
+  it('shared task → assignee plus participants', () => {
+    expect(
+      reminderRecipientIds({ assigneeId: 'u-a' }, { participantIds: ['u-b', 'u-c'] }),
+    ).toEqual(['u-a', 'u-b', 'u-c']);
+  });
+
+  it('dedupes the assignee out of participants', () => {
+    expect(
+      reminderRecipientIds({ assigneeId: 'u-a' }, { participantIds: ['u-a', 'u-b'] }),
+    ).toEqual(['u-a', 'u-b']);
+  });
+
+  it('drops a null assignee, keeps participants', () => {
+    expect(
+      reminderRecipientIds({ assigneeId: null }, { participantIds: ['u-b'] }),
+    ).toEqual(['u-b']);
+  });
+});
 
 describe('zonedDateTimeToUtc', () => {
   it('treats UTC tz as identity', () => {

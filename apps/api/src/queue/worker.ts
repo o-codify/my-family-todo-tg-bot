@@ -32,7 +32,13 @@ export function startNotificationsWorker(): Worker {
           return;
         case 'reminder':
           await runReminder(
-            job.data as { occurrenceId: string; userId: string; taskTitle: string },
+            job.data as {
+              occurrenceId: string;
+              userId: string;
+              taskTitle: string;
+              minutesBefore?: number;
+              canClose?: boolean;
+            },
           );
           return;
         case 'google-sync-tick':

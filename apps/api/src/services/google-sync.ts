@@ -1,4 +1,4 @@
-import { and, eq, gte, inArray, isNull, lte, or } from 'drizzle-orm';
+import { and, eq, gte, inArray, isNull, lte, or, sql } from 'drizzle-orm';
 import { db } from '../db/client';
 import {
   familyEvents,
@@ -97,7 +97,12 @@ async function collectDesiredEvents(userId: string): Promise<DesiredEvent[]> {
         inArray(tasks.familyId, familyIds),
         isNull(tasks.archivedAt),
         eq(taskOccurrences.status, 'pending'),
-        eq(taskOccurrences.assigneeId, userId),
+        // Assigned to me, or I'm a participant on a shared task (the
+        // occurrence assignee is the responsible, not me).
+        or(
+          eq(taskOccurrences.assigneeId, userId),
+          sql`${tasks.participantIds} @> ARRAY[${userId}]::uuid[]`,
+        ),
         // Dated only — floating tasks have no anchor.
         gte(taskOccurrences.scheduledDate, from),
         lte(taskOccurrences.scheduledDate, to),
