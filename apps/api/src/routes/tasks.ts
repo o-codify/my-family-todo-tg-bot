@@ -23,6 +23,7 @@ import {
   updateTask,
 } from '../services/tasks';
 import { getTagIdsForTasks } from '../services/tags';
+import { diffTaskFields, recordAuditEvent } from '../services/audit-log';
 
 export const tasksRouter = new Hono<{ Variables: AuthVariables & FamilyVariables }>()
   .use('*', tgAuth)
@@ -47,6 +48,15 @@ tasksRouter.post(
     const data = c.req.valid('json');
     const task = await createTask({ familyId, createdBy: user.id, data });
     const tagMap = await getTagIdsForTasks([task.id]);
+    void recordAuditEvent({
+      familyId,
+      actorUserId: user.id,
+      kind: 'task.create',
+      entityType: 'task',
+      entityId: task.id,
+      entityTitle: task.title,
+      details: { taskType: task.type },
+    });
     return c.json({ task: serializeTask(task, tagMap.get(task.id) ?? []) }, 201);
   },
 );
@@ -80,6 +90,21 @@ tasksRouter.patch(
 
     const updated = await updateTask({ task, data: c.req.valid('json') });
     const tagMap = await getTagIdsForTasks([updated.id]);
+    const changedFields = diffTaskFields(task, updated);
+    // Only emit an audit row when something material actually
+    // changed — a no-op PATCH (e.g. the client re-saving the same
+    // form) shouldn't clutter the History timeline.
+    if (changedFields.length > 0) {
+      void recordAuditEvent({
+        familyId,
+        actorUserId: user.id,
+        kind: 'task.update',
+        entityType: 'task',
+        entityId: updated.id,
+        entityTitle: updated.title,
+        details: { changedFields },
+      });
+    }
     return c.json({ task: serializeTask(updated, tagMap.get(updated.id) ?? []) });
   },
 );
@@ -121,6 +146,14 @@ tasksRouter.delete('/:taskId', async (c) => {
   }
 
   await archiveTask(task.id);
+  void recordAuditEvent({
+    familyId,
+    actorUserId: user.id,
+    kind: 'task.delete',
+    entityType: 'task',
+    entityId: task.id,
+    entityTitle: task.title,
+  });
   return c.body(null, 204);
 });
 
@@ -147,5 +180,13 @@ tasksRouter.post('/:taskId/restore', async (c) => {
   const restored = await restoreTask(task.id);
   if (!restored) return c.json({ error: 'task_not_found' }, 404);
   const tagMap = await getTagIdsForTasks([restored.id]);
+  void recordAuditEvent({
+    familyId,
+    actorUserId: user.id,
+    kind: 'task.restore',
+    entityType: 'task',
+    entityId: restored.id,
+    entityTitle: restored.title,
+  });
   return c.json({ task: serializeTask(restored, tagMap.get(restored.id) ?? []) });
 });

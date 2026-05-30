@@ -495,6 +495,22 @@ export const api = {
     request<{ occurrences: OccurrenceDto[] }>(
       `/api/v1/families/${familyId}/occurrences?from=${from}&to=${to}`,
     ),
+
+  /** Family audit log — task create/update/delete events. Powers the
+   *  "changes" filter on the History page. */
+  listAuditEvents: (
+    familyId: string,
+    opts?: { from?: string; to?: string; limit?: number },
+  ) => {
+    const params = new URLSearchParams();
+    if (opts?.from) params.set('from', opts.from);
+    if (opts?.to) params.set('to', opts.to);
+    if (opts?.limit) params.set('limit', String(opts.limit));
+    const qs = params.toString();
+    return request<{ events: AuditEventDto[] }>(
+      `/api/v1/families/${familyId}/audit-log${qs ? `?${qs}` : ''}`,
+    );
+  },
   getOccurrence: (familyId: string, occurrenceId: string) =>
     request<{ occurrence: OccurrenceDto }>(
       `/api/v1/families/${familyId}/occurrences/${occurrenceId}`,
@@ -1139,6 +1155,27 @@ export type RewardDto = {
   createdBy: string;
   createdAt: string;
   updatedAt: string;
+};
+
+export type AuditEventDto = {
+  id: string;
+  familyId: string;
+  actorUserId: string | null;
+  /** Dot-namespaced kind, e.g. `task.create`, `task.update`,
+   *  `task.delete`, `task.restore`. Future entities reuse the
+   *  `<type>.<verb>` shape. */
+  kind: string;
+  entityType: string;
+  entityId: string;
+  /** Display snapshot of the entity's label at the moment of the
+   *  action — preserved so a deleted task can still be named in the
+   *  History row. */
+  entityTitle: string | null;
+  /** Optional structured details. For `task.update` carries
+   *  `{ changedFields: string[] }` so the row can summarise what
+   *  changed; for `task.create` carries `{ taskType: '...' }`. */
+  details: Record<string, unknown> | null;
+  createdAt: string;
 };
 
 export type RedemptionDto = {

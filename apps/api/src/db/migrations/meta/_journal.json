@@ -190,6 +190,13 @@
       "when": 1779521000000,
       "tag": "0026_task_participants",
       "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1779522000000,
+      "tag": "0027_audit_log",
+      "breakpoints": true
     }
   ]
 }

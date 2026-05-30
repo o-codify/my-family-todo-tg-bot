@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
   api,
+  type AuditEventDto,
   type FamilyMemberDto,
   type FamilySummary,
   type MeResponse,
@@ -19,7 +20,8 @@ import { useT } from '../i18n';
  */
 type HistoryItem =
   | { kind: 'task'; at: string; userId: string | null; occ: OccurrenceDto }
-  | { kind: 'reward'; at: string; userId: string; red: RedemptionDto };
+  | { kind: 'reward'; at: string; userId: string; red: RedemptionDto }
+  | { kind: 'change'; at: string; userId: string | null; evt: AuditEventDto };
 
 type Props = {
   me: MeResponse;
@@ -53,7 +55,7 @@ export function History({ me, family, onBack, onOpenDrawer }: Props) {
   const MINE = t('common.mine');
   const ALL = t('common.everyone');
   const [author, setAuthor] = useState<string>(ALL);
-  type TypeFilter = 'all' | 'tasks' | 'rewards' | 'photos';
+  type TypeFilter = 'all' | 'tasks' | 'rewards' | 'photos' | 'changes';
   const [typeFilter, setTypeFilter] = useState<TypeFilter>('all');
   const today = new Date();
   const from = new Date(today.getTime() - 90 * 86_400_000).toISOString().slice(0, 10);
@@ -66,6 +68,15 @@ export function History({ me, family, onBack, onOpenDrawer }: Props) {
   const redemptionsQuery = useQuery({
     queryKey: ['redemptions', family.id, 'granted'],
     queryFn: () => api.listRedemptions(family.id, 'granted'),
+  });
+  const auditQuery = useQuery({
+    queryKey: ['audit-log', family.id, from],
+    // Match the occurrences window so the timeline is consistent — 90
+    // days back is enough for the History page's grouped view.
+    queryFn: () =>
+      api.listAuditEvents(family.id, {
+        from: new Date(`${from}T00:00:00.000Z`).toISOString(),
+      }),
   });
   const membersQuery = useQuery({
     queryKey: ['members', family.id],
@@ -97,8 +108,16 @@ export function History({ me, family, onBack, onOpenDrawer }: Props) {
         out.push({ kind: 'reward', at: r.grantedAt, userId: r.userId, red: r });
       }
     }
-    // Author filter applies to both kinds — `userId` is the completer for
-    // tasks, the requester for rewards.
+    // Audit-log events → change items. Surfaces task create/update/
+    // delete/restore (and any future entity events the audit log
+    // grows) in the same timeline.
+    if (typeFilter === 'all' || typeFilter === 'changes') {
+      for (const e of auditQuery.data?.events ?? []) {
+        out.push({ kind: 'change', at: e.createdAt, userId: e.actorUserId, evt: e });
+      }
+    }
+    // Author filter applies to all kinds — `userId` is the completer for
+    // tasks, the requester for rewards, the actor for changes.
     const filtered =
       author === MINE ? out.filter((it) => it.userId === me.id) : out;
     filtered.sort((a, b) => (a.at > b.at ? -1 : 1));
@@ -106,6 +125,7 @@ export function History({ me, family, onBack, onOpenDrawer }: Props) {
   }, [
     occurrencesQuery.data,
     redemptionsQuery.data,
+    auditQuery.data,
     typeFilter,
     author,
     me.id,
@@ -113,7 +133,10 @@ export function History({ me, family, onBack, onOpenDrawer }: Props) {
   ]);
 
   const grouped = useMemo(() => groupByDay(items), [items]);
-  const isLoading = occurrencesQuery.isLoading || redemptionsQuery.isLoading;
+  const isLoading =
+    occurrencesQuery.isLoading ||
+    redemptionsQuery.isLoading ||
+    auditQuery.isLoading;
 
   return (
     <WfBody onBack={onBack}>
@@ -129,8 +152,9 @@ export function History({ me, family, onBack, onOpenDrawer }: Props) {
           tasks: t('history.type.tasks'),
           rewards: t('history.type.rewards'),
           photos: t('history.type.photos'),
+          changes: t('history.type.changes'),
         };
-        const order: TypeFilter[] = ['all', 'tasks', 'rewards', 'photos'];
+        const order: TypeFilter[] = ['all', 'tasks', 'rewards', 'photos', 'changes'];
         return (
           <Seg
             items={order.map((k) => TYPE_LABELS[k])}
@@ -182,6 +206,40 @@ export function History({ me, family, onBack, onOpenDrawer }: Props) {
                         +{it.occ.pointsAwarded} ⭐
                       </span>
                     )}
+                  </div>
+                </div>
+              );
+            }
+            if (it.kind === 'change') {
+              const verb = describeAuditKind(it.evt.kind, t);
+              const subject =
+                it.evt.entityTitle ?? t('history.change.unknownEntity');
+              const changedFields = Array.isArray(
+                (it.evt.details as { changedFields?: unknown } | null)
+                  ?.changedFields,
+              )
+                ? ((it.evt.details as { changedFields: string[] }).changedFields)
+                : [];
+              const detailLine =
+                it.evt.kind === 'task.update' && changedFields.length > 0
+                  ? `${t('history.change.fields')}: ${changedFields
+                      .map((f) => t(`history.change.field.${f}`))
+                      .join(', ')}`
+                  : null;
+              return (
+                <div key={`evt:${it.evt.id}`} className="wf-card">
+                  <div className="wf-row wf-gap-10">
+                    <Av m={m} size="sm" />
+                    <div className="wf-col" style={{ flex: 1 }}>
+                      <span className="wf-label">
+                        {verb}: {subject}
+                      </span>
+                      <span className="wf-hint">
+                        {(m?.name ?? '—') +
+                          (detailLine ? ` · ${detailLine}` : '')}{' '}
+                        · {fmtTime(it.at)}
+                      </span>
+                    </div>
                   </div>
                 </div>
               );
@@ -270,4 +328,25 @@ function dayHeading(iso: string, isEn: boolean, t: ReturnType<typeof useT>): str
 function fmtTime(iso: string): string {
   const d = new Date(iso);
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+}
+
+/**
+ * Map an audit-event `kind` ("task.create", "task.update", …) to a
+ * short localised verb. Unknown kinds fall back to the raw key so a
+ * future event type still renders something legible until the
+ * translation lands.
+ */
+function describeAuditKind(kind: string, t: ReturnType<typeof useT>): string {
+  switch (kind) {
+    case 'task.create':
+      return t('history.change.task.create');
+    case 'task.update':
+      return t('history.change.task.update');
+    case 'task.delete':
+      return t('history.change.task.delete');
+    case 'task.restore':
+      return t('history.change.task.restore');
+    default:
+      return kind;
+  }
 }
