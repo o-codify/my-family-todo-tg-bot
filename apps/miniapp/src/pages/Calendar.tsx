@@ -179,10 +179,23 @@ export function Calendar({
     setSelectedIso(iso);
   };
 
-  const monthStart = new Date(view.getFullYear(), view.getMonth(), 1);
-  const monthEnd = new Date(view.getFullYear(), view.getMonth() + 1, 0);
-  const fromIso = toIso(monthStart);
-  const toIsoStr = toIso(monthEnd);
+  // The month grid renders 42 cells (6 weeks × 7) — the leading "dim"
+  // cells belong to the previous month and the trailing ones to the
+  // next. Fetch occurrences for the full visible window, not just the
+  // month proper, so tasks on those carry-over days actually show up
+  // as dots / list items. The user reported: "в календаре отображает
+  // 42 дня - 6 недель по 7 дней, но задачи в нем отображает только на
+  // текущий месяц - 31 день, надо чтобы отображало на весь календарь
+  // в 42 дня". Mirror the same start-of-grid offset that
+  // makeMonthCells uses.
+  const monthFirst = new Date(view.getFullYear(), view.getMonth(), 1);
+  const gridDow = (monthFirst.getDay() + 6) % 7; // Mon=0..Sun=6
+  const gridStart = new Date(monthFirst);
+  gridStart.setDate(monthFirst.getDate() - gridDow);
+  const gridEnd = new Date(gridStart);
+  gridEnd.setDate(gridStart.getDate() + 41);
+  const fromIso = toIso(gridStart);
+  const toIsoStr = toIso(gridEnd);
 
   const membersQuery = useQuery({
     queryKey: ['members', family.id],
@@ -623,15 +636,7 @@ export function Calendar({
   // after). Same rule as Day.tsx — keeps the two surfaces consistent so a
   // user planning their morning sees the same order in both lists.
   const selectedPending = [
-    ...selectedOccurrences.filter(
-      (o) =>
-        o.status !== 'done' &&
-        // Synthetic placeholders we inject into byDate so floating
-        // tasks (no occurrence yet) get a today-dot on the grid.
-        // They already render in the "Когда-нибудь" rollup below;
-        // showing them in the day list too would double them up.
-        !o.id.startsWith('floating:'),
-    ),
+    ...selectedOccurrences.filter((o) => o.status !== 'done'),
   ].sort(
     (a, b) => {
       const ta = a.scheduledTime ?? null;
@@ -1081,7 +1086,7 @@ export function Calendar({
 
       {viewMode === 'agenda' && (
         <AgendaView
-          occurrences={occurrences}
+          byDate={byDate}
           memberById={memberById}
           todayIso={todayIso}
           meId={me.id}
@@ -1551,12 +1556,18 @@ function WeekView({
 /**
  * Agenda view — flat forward-looking list. Skips empty days (unlike
  * Week which always shows all 7) so the user sees only what's actually
- * scheduled in the coming weeks. The list is derived from the month
- * fetch + queue forecast; for days past the current month we just
- * surface whatever the parent already loaded.
+ * scheduled in the coming weeks.
+ *
+ * Reads from the SAME `byDate` map the Month grid uses, so dateless
+ * pendings (queue/floating on today, or cooldown rows anchored on
+ * their `availableAt` day) appear on the right cell automatically.
+ * Earlier we read straight from the flat `occurrences` array and
+ * skipped any row with `scheduledDate === null`, which dropped queue
+ * tasks from today entirely + hid the "Когда-нибудь" mine-rollup on
+ * today (Week shows both — the user reported the asymmetry).
  */
 function AgendaView({
-  occurrences,
+  byDate,
   memberById,
   todayIso,
   meId,
@@ -1566,7 +1577,7 @@ function AgendaView({
   isEn,
   t,
 }: {
-  occurrences: OccurrenceDto[];
+  byDate: Map<string, OccurrenceDto[]>;
   memberById: Map<string, Member>;
   todayIso: string;
   /** Current user id — forwarded into DayTaskCard for the ownership
@@ -1579,19 +1590,22 @@ function AgendaView({
   t: ReturnType<typeof useT>;
 }) {
   const grouped = useMemo(() => {
-    const map = new Map<string, OccurrenceDto[]>();
-    for (const o of occurrences) {
-      // Agenda is forward-looking — anchor each row by its scheduled
-      // date (skip nulls and past days; "Когда-нибудь" lives in its own
-      // section, completed history lives on the History screen).
-      if (!o.scheduledDate || o.scheduledDate < todayIso) continue;
-      if (!map.has(o.scheduledDate)) map.set(o.scheduledDate, []);
-      map.get(o.scheduledDate)!.push(o);
+    const out: Array<{ iso: string; items: OccurrenceDto[] }> = [];
+    const entries = Array.from(byDate.entries()).sort((a, b) =>
+      a[0] < b[0] ? -1 : 1,
+    );
+    for (const [iso, items] of entries) {
+      // Forward-looking only — past days live on the History screen.
+      // The synthetic "__floating__" bucket is a safety net for
+      // pendings with no date AND no availableAt; it isn't a real
+      // ISO day, so skip.
+      if (iso === '__floating__') continue;
+      if (iso < todayIso) continue;
+      if (items.length === 0) continue;
+      out.push({ iso, items });
     }
-    return Array.from(map.entries())
-      .sort((a, b) => (a[0] < b[0] ? -1 : 1))
-      .map(([iso, items]) => ({ iso, items }));
-  }, [occurrences, todayIso]);
+    return out;
+  }, [byDate, todayIso]);
 
   if (grouped.length === 0) {
     return (
