@@ -220,6 +220,14 @@ export function TaskSheet({ me, family, occurrence, onClose, onEdit, onTransfer 
   const done = o.status === 'done';
   const isCompleter = o.completedBy === me.id;
   const isAssignee = o.assigneeId === me.id;
+  // Queue tasks rotate by design — any family member can complete a
+  // queue turn out-of-order; balance auto-corrects so the skipped
+  // assignee picks up next time. `canComplete` is the gate that drives
+  // the primary "Выполнить" button; non-assignees still don't get the
+  // secondary actions (Reschedule / Transfer / Snooze) because those
+  // edit the assigned slot, not the act of doing the chore.
+  const isQueued = o.task.type === 'queued';
+  const canComplete = isAssignee || isQueued || o.assigneeId === null;
   const photoMissing = o.task.photoRequired && photos.length === 0;
   // Merge optimistic toggles into the server-known subtask list so the
   // checkbox flips instantly on click. The patch is cleared on each new
@@ -464,12 +472,12 @@ export function TaskSheet({ me, family, occurrence, onClose, onEdit, onTransfer 
             row below where they can break into a second line if needed.
             Previously all four were on one row which clipped "Выполнить"
             on standard phone viewports. */}
-        {(!done && isAssignee) || (done && (isCompleter || isAssignee)) ? (
+        {(!done && canComplete) || (done && (isCompleter || isAssignee)) ? (
           <div
             className="wf-col"
             style={{ marginTop: 12, gap: 8 }}
           >
-            {!done && isAssignee && (
+            {!done && canComplete && (
               <>
                 <button
                   className="wf-btn primary"
@@ -488,42 +496,49 @@ export function TaskSheet({ me, family, occurrence, onClose, onEdit, onTransfer 
                     ? t('task.action.completing')
                     : t('task.action.complete')}
                 </button>
-                <div
-                  className="wf-row wf-gap-8"
-                  style={{ flexWrap: 'wrap' }}
-                >
-                  <button
-                    className="wf-btn"
-                    onClick={() => onTransfer && close(onTransfer)}
-                    disabled={!onTransfer}
-                    style={{
-                      cursor: onTransfer ? 'pointer' : 'not-allowed',
-                      flex: '1 1 auto',
-                    }}
+                {/* Secondary actions (Transfer / Snooze / Reschedule)
+                    only make sense for the assignee — they all
+                    operate on the assigned slot itself. A non-assignee
+                    picking up a queue turn just needs the primary
+                    Complete button above. */}
+                {isAssignee && (
+                  <div
+                    className="wf-row wf-gap-8"
+                    style={{ flexWrap: 'wrap' }}
                   >
-                    {t('task.action.transfer')}
-                  </button>
-                  {/* Reschedule + Snooze are only meaningful for dated
-                      occurrences. Floating tasks have no scheduledDate. */}
-                  {!o.id.startsWith('floating:') && o.task.type !== 'floating' && (
-                    <>
-                      <button
-                        className="wf-btn"
-                        onClick={() => setSnoozeOpen((v) => !v)}
-                        style={{ cursor: 'pointer', flex: '1 1 auto' }}
-                      >
-                        {t('task.action.snooze')}
-                      </button>
-                      <button
-                        className="wf-btn"
-                        onClick={() => setRescheduleOpen(true)}
-                        style={{ cursor: 'pointer', flex: '1 1 auto' }}
-                      >
-                        {t('task.action.reschedule')}
-                      </button>
-                    </>
-                  )}
-                </div>
+                    <button
+                      className="wf-btn"
+                      onClick={() => onTransfer && close(onTransfer)}
+                      disabled={!onTransfer}
+                      style={{
+                        cursor: onTransfer ? 'pointer' : 'not-allowed',
+                        flex: '1 1 auto',
+                      }}
+                    >
+                      {t('task.action.transfer')}
+                    </button>
+                    {/* Reschedule + Snooze are only meaningful for dated
+                        occurrences. Floating tasks have no scheduledDate. */}
+                    {!o.id.startsWith('floating:') && o.task.type !== 'floating' && (
+                      <>
+                        <button
+                          className="wf-btn"
+                          onClick={() => setSnoozeOpen((v) => !v)}
+                          style={{ cursor: 'pointer', flex: '1 1 auto' }}
+                        >
+                          {t('task.action.snooze')}
+                        </button>
+                        <button
+                          className="wf-btn"
+                          onClick={() => setRescheduleOpen(true)}
+                          style={{ cursor: 'pointer', flex: '1 1 auto' }}
+                        >
+                          {t('task.action.reschedule')}
+                        </button>
+                      </>
+                    )}
+                  </div>
+                )}
               </>
             )}
             {done && (

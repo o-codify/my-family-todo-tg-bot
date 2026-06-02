@@ -1,7 +1,7 @@
 import { and, eq } from 'drizzle-orm';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { db } from '../../src/db/client';
-import { taskOccurrences, users } from '../../src/db/schema';
+import { taskOccurrences } from '../../src/db/schema';
 import {
   completeOccurrence,
   uncompleteOccurrence,
@@ -284,5 +284,74 @@ describe('queued tasks (integration)', () => {
         .where(and(eq(taskOccurrences.taskId, task.id), eq(taskOccurrences.status, 'pending')))
     )[0]!;
     expect(pending.assigneeId).toBe(b.id);
+  });
+
+  it('out-of-turn completion: non-assignee completes, next pending rotates back', async () => {
+    // User: "выполнять задачи очереди вне очереди, то есть даже если
+    // очередь на ком-то, то можно выполнить самому, а его сдвинет."
+    //   - Initial pending is on `a`.
+    //   - `b` completes it out-of-turn — completedBy must be `b`, not `a`.
+    //   - Next pending must be on `a`: pickNextAssignee sees a=0,b=1
+    //     and picks the behind user. The skipped slot auto-corrects.
+    const a = await makeUser();
+    const b = await makeUser();
+    const { family } = await makeFamily(a);
+    await addMember(family, b, 'Adult');
+
+    const task = await createTask({
+      familyId: family.id,
+      createdBy: a.id,
+      data: {
+        title: 'Out-of-turn',
+        type: 'queued',
+        schedule: { kind: 'queued' },
+        queueUserIds: [a.id, b.id],
+        points: 0,
+        photoRequired: false,
+        singleShot: false,
+      },
+    });
+    const taskFull = (await getTaskInFamily(task.id, family.id))!;
+
+    // Force the current head onto `a` so the rotation start is
+    // deterministic regardless of pickNextAssignee's initial pick.
+    const firstOcc = (
+      await db
+        .select()
+        .from(taskOccurrences)
+        .where(and(eq(taskOccurrences.taskId, task.id), eq(taskOccurrences.status, 'pending')))
+    )[0]!;
+    await db
+      .update(taskOccurrences)
+      .set({ assigneeId: a.id })
+      .where(eq(taskOccurrences.id, firstOcc.id));
+    const reloaded = (
+      await db.select().from(taskOccurrences).where(eq(taskOccurrences.id, firstOcc.id))
+    )[0]!;
+
+    // `b` completes `a`'s turn.
+    await completeOccurrence({
+      occurrence: { ...reloaded, task: taskFull },
+      userId: b.id,
+      data: {},
+    });
+
+    // The done row attributes the work to b, not a.
+    const done = (
+      await db
+        .select()
+        .from(taskOccurrences)
+        .where(and(eq(taskOccurrences.taskId, task.id), eq(taskOccurrences.status, 'done')))
+    )[0]!;
+    expect(done.completedBy).toBe(b.id);
+
+    // Next pending rotates back to a (behind by completions).
+    const next = (
+      await db
+        .select()
+        .from(taskOccurrences)
+        .where(and(eq(taskOccurrences.taskId, task.id), eq(taskOccurrences.status, 'pending')))
+    )[0]!;
+    expect(next.assigneeId).toBe(a.id);
   });
 });

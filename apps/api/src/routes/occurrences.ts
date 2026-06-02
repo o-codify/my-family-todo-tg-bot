@@ -56,13 +56,23 @@ occurrencesRouter.post(
     const occ = await getOccurrenceInFamily(c.req.param('occurrenceId'), familyId);
     if (!occ) return c.json({ error: 'occurrence_not_found' }, 404);
 
-    // Ownership-only: even Owners can't close someone else's task. The
-    // `task.complete.any` permission stays in the catalog for possible
-    // future "manager mode" but is intentionally NOT honoured here —
-    // the user reported "clicked the checkbox of someone else's task,
-    // it marked done by me" which is jarring UX. Unassigned shared
-    // tasks (assigneeId === null) stay completable by anyone in family.
-    const canAct = occ.assigneeId === null || occ.assigneeId === user.id;
+    // Ownership-only by default: even Owners can't close someone
+    // else's regular task. The `task.complete.any` permission stays
+    // in the catalog for possible future "manager mode" but is NOT
+    // honoured here — the user once reported "clicked the checkbox
+    // of someone else's task, it marked done by me" which is jarring
+    // UX. Unassigned shared tasks (assigneeId === null) stay
+    // completable by anyone in family.
+    //
+    // QUEUE TASKS are the explicit exception: the queue rotates by
+    // design and the user wants "выполнять задачи очереди вне
+    // очереди — если очередь на ком-то, можно выполнить самому, а
+    // его сдвинет, потом скорректирует". pickNextAssignee's balance
+    // rule auto-corrects: the skipped user has fewer completions
+    // and gets picked next.
+    const isQueued = occ.task.type === 'queued';
+    const canAct =
+      isQueued || occ.assigneeId === null || occ.assigneeId === user.id;
     if (!canAct) {
       return c.json({ error: 'not_your_task' }, 403);
     }
@@ -97,7 +107,11 @@ occurrencesRouter.patch(
     if (!occ) return c.json({ error: 'occurrence_not_found' }, 404);
 
     // Same ownership rule as /complete — see the comment there.
-    const canAct = occ.assigneeId === null || occ.assigneeId === user.id;
+    // Queue tasks also unlocked here so a non-assignee picking up
+    // the chore can tick subtasks before hitting "Выполнить".
+    const isQueued = occ.task.type === 'queued';
+    const canAct =
+      isQueued || occ.assigneeId === null || occ.assigneeId === user.id;
     if (!canAct) {
       return c.json({ error: 'not_your_task' }, 403);
     }
