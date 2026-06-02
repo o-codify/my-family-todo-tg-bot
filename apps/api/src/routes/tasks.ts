@@ -24,6 +24,44 @@ import {
 } from '../services/tasks';
 import { getTagIdsForTasks } from '../services/tags';
 import { diffTaskFields, recordAuditEvent } from '../services/audit-log';
+import {
+  getQueueStatsForTasks,
+  type QueueStatsRow,
+} from '../services/queue-tasks';
+import type { QueueStats } from '../services/tasks';
+
+/** Build a queueStats DTO blob for serialisation. Empty/null stats
+ *  collapse to "no completions yet" so the client never has to guard
+ *  for absent map entries. Date -> ISO so the wire stays JSON-clean. */
+function queueStatsToDto(stats: QueueStatsRow | null): QueueStats {
+  if (!stats) {
+    return {
+      completionsByUser: {},
+      lastCompleterId: null,
+      lastCompletedAt: null,
+    };
+  }
+  return {
+    completionsByUser: stats.completionsByUser,
+    lastCompleterId: stats.lastCompleterId,
+    lastCompletedAt: stats.lastCompletedAt?.toISOString() ?? null,
+  };
+}
+
+/** Batch-load queue stats only for queued tasks in the list; non-queue
+ *  rows return null (serialiser sends `queueStats: null` for those). */
+async function loadQueueStatsByTaskId(
+  tasks: { id: string; type: string }[],
+): Promise<Map<string, QueueStats | null>> {
+  const map = new Map<string, QueueStats | null>();
+  const queueIds = tasks.filter((t) => t.type === 'queued').map((t) => t.id);
+  if (queueIds.length === 0) return map;
+  const raw = await getQueueStatsForTasks(queueIds);
+  for (const id of queueIds) {
+    map.set(id, queueStatsToDto(raw.get(id) ?? null));
+  }
+  return map;
+}
 
 export const tasksRouter = new Hono<{ Variables: AuthVariables & FamilyVariables }>()
   .use('*', tgAuth)
@@ -32,10 +70,18 @@ export const tasksRouter = new Hono<{ Variables: AuthVariables & FamilyVariables
 tasksRouter.get('/', async (c) => {
   const familyId = c.get('familyId');
   const tasks = await listFamilyTasks(familyId);
-  // Batch-lookup tag attachments so we don't run N+1 queries while
-  // serializing. Tasks without any tags just get an empty array.
-  const tagMap = await getTagIdsForTasks(tasks.map((t) => t.id));
-  return c.json({ tasks: tasks.map((t) => serializeTask(t, tagMap.get(t.id) ?? [])) });
+  // Batch-lookup tag attachments + queue stats so we don't run N+1
+  // queries during serialisation. Tasks without any tags just get an
+  // empty array; non-queue tasks get a null queueStats.
+  const [tagMap, queueStatsMap] = await Promise.all([
+    getTagIdsForTasks(tasks.map((t) => t.id)),
+    loadQueueStatsByTaskId(tasks),
+  ]);
+  return c.json({
+    tasks: tasks.map((t) =>
+      serializeTask(t, tagMap.get(t.id) ?? [], queueStatsMap.get(t.id) ?? null),
+    ),
+  });
 });
 
 tasksRouter.post(
@@ -47,7 +93,10 @@ tasksRouter.post(
     const familyId = c.get('familyId');
     const data = c.req.valid('json');
     const task = await createTask({ familyId, createdBy: user.id, data });
-    const tagMap = await getTagIdsForTasks([task.id]);
+    const [tagMap, queueStatsMap] = await Promise.all([
+      getTagIdsForTasks([task.id]),
+      loadQueueStatsByTaskId([task]),
+    ]);
     void recordAuditEvent({
       familyId,
       actorUserId: user.id,
@@ -57,7 +106,16 @@ tasksRouter.post(
       entityTitle: task.title,
       details: { taskType: task.type },
     });
-    return c.json({ task: serializeTask(task, tagMap.get(task.id) ?? []) }, 201);
+    return c.json(
+      {
+        task: serializeTask(
+          task,
+          tagMap.get(task.id) ?? [],
+          queueStatsMap.get(task.id) ?? null,
+        ),
+      },
+      201,
+    );
   },
 );
 
@@ -65,8 +123,17 @@ tasksRouter.get('/:taskId', async (c) => {
   const familyId = c.get('familyId');
   const task = await getTaskInFamily(c.req.param('taskId'), familyId);
   if (!task) return c.json({ error: 'task_not_found' }, 404);
-  const tagMap = await getTagIdsForTasks([task.id]);
-  return c.json({ task: serializeTask(task, tagMap.get(task.id) ?? []) });
+  const [tagMap, queueStatsMap] = await Promise.all([
+    getTagIdsForTasks([task.id]),
+    loadQueueStatsByTaskId([task]),
+  ]);
+  return c.json({
+    task: serializeTask(
+      task,
+      tagMap.get(task.id) ?? [],
+      queueStatsMap.get(task.id) ?? null,
+    ),
+  });
 });
 
 tasksRouter.patch(
@@ -89,7 +156,10 @@ tasksRouter.patch(
     }
 
     const updated = await updateTask({ task, data: c.req.valid('json') });
-    const tagMap = await getTagIdsForTasks([updated.id]);
+    const [tagMap, queueStatsMap] = await Promise.all([
+      getTagIdsForTasks([updated.id]),
+      loadQueueStatsByTaskId([updated]),
+    ]);
     const changedFields = diffTaskFields(task, updated);
     // Only emit an audit row when something material actually
     // changed — a no-op PATCH (e.g. the client re-saving the same
@@ -105,7 +175,13 @@ tasksRouter.patch(
         details: { changedFields },
       });
     }
-    return c.json({ task: serializeTask(updated, tagMap.get(updated.id) ?? []) });
+    return c.json({
+      task: serializeTask(
+        updated,
+        tagMap.get(updated.id) ?? [],
+        queueStatsMap.get(updated.id) ?? null,
+      ),
+    });
   },
 );
 
@@ -179,7 +255,10 @@ tasksRouter.post('/:taskId/restore', async (c) => {
 
   const restored = await restoreTask(task.id);
   if (!restored) return c.json({ error: 'task_not_found' }, 404);
-  const tagMap = await getTagIdsForTasks([restored.id]);
+  const [tagMap, queueStatsMap] = await Promise.all([
+    getTagIdsForTasks([restored.id]),
+    loadQueueStatsByTaskId([restored]),
+  ]);
   void recordAuditEvent({
     familyId,
     actorUserId: user.id,
@@ -188,5 +267,11 @@ tasksRouter.post('/:taskId/restore', async (c) => {
     entityId: restored.id,
     entityTitle: restored.title,
   });
-  return c.json({ task: serializeTask(restored, tagMap.get(restored.id) ?? []) });
+  return c.json({
+    task: serializeTask(
+      restored,
+      tagMap.get(restored.id) ?? [],
+      queueStatsMap.get(restored.id) ?? null,
+    ),
+  });
 });

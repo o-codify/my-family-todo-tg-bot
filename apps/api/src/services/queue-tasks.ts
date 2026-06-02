@@ -9,6 +9,100 @@ import {
 } from '../db/schema';
 import { pickNextAssignee, type QueueCandidate } from './queue';
 
+/**
+ * Batch-load full-history completion stats for a list of queue task
+ * ids. The client used to derive these counts from its visible
+ * occurrences window (42 days on Calendar, 180 days on QueueDetail),
+ * which silently dropped older completions and made the per-user
+ * balance read wrong. This helper goes straight to the source —
+ * `task_occurrences where status='done'` — and returns the full
+ * count + latest completer per task in two batched queries.
+ *
+ * The map is keyed by task id; tasks with zero completions aren't in
+ * the map (caller defaults to empty when missing).
+ */
+export type QueueStatsRow = {
+  completionsByUser: Record<string, number>;
+  lastCompleterId: string | null;
+  lastCompletedAt: Date | null;
+};
+
+export async function getQueueStatsForTasks(
+  taskIds: string[],
+): Promise<Map<string, QueueStatsRow>> {
+  const out = new Map<string, QueueStatsRow>();
+  if (taskIds.length === 0) return out;
+
+  // 1. Per-(task, user) counts — single grouped query covers every
+  //    task in the batch. Restrict to non-null completedBy so we
+  //    don't bucket orphaned rows under "null user".
+  const counts = await db
+    .select({
+      taskId: taskOccurrences.taskId,
+      userId: taskOccurrences.completedBy,
+      count: dsql<number>`count(*)::int`,
+    })
+    .from(taskOccurrences)
+    .where(
+      and(
+        inArray(taskOccurrences.taskId, taskIds),
+        eq(taskOccurrences.status, 'done'),
+      ),
+    )
+    .groupBy(taskOccurrences.taskId, taskOccurrences.completedBy);
+
+  for (const row of counts) {
+    if (!row.userId) continue;
+    const stats =
+      out.get(row.taskId) ??
+      ({
+        completionsByUser: {},
+        lastCompleterId: null,
+        lastCompletedAt: null,
+      } satisfies QueueStatsRow);
+    stats.completionsByUser[row.userId] = Number(row.count);
+    out.set(row.taskId, stats);
+  }
+
+  // 2. Latest done row per task — pull the full set and fold in JS
+  //    (avoids a window-function for portability; queue completion
+  //    volume per task is small).
+  const lastRows = await db
+    .select({
+      taskId: taskOccurrences.taskId,
+      completedBy: taskOccurrences.completedBy,
+      completedAt: taskOccurrences.completedAt,
+    })
+    .from(taskOccurrences)
+    .where(
+      and(
+        inArray(taskOccurrences.taskId, taskIds),
+        eq(taskOccurrences.status, 'done'),
+      ),
+    );
+  const latestAt = new Map<string, number>();
+  for (const r of lastRows) {
+    if (!r.completedAt) continue;
+    const ts = r.completedAt.getTime();
+    const prev = latestAt.get(r.taskId) ?? -Infinity;
+    if (ts > prev) {
+      latestAt.set(r.taskId, ts);
+      const stats =
+        out.get(r.taskId) ??
+        ({
+          completionsByUser: {},
+          lastCompleterId: null,
+          lastCompletedAt: null,
+        } satisfies QueueStatsRow);
+      stats.lastCompleterId = r.completedBy;
+      stats.lastCompletedAt = r.completedAt;
+      out.set(r.taskId, stats);
+    }
+  }
+
+  return out;
+}
+
 export type DbLike = Db | Parameters<Parameters<Db['transaction']>[0]>[0];
 
 /**

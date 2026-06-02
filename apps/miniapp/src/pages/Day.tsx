@@ -99,10 +99,10 @@ export function Day({ me, family, iso, onBack, onOpenTask, onCreateTask }: Props
     mutationFn: (id: string) => api.completeOccurrence(family.id, id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['occurrences', family.id] });
-      // Balance pill in the header reads from ['balance', familyId,
-      // userId] — without this invalidate, points awarded by the
-      // completion stay invisible until a manual refetch.
       queryClient.invalidateQueries({ queryKey: ['balance', family.id] });
+      // tasks list carries queueStats — refetch so per-user balance
+      // bars + forecast inputs pick up the new completion.
+      queryClient.invalidateQueries({ queryKey: ['tasks', family.id] });
     },
   });
   const uncompleteMut = useMutation({
@@ -110,6 +110,7 @@ export function Day({ me, family, iso, onBack, onOpenTask, onCreateTask }: Props
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['occurrences', family.id] });
       queryClient.invalidateQueries({ queryKey: ['balance', family.id] });
+      queryClient.invalidateQueries({ queryKey: ['tasks', family.id] });
     },
   });
 
@@ -139,29 +140,20 @@ export function Day({ me, family, iso, onBack, onOpenTask, onCreateTask }: Props
   const memberIds = useMemo(() => members.map((m) => m.id), [members]);
   const forecastedQueue = useMemo(() => {
     if (iso <= todayIso) return [];
-    // Build per (task, user) completion counts + last-completer maps
-    // from the same data Calendar uses. Lets the forecast simulate the
-    // real pickNextAssignee instead of dumb round-robin (which gave
-    // "him, me, me" mismatched rotations).
+    // Per (task, user) completion counts + last-completer come straight
+    // from the task DTO — the server now publishes authoritative
+    // queueStats covering the full history, so we don't need to mine
+    // them out of rawOccurrences (which is bounded to one day here
+    // and was always undercounting older completions anyway).
     const completionsByTaskUser = new Map<string, number>();
-    const latestAtByTask = new Map<string, string>();
-    for (const o of rawOccurrences) {
-      if (o.status !== 'done') continue;
-      if (o.completedBy) {
-        const k = `${o.taskId}:${o.completedBy}`;
-        completionsByTaskUser.set(k, (completionsByTaskUser.get(k) ?? 0) + 1);
-      }
-      if (o.completedAt) {
-        const prev = latestAtByTask.get(o.taskId);
-        if (!prev || o.completedAt > prev) latestAtByTask.set(o.taskId, o.completedAt);
-      }
-    }
     const lastCompleterByTask = new Map<string, string | null>();
-    for (const o of rawOccurrences) {
-      if (o.status !== 'done') continue;
-      if (o.completedAt && latestAtByTask.get(o.taskId) === o.completedAt) {
-        lastCompleterByTask.set(o.taskId, o.completedBy ?? null);
+    for (const tk of tasks) {
+      const stats = tk.queueStats;
+      if (!stats) continue;
+      for (const [userId, count] of Object.entries(stats.completionsByUser)) {
+        completionsByTaskUser.set(`${tk.id}:${userId}`, count);
       }
+      lastCompleterByTask.set(tk.id, stats.lastCompleterId);
     }
     return forecastQueueOccurrences({
       tasks,

@@ -231,6 +231,10 @@ export function TaskSheet({ me, family, occurrence, onClose, onEdit, onTransfer 
   // edit the assigned slot, not the act of doing the chore.
   const isQueued = o.task.type === 'queued';
   const canComplete = isAssignee || isQueued || o.assigneeId === null;
+
+  // (Queue per-user counters live on the QueueDetail page now — they
+  // read straight from `task.queueStats` returned by the server, so
+  // the TaskSheet doesn't need its own balance fetch.)
   const photoMissing = o.task.photoRequired && photos.length === 0;
   // Merge optimistic toggles into the server-known subtask list so the
   // checkbox flips instantly on click. The patch is cleared on each new

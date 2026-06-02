@@ -227,6 +227,18 @@ export type TaskDto = {
   /** Ids of tags attached to this task. Sorted ascending so re-renders
    *  don't reshuffle the chip order. */
   tagIds: string[];
+  /** Authoritative queue-rotation stats (full history, not bounded by
+   *  any occurrence-fetch window). Null for non-queue tasks. */
+  queueStats: {
+    /** userId → number of done occurrences attributed to them. */
+    completionsByUser: Record<string, number>;
+    /** Latest done occurrence's `completedBy`. Drives strict
+     *  alternation tie-break in pickNextAssignee. */
+    lastCompleterId: string | null;
+    /** ISO timestamp of the latest done occurrence. Lets the client
+     *  anchor cooldown / forecast cursor. */
+    lastCompletedAt: string | null;
+  } | null;
   createdAt: string;
   updatedAt: string;
 };

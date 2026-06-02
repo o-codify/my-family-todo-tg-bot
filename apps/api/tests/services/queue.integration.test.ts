@@ -437,4 +437,70 @@ describe('queued tasks (integration)', () => {
     )[0]!;
     expect(next.assigneeId).toBe(a.id);
   });
+
+  it('getQueueStatsForTasks aggregates full history regardless of any window', async () => {
+    // Regression: the client used to derive per-user counts from a
+    // 42-day (Calendar) or 180-day (QueueDetail) occurrences fetch,
+    // so completions older than that fell off the balance display.
+    // User report: "очередь начиналась с 24 мая, было по 1 у каждого,
+    // отображает 0-1, задач выполненных раньше 30 нет". This test
+    // seeds three done rows for the same queue task at carefully
+    // chosen dates and asserts the helper folds the FULL history.
+    const a = await makeUser();
+    const b = await makeUser();
+    const { family } = await makeFamily(a);
+    await addMember(family, b, 'Adult');
+    const task = await createTask({
+      familyId: family.id,
+      createdBy: a.id,
+      data: {
+        title: 'History',
+        type: 'queued',
+        schedule: { kind: 'queued' },
+        queueUserIds: [a.id, b.id],
+        points: 0,
+        photoRequired: false,
+        singleShot: false,
+      },
+    });
+
+    // Three pre-existing done rows: two by `a` (old), one by `b`
+    // (less old). Old enough that a 30-day window would drop them
+    // all; the server helper must still see them.
+    const daysAgo = (n: number) => new Date(Date.now() - n * 86_400_000);
+    await db.insert(taskOccurrences).values([
+      {
+        taskId: task.id,
+        scheduledDate: null,
+        status: 'done',
+        completedBy: a.id,
+        completedAt: daysAgo(40),
+      },
+      {
+        taskId: task.id,
+        scheduledDate: null,
+        status: 'done',
+        completedBy: a.id,
+        completedAt: daysAgo(35),
+      },
+      {
+        taskId: task.id,
+        scheduledDate: null,
+        status: 'done',
+        completedBy: b.id,
+        completedAt: daysAgo(20),
+      },
+    ]);
+
+    const { getQueueStatsForTasks } = await import(
+      '../../src/services/queue-tasks'
+    );
+    const map = await getQueueStatsForTasks([task.id]);
+    const stats = map.get(task.id);
+    expect(stats).toBeDefined();
+    expect(stats!.completionsByUser[a.id]).toBe(2);
+    expect(stats!.completionsByUser[b.id]).toBe(1);
+    // Latest = b's row (-20 days).
+    expect(stats!.lastCompleterId).toBe(b.id);
+  });
 });

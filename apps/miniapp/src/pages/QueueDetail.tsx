@@ -91,6 +91,9 @@ export function QueueDetail({ me, family, taskId, onBack, onEditTask }: Props) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['occurrences', family.id] });
       queryClient.invalidateQueries({ queryKey: ['balance', family.id] });
+      // tasks list carries queueStats — must refetch so the balance
+      // bars below re-render with the new count.
+      queryClient.invalidateQueries({ queryKey: ['tasks', family.id] });
     },
   });
 
@@ -109,14 +112,33 @@ export function QueueDetail({ me, family, taskId, onBack, onEditTask }: Props) {
   const pending = occs.find((o) => o.status === 'pending');
   const done = occs.filter((o) => o.status === 'done');
 
-  const balance: Record<string, number> = {};
+  // Balance is sourced from the task's authoritative queueStats
+  // (full history). Earlier we counted `done` rows from the visible
+  // 180-day window, which silently dropped older completions and
+  // gave wrong totals on long-running queues (user: "у каждого
+  // должно быть 1-2, а отображает 0-1; задач выполненных раньше 30
+  // нет, а 24, 27, 28 они были"). The local `done` list is still
+  // used for the "X times" tag below — that's a total-events
+  // count, but per-user we trust the server.
   const allowedIds = task?.queueUserIds ?? members.map((m) => m.id);
+  const balance: Record<string, number> = {};
   for (const id of allowedIds) balance[id] = 0;
-  for (const d of done) {
-    if (d.completedBy && balance[d.completedBy] != null) {
-      balance[d.completedBy] = (balance[d.completedBy] ?? 0) + 1;
+  const queueStats = task?.queueStats ?? null;
+  if (queueStats) {
+    for (const [userId, count] of Object.entries(queueStats.completionsByUser)) {
+      // Only roster members get a bar; out-of-roster completers (e.g.
+      // someone who did the chore once before being removed from the
+      // queue) are excluded from the balance display by design.
+      if (balance[userId] != null) {
+        balance[userId] = count;
+      }
     }
   }
+  // Total events on this task across all members — read from
+  // queueStats so it also covers history beyond the visible window.
+  const totalCompletions = queueStats
+    ? Object.values(queueStats.completionsByUser).reduce((a, b) => a + b, 0)
+    : done.length;
   const sortedIds = Object.keys(balance).sort(
     (a, b) => (balance[a] ?? 0) - (balance[b] ?? 0),
   );
@@ -181,7 +203,7 @@ export function QueueDetail({ me, family, taskId, onBack, onEditTask }: Props) {
           </Tag>
         )}
         <Tag>
-          {done.length} {t('queues.detail.times')}
+          {totalCompletions} {t('queues.detail.times')}
         </Tag>
       </div>
 

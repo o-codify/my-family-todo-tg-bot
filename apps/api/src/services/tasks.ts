@@ -262,7 +262,30 @@ export async function archiveTask(taskId: string): Promise<void> {
   }
 }
 
-export function serializeTask(row: TaskRow, tagIds: string[] = []) {
+/** Per-queue-task completion stats. Authoritative source for the
+ *  per-user count + last completer; the client used to derive these
+ *  from its windowed occurrences fetch, which dropped completions
+ *  older than the visible grid (the user reported "у каждого должно
+ *  быть 1-2, а отображает 0-1; задач старее 30 мая не видно вообще"
+ *  on a queue that started May 24). Computing server-side reads the
+ *  full history regardless of any frontend window. */
+export type QueueStats = {
+  /** userId → number of done occurrences attributed to that user. */
+  completionsByUser: Record<string, number>;
+  /** Latest done occurrence's `completedBy`, or null if no one's
+   *  completed this task yet. Drives the strict-alternation tie-break
+   *  in pickNextAssignee. */
+  lastCompleterId: string | null;
+  /** Latest done occurrence's `completedAt` ISO. Lets the client
+   *  anchor its cooldown / forecast cursor correctly. */
+  lastCompletedAt: string | null;
+};
+
+export function serializeTask(
+  row: TaskRow,
+  tagIds: string[] = [],
+  queueStats: QueueStats | null = null,
+) {
   return {
     id: row.id,
     familyId: row.familyId,
@@ -284,6 +307,7 @@ export function serializeTask(row: TaskRow, tagIds: string[] = []) {
     createdBy: row.createdBy,
     archivedAt: row.archivedAt?.toISOString() ?? null,
     tagIds,
+    queueStats,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
   };
