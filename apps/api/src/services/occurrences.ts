@@ -9,7 +9,17 @@ import {
   type TaskRow,
 } from '../db/schema';
 
-const OCCURRENCE_WINDOW_DAYS = 30;
+/**
+ * Look-ahead window for materialising recurring + future-dated oneoff
+ * occurrences as real DB rows. The calendar grid can be flipped to any
+ * month; previously this was 30 days, which meant flipping ≥2 months
+ * ahead showed empty cells even for daily-recurring tasks because no
+ * rows existed yet. Bumped to ~1 year so flipping forward shows actual
+ * dots. (Queue tasks remain forecast-only — they're date-less by
+ * design and a forecast simulator paints their future turns
+ * client-side.)
+ */
+const OCCURRENCE_WINDOW_DAYS = 365;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 // Drizzle's transaction callback receives an object with the same query surface

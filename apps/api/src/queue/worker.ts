@@ -12,6 +12,8 @@ import {
 } from './google-cron';
 import { isGoogleOauthConfigured } from '../services/google-crypto';
 import { ensureQueuedOccurrence } from '../services/queue-tasks';
+import { syncOccurrencesForTask } from '../services/occurrences';
+import { or } from 'drizzle-orm';
 import { NOTIFICATIONS_QUEUE, getConnectionOptions } from './index';
 
 let worker: Worker | null = null;
@@ -142,6 +144,44 @@ export async function hydrateQueueAssignees(): Promise<void> {
   logger.info(
     { fixed, total: queueTasks.length },
     'queue assignees hydrated',
+  );
+}
+
+/**
+ * Boot-time: ensure every active recurring + oneoff task has its
+ * occurrence rows materialised through the full
+ * `OCCURRENCE_WINDOW_DAYS` look-ahead. New tasks created via
+ * `createTask` already do this at insert time, but tasks created
+ * back when the window was 30 days only have a month of rows
+ * materialised — so flipping the calendar grid to month +3 or +6
+ * shows nothing for them. syncOccurrencesForTask is idempotent
+ * (onConflictDoNothing on the (taskId, scheduledDate) unique
+ * index), so re-running here just tops up the missing future rows.
+ */
+export async function hydrateOccurrenceWindow(): Promise<void> {
+  const expandableTasks = await db
+    .select()
+    .from(tasks)
+    .where(
+      and(
+        isNull(tasks.archivedAt),
+        or(eq(tasks.type, 'recurring'), eq(tasks.type, 'oneoff')),
+      ),
+    );
+  let added = 0;
+  for (const t of expandableTasks) {
+    try {
+      added += await syncOccurrencesForTask(t);
+    } catch (err) {
+      logger.warn(
+        { err, taskId: t.id },
+        'occurrence-window hydrate failed for task',
+      );
+    }
+  }
+  logger.info(
+    { added, total: expandableTasks.length },
+    'occurrence window hydrated',
   );
 }
 

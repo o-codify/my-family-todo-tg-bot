@@ -55,12 +55,25 @@ describe('planOccurrencesForWindow', () => {
       expect(planOccurrencesForWindow(task, WINDOW_START)).toHaveLength(0);
     });
 
-    it('emits nothing when date is beyond 30-day window', () => {
+    it('emits nothing when date is beyond the look-ahead window', () => {
+      // Default window is 365 days; pick a date well past it.
+      const task = makeTask({
+        type: 'oneoff',
+        schedule: { kind: 'oneoff', date: '2028-06-01' },
+      });
+      expect(planOccurrencesForWindow(task, WINDOW_START)).toHaveLength(0);
+    });
+
+    it('still emits a oneoff dated months ahead (within the 365-day window)', () => {
+      // Regression for "листаю календарь — задач нет на будущие месяцы".
+      // Before the window bump, anything past day +30 dropped silently.
       const task = makeTask({
         type: 'oneoff',
         schedule: { kind: 'oneoff', date: '2026-07-01' },
       });
-      expect(planOccurrencesForWindow(task, WINDOW_START)).toHaveLength(0);
+      const result = planOccurrencesForWindow(task, WINDOW_START);
+      expect(result).toHaveLength(1);
+      expect(result[0]?.scheduledDate).toBe('2026-07-01');
     });
 
     it('attaches scheduledTime when present', () => {
@@ -73,14 +86,26 @@ describe('planOccurrencesForWindow', () => {
   });
 
   describe('recurring daily', () => {
-    it('emits 30 occurrences for daily', () => {
+    it('emits 365 occurrences for daily over the default window', () => {
       const task = makeTask({
         type: 'recurring',
         schedule: { kind: 'recurring', recurrence: 'daily' },
       });
       const result = planOccurrencesForWindow(task, WINDOW_START);
-      expect(result).toHaveLength(30);
+      expect(result).toHaveLength(365);
       expect(result[0]?.scheduledDate).toBe('2026-05-21');
+      // Day 364 from 2026-05-21 is 2027-05-20.
+      expect(result[364]?.scheduledDate).toBe('2027-05-20');
+    });
+
+    it('respects a custom (smaller) window when caller passes one', () => {
+      const task = makeTask({
+        type: 'recurring',
+        schedule: { kind: 'recurring', recurrence: 'daily' },
+      });
+      // Old 30-day shape kept as an explicit-input contract.
+      const result = planOccurrencesForWindow(task, WINDOW_START, 30);
+      expect(result).toHaveLength(30);
       expect(result[29]?.scheduledDate).toBe('2026-06-19');
     });
   });
@@ -92,7 +117,9 @@ describe('planOccurrencesForWindow', () => {
         type: 'recurring',
         schedule: { kind: 'recurring', recurrence: 'weekly', daysOfWeek: [1, 3, 5] },
       });
-      const result = planOccurrencesForWindow(task, WINDOW_START);
+      // Use a small explicit window so the day-of-week-membership
+      // assertion stays compact + identical to the pre-bump shape.
+      const result = planOccurrencesForWindow(task, WINDOW_START, 30);
       // In a 30-day window starting Thu, expect roughly 12-13 occurrences (3 per week × ~4.3 weeks)
       expect(result.length).toBeGreaterThanOrEqual(12);
       expect(result.length).toBeLessThanOrEqual(14);
@@ -116,12 +143,13 @@ describe('planOccurrencesForWindow', () => {
   });
 
   describe('recurring interval', () => {
-    it('emits every N days', () => {
+    it('emits every N days within the window', () => {
       const task = makeTask({
         type: 'recurring',
         schedule: { kind: 'recurring', recurrence: 'interval', intervalDays: 3 },
       });
-      const result = planOccurrencesForWindow(task, WINDOW_START);
+      // Pin to a 30-day window so the count stays easy to reason about.
+      const result = planOccurrencesForWindow(task, WINDOW_START, 30);
       // 30 days / 3 = 10 occurrences (days 0, 3, 6, ..., 27)
       expect(result).toHaveLength(10);
       expect(result[0]?.scheduledDate).toBe('2026-05-21');

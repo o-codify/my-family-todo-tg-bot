@@ -34,6 +34,7 @@ import { closeQueue } from './queue';
 import {
   hydrateDigestSchedulers,
   hydrateGoogleSyncCron,
+  hydrateOccurrenceWindow,
   hydrateQueueAssignees,
   startNotificationsWorker,
   stopNotificationsWorker,
@@ -188,6 +189,9 @@ async function main() {
   );
   void hydrateQueueAssignees().catch((err) =>
     logger.warn({ err }, 'failed to hydrate queue assignees'),
+  );
+  void hydrateOccurrenceWindow().catch((err) =>
+    logger.warn({ err }, 'failed to hydrate occurrence window'),
   );
 
   const shutdown = async (signal: string) => {

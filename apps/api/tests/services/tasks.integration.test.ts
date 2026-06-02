@@ -117,7 +117,10 @@ describe('tasks service (integration)', () => {
     expect(occs[0]?.scheduledTime).toBeNull();
   });
 
-  it('creates a daily recurring task with 30 occurrences', async () => {
+  it('creates a daily recurring task and materialises a full year of occurrences', async () => {
+    // Window bumped from 30 → 365 days so flipping the calendar grid
+    // ahead a couple of months still shows dots (user: "календарь
+    // должен отображать вообще всё, а не 42 дня").
     const owner = await makeUser();
     const { family } = await makeFamily(owner);
 
@@ -138,7 +141,7 @@ describe('tasks service (integration)', () => {
       .select()
       .from(taskOccurrences)
       .where(eq(taskOccurrences.taskId, task.id));
-    expect(occurrences).toHaveLength(30);
+    expect(occurrences).toHaveLength(365);
   });
 
   it('clears future occurrences when schedule changes', async () => {
@@ -159,7 +162,7 @@ describe('tasks service (integration)', () => {
     });
 
     let occ = await db.select().from(taskOccurrences).where(eq(taskOccurrences.taskId, task.id));
-    expect(occ.length).toBe(30);
+    expect(occ.length).toBe(365);
 
     const reloaded = await getTaskInFamily(task.id, family.id);
     await updateTask({
@@ -168,9 +171,9 @@ describe('tasks service (integration)', () => {
     });
 
     occ = await db.select().from(taskOccurrences).where(eq(taskOccurrences.taskId, task.id));
-    // Should have ~4-5 Mondays in the next 30 days
-    expect(occ.length).toBeGreaterThanOrEqual(4);
-    expect(occ.length).toBeLessThanOrEqual(5);
+    // 52-53 Mondays in a 365-day window.
+    expect(occ.length).toBeGreaterThanOrEqual(52);
+    expect(occ.length).toBeLessThanOrEqual(53);
   });
 
   it('archives task and wipes future occurrences', async () => {
