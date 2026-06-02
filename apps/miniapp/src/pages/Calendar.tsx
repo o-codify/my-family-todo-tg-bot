@@ -229,11 +229,22 @@ export function Calendar({
       }
       return api.completeOccurrence(family.id, occurrenceId);
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['occurrences', family.id] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['occurrences', family.id] });
+      // Completion awards points to the actor — refresh the balance
+      // pill so the user sees credit immediately. Without this the
+      // header sticks on the pre-completion number and the user
+      // (rightly) reads it as "не зачислило выполнение".
+      queryClient.invalidateQueries({ queryKey: ['balance', family.id] });
+    },
   });
   const uncompleteMut = useMutation({
     mutationFn: (occurrenceId: string) => api.uncompleteOccurrence(family.id, occurrenceId),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['occurrences', family.id] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['occurrences', family.id] });
+      // Uncomplete reverses the ledger entry — same balance refresh.
+      queryClient.invalidateQueries({ queryKey: ['balance', family.id] });
+    },
   });
   // Drag-to-reschedule: dropping a card onto a different cell fires
   // a /reschedule call. Errors (e.g. date conflict — same task already
@@ -279,6 +290,7 @@ export function Calendar({
     mutationFn: (ids: string[]) => api.bulkCompleteOccurrences(family.id, ids),
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['occurrences', family.id] });
+      queryClient.invalidateQueries({ queryKey: ['balance', family.id] });
       // Best-effort toast summary; rely on the page list to refresh.
       const ok = data.results.filter((r) => r.status !== 'error').length;
       const fail = data.results.filter((r) => r.status === 'error').length;

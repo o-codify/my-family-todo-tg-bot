@@ -88,7 +88,10 @@ export function QueueDetail({ me, family, taskId, onBack, onEditTask }: Props) {
 
   const completeMut = useMutation({
     mutationFn: (occurrenceId: string) => api.completeOccurrence(family.id, occurrenceId),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['occurrences', family.id] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['occurrences', family.id] });
+      queryClient.invalidateQueries({ queryKey: ['balance', family.id] });
+    },
   });
 
 

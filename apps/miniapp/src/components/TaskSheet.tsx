@@ -71,12 +71,15 @@ export function TaskSheet({ me, family, occurrence, onClose, onEdit, onTransfer 
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['occurrences', family.id] });
       queryClient.invalidateQueries({ queryKey: ['tasks', family.id] });
+      // Points pill refresh — same reason as Calendar/Day mutations.
+      queryClient.invalidateQueries({ queryKey: ['balance', family.id] });
     },
   });
   const uncompleteMut = useMutation({
     mutationFn: () => api.uncompleteOccurrence(family.id, o.id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['occurrences', family.id] });
+      queryClient.invalidateQueries({ queryKey: ['balance', family.id] });
     },
   });
 

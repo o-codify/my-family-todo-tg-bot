@@ -97,11 +97,20 @@ export function Day({ me, family, iso, onBack, onOpenTask, onCreateTask }: Props
 
   const completeMut = useMutation({
     mutationFn: (id: string) => api.completeOccurrence(family.id, id),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['occurrences', family.id] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['occurrences', family.id] });
+      // Balance pill in the header reads from ['balance', familyId,
+      // userId] — without this invalidate, points awarded by the
+      // completion stay invisible until a manual refetch.
+      queryClient.invalidateQueries({ queryKey: ['balance', family.id] });
+    },
   });
   const uncompleteMut = useMutation({
     mutationFn: (id: string) => api.uncompleteOccurrence(family.id, id),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['occurrences', family.id] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['occurrences', family.id] });
+      queryClient.invalidateQueries({ queryKey: ['balance', family.id] });
+    },
   });
 
   const members = useMemo(

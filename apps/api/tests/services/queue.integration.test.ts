@@ -286,6 +286,89 @@ describe('queued tasks (integration)', () => {
     expect(pending.assigneeId).toBe(b.id);
   });
 
+  it('out-of-turn completion with cooldown + points: everything lines up', async () => {
+    // User reported the new path "просто отмечает задачу выполненной"
+    // — points not credited, cooldown not honoured on the spawned
+    // next pending. This test exercises the full chain end-to-end.
+    const a = await makeUser();
+    const b = await makeUser();
+    const { family } = await makeFamily(a);
+    await addMember(family, b, 'Adult');
+
+    const task = await createTask({
+      familyId: family.id,
+      createdBy: a.id,
+      data: {
+        title: 'Q+points+cooldown',
+        type: 'queued',
+        schedule: { kind: 'queued' },
+        queueUserIds: [a.id, b.id],
+        cooldownDays: 3,
+        points: 7,
+        photoRequired: false,
+        singleShot: false,
+      },
+    });
+    const taskFull = (await getTaskInFamily(task.id, family.id))!;
+
+    // Pin current pending on a.
+    const firstOcc = (
+      await db
+        .select()
+        .from(taskOccurrences)
+        .where(and(eq(taskOccurrences.taskId, task.id), eq(taskOccurrences.status, 'pending')))
+    )[0]!;
+    await db
+      .update(taskOccurrences)
+      .set({ assigneeId: a.id })
+      .where(eq(taskOccurrences.id, firstOcc.id));
+    const reloaded = (
+      await db.select().from(taskOccurrences).where(eq(taskOccurrences.id, firstOcc.id))
+    )[0]!;
+
+    const completeStart = Date.now();
+    await completeOccurrence({
+      occurrence: { ...reloaded, task: taskFull },
+      userId: b.id,
+      data: {},
+    });
+    const completeEnd = Date.now();
+
+    // 1. completedBy is b.
+    const done = (
+      await db
+        .select()
+        .from(taskOccurrences)
+        .where(and(eq(taskOccurrences.taskId, task.id), eq(taskOccurrences.status, 'done')))
+    )[0]!;
+    expect(done.completedBy).toBe(b.id);
+    expect(done.pointsAwarded).toBe(7);
+
+    // 2. Points went to b via the ledger — assert b's family balance.
+    const { getUserPoints } = await import('../../src/services/rewards');
+    const bBalance = await getUserPoints({ familyId: family.id, userId: b.id });
+    expect(bBalance).toBe(7);
+    const aBalance = await getUserPoints({ familyId: family.id, userId: a.id });
+    expect(aBalance).toBe(0);
+
+    // 3. A fresh pending row exists, on a (the skipped user), with
+    //    availableAt ~= now + 3 days. This is the "очередь на нем"
+    //    auto-correction.
+    const next = (
+      await db
+        .select()
+        .from(taskOccurrences)
+        .where(and(eq(taskOccurrences.taskId, task.id), eq(taskOccurrences.status, 'pending')))
+    )[0]!;
+    expect(next.assigneeId).toBe(a.id);
+    expect(next.availableAt).not.toBeNull();
+    const availMs = next.availableAt!.getTime();
+    const expectMin = completeStart + 3 * 86_400_000 - 1000;
+    const expectMax = completeEnd + 3 * 86_400_000 + 1000;
+    expect(availMs).toBeGreaterThanOrEqual(expectMin);
+    expect(availMs).toBeLessThanOrEqual(expectMax);
+  });
+
   it('out-of-turn completion: non-assignee completes, next pending rotates back', async () => {
     // User: "выполнять задачи очереди вне очереди, то есть даже если
     // очередь на ком-то, то можно выполнить самому, а его сдвинет."
