@@ -334,7 +334,9 @@ describe('queued tasks (integration)', () => {
     });
     const completeEnd = Date.now();
 
-    // 1. completedBy is b.
+    // 1. completedBy is b AND assigneeId flips to b — the done row
+    //    fully transfers to the actual completer per the user rule
+    //    "если выполнил другой, то и задача ему переходит".
     const done = (
       await db
         .select()
@@ -342,6 +344,7 @@ describe('queued tasks (integration)', () => {
         .where(and(eq(taskOccurrences.taskId, task.id), eq(taskOccurrences.status, 'done')))
     )[0]!;
     expect(done.completedBy).toBe(b.id);
+    expect(done.assigneeId).toBe(b.id);
     expect(done.pointsAwarded).toBe(7);
 
     // 2. Points went to b via the ledger — assert b's family balance.
@@ -419,7 +422,8 @@ describe('queued tasks (integration)', () => {
       data: {},
     });
 
-    // The done row attributes the work to b, not a.
+    // The done row attributes the work to b — both completedBy AND
+    // assigneeId. The task "переходит" to the actual completer.
     const done = (
       await db
         .select()
@@ -427,6 +431,7 @@ describe('queued tasks (integration)', () => {
         .where(and(eq(taskOccurrences.taskId, task.id), eq(taskOccurrences.status, 'done')))
     )[0]!;
     expect(done.completedBy).toBe(b.id);
+    expect(done.assigneeId).toBe(b.id);
 
     // Next pending rotates back to a (behind by completions).
     const next = (

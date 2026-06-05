@@ -245,6 +245,12 @@ export async function completeOccurrence(input: {
         status: 'pending_approval',
         completedAt: new Date(),
         completedBy: userId,
+        // The completer "takes ownership" of the row even at the
+        // pending-approval stage: a child marking it done is now the
+        // person whose work is awaiting approval. Keeps assignee +
+        // completer in lockstep — see the comment on the 'done'
+        // branch below for the rationale.
+        assigneeId: userId,
         photoIds: data.photoIds ?? null,
         subtasks: subtasksState,
         // Clear any prior rejection from a previous attempt.
@@ -264,12 +270,20 @@ export async function completeOccurrence(input: {
   // Conditional on status to close the concurrent-complete race: if a
   // parallel request already flipped this row to 'done', the WHERE matches
   // nothing and we bail before awarding points a second time.
+  //
+  // Crucially, `assigneeId` is also flipped to the completer here.
+  // User rule: "если выполнил другой, то и задача ему переходит. не
+  // должно быть логики что ответственный один, а выполнил другой."
+  // So on every transition pending → done, assignee follows completer
+  // unconditionally. `completedBy` stays as a column for audit
+  // purposes but always equals `assigneeId` on done rows now.
   const [updated] = await db
     .update(taskOccurrences)
     .set({
       status: 'done',
       completedAt: new Date(),
       completedBy: userId,
+      assigneeId: userId,
       photoIds: data.photoIds ?? null,
       pointsAwarded: occurrence.task.points,
       subtasks: subtasksState,
@@ -372,6 +386,14 @@ export async function uncompleteOccurrence(
         ),
       );
 
+    // Reset to pending. assigneeId stays as-is — it currently equals
+    // the completer (we set them in lockstep on complete). For queue
+    // tasks the call to ensureQueuedOccurrence below re-picks the
+    // assignee per balance, which is the right behaviour: the
+    // rotation reassesses now that one completion was reversed. For
+    // non-queue tasks the row goes back to "owned by the previous
+    // completer", which mirrors the simple physical truth — they were
+    // the most recent person responsible.
     const [updated] = await tx
       .update(taskOccurrences)
       .set({
@@ -383,6 +405,14 @@ export async function uncompleteOccurrence(
       })
       .where(eq(taskOccurrences.id, occurrenceId))
       .returning();
+
+    if (updated && task?.type === 'queued') {
+      // Re-pick the queue assignee now that the completion count
+      // flipped back down. Without this the pending row would carry
+      // the wrong assigneeId (the user who just uncompleted) and the
+      // calendar would lie about whose turn it is.
+      await ensureQueuedOccurrence(task, tx);
+    }
 
     if (updated) {
       // Re-schedule the reminder if the occurrence is still in the future.
@@ -546,6 +576,10 @@ export async function completeFloatingTask(input: {
     // Floating completions are intrinsically date-less — we anchor them to a
     // day via `completedAt` instead, and the list filter
     // (listFamilyOccurrences) joins null-dated done rows by completedAt range.
+    // Done rows now ALWAYS attribute to the actual completer — user
+    // rule "если выполнил другой, то и задача ему переходит. не
+    // должно быть логики что ответственный один, а выполнил другой."
+    // assigneeId = userId everywhere on done.
     let completedRow: TaskOccurrenceRow;
     if (pending[0]) {
       const [updated] = await tx
@@ -554,13 +588,9 @@ export async function completeFloatingTask(input: {
           status: 'done',
           completedAt: today,
           completedBy: userId,
+          assigneeId: userId,
           photoIds: data.photoIds ?? null,
           pointsAwarded: task.points,
-          // Backfill the assignee if the existing pending row was
-          // missing one — happens for legacy rows created before this
-          // fix landed. Without this, the done row leaks into other
-          // members' ICS feeds via the `assigneeId IS NULL` branch.
-          assigneeId: pending[0].assigneeId ?? task.assigneeId ?? userId,
         })
         .where(eq(taskOccurrences.id, pending[0].id))
         .returning();
@@ -573,11 +603,7 @@ export async function completeFloatingTask(input: {
           status: 'done',
           completedAt: today,
           completedBy: userId,
-          // Inherit the task's assignee; for shared tasks (task.
-          // assigneeId is null) fall back to the completer so the
-          // row still has an owner and doesn't appear in everybody
-          // else's per-user ICS feed.
-          assigneeId: task.assigneeId ?? userId,
+          assigneeId: userId,
           photoIds: data.photoIds ?? null,
           pointsAwarded: task.points,
         })
