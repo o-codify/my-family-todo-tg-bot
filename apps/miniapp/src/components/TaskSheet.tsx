@@ -231,6 +231,12 @@ export function TaskSheet({ me, family, occurrence, onClose, onEdit, onTransfer 
   // edit the assigned slot, not the act of doing the chore.
   const isQueued = o.task.type === 'queued';
   const canComplete = isAssignee || isQueued || o.assigneeId === null;
+  // Family owner can uncomplete ANY member's completed task — user
+  // asked for "владелец семьи мог отменить выполнение задачи любого
+  // члена семьи, а не только свои". Backend route mirrors this with
+  // a `family.ownerId === user.id` bypass.
+  const isFamilyOwner = family.ownerId === me.id;
+  const canUncomplete = isCompleter || isAssignee || isFamilyOwner;
 
   // (Queue per-user counters live on the QueueDetail page now — they
   // read straight from `task.queueStats` returned by the server, so
@@ -479,7 +485,7 @@ export function TaskSheet({ me, family, occurrence, onClose, onEdit, onTransfer 
             row below where they can break into a second line if needed.
             Previously all four were on one row which clipped "Выполнить"
             on standard phone viewports. */}
-        {(!done && canComplete) || (done && (isCompleter || isAssignee)) ? (
+        {(!done && canComplete) || (done && canUncomplete) ? (
           <div
             className="wf-col"
             style={{ marginTop: 12, gap: 8 }}
@@ -548,7 +554,7 @@ export function TaskSheet({ me, family, occurrence, onClose, onEdit, onTransfer 
                 )}
               </>
             )}
-            {done && (
+            {done && canUncomplete && (
               <button
                 className="wf-btn block"
                 onClick={() => uncompleteMut.mutate(undefined, { onSuccess: () => close() })}

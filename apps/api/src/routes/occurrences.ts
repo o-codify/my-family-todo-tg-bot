@@ -1,3 +1,4 @@
+import { eq } from 'drizzle-orm';
 import { zValidator } from '@hono/zod-validator';
 import { Hono } from 'hono';
 import {
@@ -9,6 +10,8 @@ import {
 } from '@family-todo/shared';
 import { tgAuth, type AuthVariables } from '../middleware/auth';
 import { requireFamily, type FamilyVariables } from '../middleware/family';
+import { db } from '../db/client';
+import { families } from '../db/schema';
 import {
   approveOccurrence,
   bulkCompleteOccurrences,
@@ -258,10 +261,22 @@ occurrencesRouter.post('/:occurrenceId/uncomplete', async (c) => {
   const occ = await getOccurrenceInFamily(c.req.param('occurrenceId'), familyId);
   if (!occ) return c.json({ error: 'occurrence_not_found' }, 404);
 
-  // Same ownership rule: only the assignee (or the completer, for
-  // unassigned tasks) can revert. Owner/Adult bypass removed — matches
-  // /complete behaviour.
+  // Permission rule:
+  //   - the assignee can revert their own task,
+  //   - the completer can revert what they finished (covers the
+  //     queue-out-of-turn path now that assignee = completer on done),
+  //   - anyone may revert an unassigned (shared) task,
+  //   - AND the family owner can revert anyone's completion — user
+  //     asked for "владелец семьи мог отменить выполнение задачи
+  //     любого члена семьи, а не только свои". `family.ownerId` is
+  //     the hard-coded intrinsic-owner check used elsewhere (rename
+  //     / delete / member-name); same pattern here.
+  const family = await db.query.families.findFirst({
+    where: eq(families.id, familyId),
+  });
+  const isFamilyOwner = family?.ownerId === user.id;
   const canAct =
+    isFamilyOwner ||
     occ.completedBy === user.id ||
     occ.assigneeId === user.id ||
     occ.assigneeId === null;
