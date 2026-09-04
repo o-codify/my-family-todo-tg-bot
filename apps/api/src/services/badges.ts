@@ -1,4 +1,4 @@
-import { and, eq, gte, inArray, sql } from 'drizzle-orm';
+import { and, eq, gte, inArray, isNotNull, sql } from 'drizzle-orm';
 import { db } from '../db/client';
 import {
   taskOccurrences,
@@ -7,6 +7,7 @@ import {
   userBadges,
   type UserBadgeRow,
 } from '../db/schema';
+import { completionCredits } from './task-credit';
 import { logger } from '../logger';
 
 /**
@@ -204,21 +205,36 @@ export async function collectBadgeData(input: {
 }): Promise<BadgeData> {
   // Completed-task aggregates. We pull (completedAt, task.type, points,
   // hasPhoto-via-id-set) so a single query feeds counts + streak + flags.
-  const rows = await db
+  // Shared tasks credit every member on them, not only the person who
+  // tapped "Выполнить" — same rule as points and the Stats counters (see
+  // `completionCredits`). So we pull the family's done rows with the
+  // task roster attached and filter in JS rather than matching
+  // `completed_by = userId` in SQL, which would hide a joint chore from
+  // every participant except one.
+  const allRows = await db
     .select({
       taskType: tasks.type,
       completedAt: taskOccurrences.completedAt,
       pointsAwarded: taskOccurrences.pointsAwarded,
+      completedBy: taskOccurrences.completedBy,
+      participantIds: tasks.participantIds,
+      assigneeId: tasks.assigneeId,
     })
     .from(taskOccurrences)
     .innerJoin(tasks, eq(taskOccurrences.taskId, tasks.id))
     .where(
       and(
         eq(tasks.familyId, input.familyId),
-        eq(taskOccurrences.completedBy, input.userId),
         eq(taskOccurrences.status, 'done'),
+        isNotNull(taskOccurrences.completedBy),
       ),
     );
+  const rows = allRows.filter((r) =>
+    completionCredits(
+      { participantIds: r.participantIds, assigneeId: r.assigneeId },
+      r.completedBy!,
+    ).includes(input.userId),
+  );
 
   let totalCompletedTasks = 0;
   let totalPointsEarned = 0;

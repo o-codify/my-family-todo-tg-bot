@@ -2,6 +2,7 @@ import { and, desc, eq, gte, isNotNull, lte, sql } from 'drizzle-orm';
 import type { StatsPeriod, StatsResponse } from '@family-todo/shared';
 import { db } from '../db/client';
 import { familyMembers, taskOccurrences, tasks } from '../db/schema';
+import { completionCredits } from './task-credit';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -68,16 +69,47 @@ export async function computeFamilyStats(input: {
   );
 
   // ── 1. byMember (count + points) ────────────────────────────────────
-  const byMemberRows = await db
+  // A shared task (non-empty participantIds) counts for EVERY member on
+  // it, not just whoever tapped "Выполнить". Points already worked that
+  // way (points_ledger fans out via completionCredits), but the counter
+  // here used to `GROUP BY completed_by`, so one person absorbed the
+  // whole shared task and the family leaderboard showed a fake gap.
+  // Pull the raw rows + the task's roster and fan out in JS using the
+  // same helper the ledger uses, so the two can't disagree.
+  const creditRows = await db
     .select({
-      userId: taskOccurrences.completedBy,
-      count: sql<number>`COUNT(*)::int`,
-      pointsEarned: sql<number>`COALESCE(SUM(${taskOccurrences.pointsAwarded}), 0)::int`,
+      completedBy: taskOccurrences.completedBy,
+      pointsAwarded: taskOccurrences.pointsAwarded,
+      participantIds: tasks.participantIds,
+      assigneeId: tasks.assigneeId,
     })
     .from(taskOccurrences)
     .innerJoin(tasks, eq(taskOccurrences.taskId, tasks.id))
-    .where(and(inWindow, isNotNull(taskOccurrences.completedBy)))
-    .groupBy(taskOccurrences.completedBy);
+    .where(and(inWindow, isNotNull(taskOccurrences.completedBy)));
+
+  const byMemberRows: Array<{
+    userId: string;
+    count: number;
+    pointsEarned: number;
+  }> = [];
+  {
+    const acc = new Map<string, { count: number; pointsEarned: number }>();
+    for (const r of creditRows) {
+      if (!r.completedBy) continue;
+      for (const uid of completionCredits(
+        { participantIds: r.participantIds, assigneeId: r.assigneeId },
+        r.completedBy,
+      )) {
+        const cur = acc.get(uid) ?? { count: 0, pointsEarned: 0 };
+        cur.count += 1;
+        // Full points each — mirrors awardPointsForCompletion, which
+        // inserts one ledger row per credited user at the full amount.
+        cur.pointsEarned += r.pointsAwarded ?? 0;
+        acc.set(uid, cur);
+      }
+    }
+    for (const [userId, v] of acc) byMemberRows.push({ userId, ...v });
+  }
 
   // Inflate with zero rows for members who haven't done anything in window —
   // the UI wants the full member list with bars at 0%.
@@ -88,7 +120,6 @@ export async function computeFamilyStats(input: {
   const byMemberMap = new Map<string, { count: number; pointsEarned: number }>();
   for (const m of members) byMemberMap.set(m.userId, { count: 0, pointsEarned: 0 });
   for (const r of byMemberRows) {
-    if (!r.userId) continue;
     byMemberMap.set(r.userId, { count: r.count, pointsEarned: r.pointsEarned });
   }
 
@@ -120,7 +151,9 @@ export async function computeFamilyStats(input: {
   // ── 3. streaks — pull (userId, completedDate) for the window ─────────
   const streakRows = await db
     .select({
-      userId: taskOccurrences.completedBy,
+      completedBy: taskOccurrences.completedBy,
+      participantIds: tasks.participantIds,
+      assigneeId: tasks.assigneeId,
       // Anchor by completedAt's UTC date — same convention as the rest of the
       // app uses for done-anchoring (Calendar/Day filters).
       date: sql<string>`to_char(${taskOccurrences.completedAt} AT TIME ZONE 'UTC', 'YYYY-MM-DD')`,
@@ -129,16 +162,23 @@ export async function computeFamilyStats(input: {
     .innerJoin(tasks, eq(taskOccurrences.taskId, tasks.id))
     .where(and(inWindow, isNotNull(taskOccurrences.completedBy)));
 
-  // Group dates per user, dedupe, sort.
+  // Group dates per user, dedupe, sort. Shared tasks credit every member
+  // on the task — same rule as the counters above, so a joint chore keeps
+  // everyone's streak alive instead of only the person who tapped it.
   const datesByUser = new Map<string, Set<string>>();
   for (const r of streakRows) {
-    if (!r.userId || !r.date) continue;
-    let s = datesByUser.get(r.userId);
-    if (!s) {
-      s = new Set();
-      datesByUser.set(r.userId, s);
+    if (!r.completedBy || !r.date) continue;
+    for (const uid of completionCredits(
+      { participantIds: r.participantIds, assigneeId: r.assigneeId },
+      r.completedBy,
+    )) {
+      let s = datesByUser.get(uid);
+      if (!s) {
+        s = new Set();
+        datesByUser.set(uid, s);
+      }
+      s.add(r.date);
     }
-    s.add(r.date);
   }
 
   const meStreak = computeStreakForDates(datesByUser.get(input.requestingUserId), now);

@@ -86,7 +86,40 @@ export async function addMember(
 /**
  * Truncates app tables (preserving migrations). Call between integration tests.
  */
+/**
+ * Hard stop: integration tests TRUNCATE real tables. If DATABASE_URL ever
+ * points at anything but a local/explicitly-test database, refuse to run.
+ *
+ * This exists because it already happened: `tests/setup.ts` loads the repo
+ * root `.env`, which on a dev machine holds the PRODUCTION DATABASE_URL, and
+ * a plain `pnpm test` truncated the live family data. Failing loudly is the
+ * only acceptable behaviour here.
+ */
+function assertSafeTestDatabase(): void {
+  const url = process.env.DATABASE_URL ?? '';
+  if (!url) throw new Error('DATABASE_URL is not set — refusing to run destructive tests.');
+  let host: string;
+  let dbName: string;
+  try {
+    const u = new URL(url);
+    host = u.hostname;
+    dbName = u.pathname.replace(/^\//, '');
+  } catch {
+    throw new Error('DATABASE_URL is unparseable — refusing to run destructive tests.');
+  }
+  const localHost = ['localhost', '127.0.0.1', '::1', 'postgres', 'db'].includes(host);
+  const testName = /test/i.test(dbName);
+  if (!localHost && !testName) {
+    throw new Error(
+      `REFUSING TO RUN: integration tests TRUNCATE tables, but DATABASE_URL points at ` +
+        `host "${host}" / database "${dbName}", which is neither local nor named *test*. ` +
+        `Point DATABASE_URL at a local or dedicated test database before running tests.`,
+    );
+  }
+}
+
 export async function resetTables(): Promise<void> {
+  assertSafeTestDatabase();
   await db.execute(dsql`
     TRUNCATE TABLE
       ${taskOccurrences},

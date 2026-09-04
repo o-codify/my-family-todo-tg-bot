@@ -19,6 +19,7 @@ import {
 import { publishFamilyEvent } from '../realtime/pubsub';
 import { decideAfterFloatingCompletion, isFloatingAvailable } from './cooldown';
 import { ensureQueuedOccurrence } from './queue-tasks';
+import { completionCredits } from './task-credit';
 import { awardPointsForCompletion } from './rewards';
 import { evaluateBadgesForUser } from './badges';
 
@@ -195,17 +196,13 @@ async function shouldGateByApproval(input: {
 }
 
 /**
- * Who earns points for a completion. For a shared task (has participantIds)
- * the points go to the responsible assignee plus every listed participant —
- * full points each. For a solo task it's just the completer. All ledger rows
- * are tagged with the occurrence id so uncomplete reverses them together.
+ * Who earns points for a completion — now delegated to the shared
+ * `completionCredits` helper so points and the per-member completion
+ * counters can never drift apart again. All ledger rows are tagged with
+ * the occurrence id so uncomplete reverses them together.
  */
 function pointsRecipients(task: TaskRow, completerId: string): string[] {
-  if (task.participantIds && task.participantIds.length > 0) {
-    const base = task.assigneeId ?? completerId;
-    return [...new Set([base, ...task.participantIds])];
-  }
-  return [completerId];
+  return completionCredits(task, completerId);
 }
 
 export async function completeOccurrence(input: {
