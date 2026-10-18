@@ -1,21 +1,24 @@
 name: family-todo-prod
 
-# Production-style stack. Extends the base compose with the app services
-# (api, bot, miniapp) built from the in-repo Dockerfiles.
+# Production-style stack. Extends the base compose with the single `app`
+# service built from the root Dockerfile — one container holding the API,
+# the Telegram bot and the Mini App bundle.
 #
 # Run from repo root:
 #   docker compose -f infra/docker-compose.yml -f infra/docker-compose.prod.yml up -d
 #
-# Migrations: run once after `up` from a host shell:
-#   docker compose exec api node apps/api/dist/db/migrate.js
-# or build a dedicated one-shot service (commented out below).
+# Migrations run automatically on boot (see the note at the bottom).
 
 services:
-  api:
+  app:
     build:
       context: ..
-      dockerfile: apps/api/Dockerfile
-    container_name: family-todo-api
+      dockerfile: Dockerfile
+      args:
+        # Vite inlines these at build time — changing them means a rebuild.
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL}
+        VITE_TG_BOT_USERNAME: ${VITE_TG_BOT_USERNAME}
+    container_name: family-todo
     restart: unless-stopped
     depends_on:
       postgres:
@@ -35,6 +38,14 @@ services:
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
       TELEGRAM_BOT_USERNAME: ${TELEGRAM_BOT_USERNAME}
       WEBAPP_URL: ${WEBAPP_URL}
+      # Setting TELEGRAM_WEBHOOK_URL is what turns the bot on inside this
+      # process: the handler is mounted at {URL}/webhook. Must be public
+      # HTTPS — Telegram won't deliver to plain HTTP. Leave it empty to
+      # run API-only.
+      TELEGRAM_WEBHOOK_URL: ${TELEGRAM_WEBHOOK_URL:-}
+      TELEGRAM_WEBHOOK_SECRET: ${TELEGRAM_WEBHOOK_SECRET:-}
+      # The bot talks to the API over loopback — same process, same port.
+      BOT_API_BASE_URL: http://127.0.0.1:3000
       PHOTO_MAX_SIZE_BYTES: ${PHOTO_MAX_SIZE_BYTES:-10485760}
       PHOTO_MAX_COUNT_PER_OCCURRENCE: ${PHOTO_MAX_COUNT_PER_OCCURRENCE:-3}
       PHOTO_ALLOWED_MIME: ${PHOTO_ALLOWED_MIME:-image/jpeg,image/png,image/webp}
@@ -46,47 +57,8 @@ services:
       timeout: 3s
       retries: 5
 
-  bot:
-    build:
-      context: ..
-      dockerfile: apps/bot/Dockerfile
-    container_name: family-todo-bot
-    restart: unless-stopped
-    depends_on:
-      api:
-        condition: service_healthy
-    environment:
-      NODE_ENV: production
-      LOG_LEVEL: ${LOG_LEVEL:-info}
-      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
-      TELEGRAM_BOT_USERNAME: ${TELEGRAM_BOT_USERNAME}
-      WEBAPP_URL: ${WEBAPP_URL}
-      BOT_API_BASE_URL: http://api:3000
-      INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN}
-      # Set TELEGRAM_WEBHOOK_URL in your prod .env to switch to webhook mode.
-      # The URL must be public HTTPS — Telegram won't deliver to plain HTTP.
-      TELEGRAM_WEBHOOK_URL: ${TELEGRAM_WEBHOOK_URL:-}
-      TELEGRAM_WEBHOOK_SECRET: ${TELEGRAM_WEBHOOK_SECRET:-}
-      BOT_PORT: 3001
-      BOT_HOST: 0.0.0.0
-    ports:
-      # Only useful in webhook mode. In long-polling mode nothing listens here.
-      - "${BOT_PORT:-3001}:3001"
-
-  miniapp:
-    build:
-      context: ..
-      dockerfile: apps/miniapp/Dockerfile
-      args:
-        VITE_API_BASE_URL: ${VITE_API_BASE_URL}
-        VITE_TG_BOT_USERNAME: ${VITE_TG_BOT_USERNAME}
-    container_name: family-todo-miniapp
-    restart: unless-stopped
-    ports:
-      - "${MINIAPP_PORT:-8080}:80"
-
   # NOTE: there's no separate `migrate` service — the API boot sequence
   # runs `runMigrations()` automatically before binding the port. A
   # Postgres advisory lock keeps concurrent replicas safe. If you ever
   # need to run migrations from a shell (e.g. dry-run a rollback), use:
-  #   docker compose exec api node apps/api/dist/db/migrate.js
+  #   docker compose exec app node apps/api/dist/db/migrate.js

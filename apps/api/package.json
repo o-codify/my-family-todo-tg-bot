@@ -16,6 +16,7 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@family-todo/bot": "workspace:*",
     "@family-todo/shared": "workspace:*",
     "@family-todo/tg-auth": "workspace:*",
     "@hono/node-server": "^1.14.0",

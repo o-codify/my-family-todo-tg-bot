@@ -4,6 +4,20 @@
   "private": true,
   "type": "module",
   "main": "dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "development": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./bot": {
+      "development": "./src/bot.ts",
+      "types": "./dist/bot.d.ts",
+      "default": "./dist/bot.js"
+    }
+  },
+  "files": ["dist"],
   "scripts": {
     "dev": "tsx watch --conditions=development --env-file=../../.env src/index.ts",
     "build": "tsc -p tsconfig.json && node ../../scripts/add-js-extensions.mjs dist",

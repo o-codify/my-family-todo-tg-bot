@@ -13,6 +13,21 @@ const envSchema = z.object({
   TELEGRAM_BOT_TOKEN: z.string().min(1),
   TELEGRAM_BOT_USERNAME: z.string().min(1),
   WEBAPP_URL: z.string().url(),
+  // Everything below runs *inside* the API process in production: one
+  // container holds the API, the Telegram bot and the Mini App bundle.
+  //
+  // TELEGRAM_WEBHOOK_URL is the public origin Telegram should POST to; the
+  // handler is mounted at `{origin}/webhook`. Leave it empty to run an
+  // API-only process (the bot then has to be started separately via
+  // `apps/bot` in long-polling mode, which is what local dev does).
+  TELEGRAM_WEBHOOK_URL: z.string().optional().default(''),
+  TELEGRAM_WEBHOOK_SECRET: z.string().optional().default(''),
+  // Directory holding the built Mini App (Vite output). Relative to the
+  // process CWD — @hono/node-server's serveStatic rejects absolute paths.
+  // When the directory is missing we simply don't serve static files, so
+  // `pnpm --filter @family-todo/api dev` keeps working next to the Vite
+  // dev server.
+  MINIAPP_DIST: z.string().default('apps/miniapp/dist'),
   // Photos are stored in Telegram, not S3 — the API uploads to the user's
   // private bot chat via `sendPhoto` and keeps only the file_id + message_id.
   PHOTO_MAX_SIZE_BYTES: z.coerce.number().int().positive().default(10_485_760), // 10MB Telegram limit

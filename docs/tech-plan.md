@@ -624,9 +624,12 @@ S3/MinIO **исключены**. Фото живут в Telegram, у нас — 
 - **Stats API** ✅ — `GET /api/v1/families/:id/stats?period=…` отдает
   byMember + topTasks + streaks + unfairness. `Stats.tsx` больше не
   тянет все occurrences.
-- **Deploy** ✅ — `Dockerfile` × 3, `nginx.conf` SPA fallback,
-  `infra/docker-compose.prod.yml`, `docs/deploy.md`. Migrate path resolver
-  работает в dev (tsx) и prod (compiled).
+- **Deploy** ✅ — один `Dockerfile` в корне: API + бот + Mini App в
+  одном контейнере и одном Node-процессе. Статика Mini App раздается
+  самим Hono (`MINIAPP_DIST`, brotli/gzip из `scripts/precompress.mjs`),
+  вебхук бота — `POST /webhook`. `infra/docker-compose.prod.yml`,
+  `docs/deploy.md`. Migrate path resolver работает в dev (tsx) и prod
+  (compiled).
 - **Photo upload UX** ✅ — оптимистичный thumbnail с blob URL,
   spinner overlay, dismiss-кнопка при ошибке.
 - **Bundle split** ✅ — Vite `manualChunks` → vendor-react /

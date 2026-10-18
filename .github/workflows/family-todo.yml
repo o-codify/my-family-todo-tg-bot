@@ -1,0 +1,78 @@
+name: family-todo
+
+# One image for the whole stack — API + Telegram bot + Mini App run in a
+# single container (see the root Dockerfile). This replaces the three
+# separate api / bot / miniapp workflows.
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - "apps/**"
+      - "packages/**"
+      - "scripts/**"
+      - "Dockerfile"
+      - ".dockerignore"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+      - ".github/workflows/family-todo.yml"
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Generate version
+        id: version
+        run: |
+          VERSION="$(date -u +%Y.%-m%d).${{ github.run_number }}"
+          echo "VERSION=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "Version: ${VERSION}"
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build & push
+        uses: docker/build-push-action@v5
+        with:
+          # Context = monorepo root; the Dockerfile lives there too.
+          context: .
+          file: ./Dockerfile
+          push: true
+          # Vite inlines its env at build time — these have to be build
+          # args, not runtime envs. Both end up in the JS bundle.
+          build-args: |
+            VITE_API_BASE_URL=${{ secrets.VITE_API_BASE_URL }}
+            VITE_TG_BOT_USERNAME=${{ secrets.VITE_TG_BOT_USERNAME }}
+          # Reuse the previous build's layers; without this every run
+          # re-installs the whole pnpm store from scratch.
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          # Keep the manifest a plain image (no attestation manifests) —
+          # Coolify pulls by tag and doesn't need provenance/SBOM.
+          provenance: false
+          sbom: false
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/family-todo:latest
+            ghcr.io/${{ github.repository_owner }}/family-todo:${{ steps.version.outputs.VERSION }}
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Trigger Coolify deploy
+        run: |
+          curl -f -X POST "${{ secrets.COOLIFY_WEBHOOK }}" \
+            -H "Authorization: Bearer ${{ secrets.COOLIFY_TOKEN }}"

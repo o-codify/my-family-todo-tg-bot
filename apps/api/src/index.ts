@@ -1,4 +1,6 @@
+import { existsSync } from 'node:fs';
 import { serve } from '@hono/node-server';
+import { serveStatic } from '@hono/node-server/serve-static';
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { logger as honoLogger } from 'hono/logger';
@@ -107,7 +109,7 @@ app.get('/health', async (c) => {
   });
 });
 
-app.get('/', (c) => c.json({ name: 'family-todo-api', version: '0.0.0' }));
+app.get('/api', (c) => c.json({ name: 'family-todo-api', version: '0.0.0' }));
 
 app.route('/api/v1/me', meRouter);
 app.route('/api/v1/families', familiesRouter);
@@ -147,6 +149,75 @@ app.route('/api/v1/families/:familyId', photosRouter);
 app.route('/api/internal/v1', internalRouter);
 
 /**
+ * ── Telegram bot ──────────────────────────────────────────────────────
+ *
+ * In production the bot lives in *this* process: one image, one container,
+ * one Node runtime. We import it dynamically so an API-only deployment —
+ * and the test suite — never loads grammY nor its stricter env schema
+ * (`BOT_API_BASE_URL` & friends, which `apps/bot/src/env.ts` requires).
+ *
+ * Local dev leaves TELEGRAM_WEBHOOK_URL empty and runs `apps/bot` on its
+ * own in long-polling mode instead.
+ */
+const botModule = env.TELEGRAM_WEBHOOK_URL
+  ? await import('@family-todo/bot/bot')
+  : null;
+
+if (botModule) {
+  app.post('/webhook', botModule.createWebhookHandler(env.TELEGRAM_WEBHOOK_SECRET));
+}
+
+/**
+ * ── Mini App ──────────────────────────────────────────────────────────
+ *
+ * Serves the Vite bundle that used to live behind its own nginx container.
+ * Registered last so it never shadows `/api/*`, `/webhook` or `/health`.
+ *
+ *   /assets/*  → content-hashed files, cached forever
+ *   /*         → any other real file (favicon, manifest, …)
+ *   fallback   → index.html, so a cold load of /some/route still boots
+ *
+ * `precompressed` makes serveStatic prefer the `.br`/`.gz` siblings that
+ * `scripts/precompress.mjs` writes at build time — that's what replaces
+ * nginx's on-the-fly gzip.
+ */
+const miniappRoot = env.MINIAPP_DIST.replace(/[\/]+$/, '');
+if (existsSync(`${miniappRoot}/index.html`)) {
+  app.use(
+    '/assets/*',
+    serveStatic({
+      root: miniappRoot,
+      precompressed: true,
+      onFound: (_path, c) => {
+        c.header('Cache-Control', 'public, max-age=31536000, immutable');
+      },
+    }),
+  );
+  app.use(
+    '/*',
+    serveStatic({
+      root: miniappRoot,
+      precompressed: true,
+      onFound: (_path, c) => {
+        c.header('Cache-Control', 'no-cache, must-revalidate');
+      },
+    }),
+  );
+  app.get(
+    '*',
+    serveStatic({
+      root: miniappRoot,
+      path: 'index.html',
+      precompressed: true,
+      onFound: (_path, c) => {
+        c.header('Cache-Control', 'no-cache, must-revalidate');
+      },
+    }),
+  );
+  logger.info({ miniappRoot }, 'Serving Mini App bundle');
+}
+
+/**
  * Boot sequence:
  *   1. Run pending DB migrations (idempotent, advisory-locked) — we never
  *      want to start serving traffic against a stale schema.
@@ -180,6 +251,20 @@ async function main() {
   // a dedicated apps/worker process is cleaner at scale. Hydration after boot
   // makes sure every user with digestEnabled has a repeatable job even if
   // Redis lost state.
+  if (botModule) {
+    // Fire-and-forget: Telegram's API is a network call we don't want to
+    // block the boot on. A failure here only means the webhook keeps
+    // pointing wherever it pointed before — the handler is already mounted.
+    void (async () => {
+      const username = await botModule.registerBotCommands();
+      const webhookUrl = await botModule.registerWebhook(
+        env.TELEGRAM_WEBHOOK_URL,
+        env.TELEGRAM_WEBHOOK_SECRET,
+      );
+      logger.info({ username, webhookUrl }, 'Telegram bot ready (webhook mode)');
+    })().catch((err) => logger.error({ err }, 'failed to register Telegram webhook'));
+  }
+
   startNotificationsWorker();
   void hydrateDigestSchedulers().catch((err) =>
     logger.warn({ err }, 'failed to hydrate digest schedulers'),

@@ -17,7 +17,7 @@ export class BotApiError extends Error {
 /**
  * Normalize the configured API base — trim trailing slash and an optional
  * `/api` suffix. That way the operator can give us either form:
- *   - `http://family-todo-api:3000`             (internal docker network)
+ *   - `http://127.0.0.1:3000`                   (prod: same process)
  *   - `https://my-family-todo.example.com`      (public host root)
  *   - `https://my-family-todo.example.com/api`  (same host as the miniapp,
  *                                                with `/api` already in the URL)
